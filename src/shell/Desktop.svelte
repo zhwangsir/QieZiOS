@@ -37,6 +37,12 @@
 
 <!-- 桌面外壳：壁纸（吃 token）+ 顶栏 + 窗口层 + Dock -->
 <div class="relative h-full w-full overflow-hidden" style="background: var(--qz-wallpaper)">
+  <!-- 景深 vignette：壁纸四周/底部压暗一点，更有层次（不挡交互） -->
+  <div
+    class="pointer-events-none absolute inset-0"
+    style="background: radial-gradient(125% 85% at 50% 0%, transparent 55%, rgb(0 0 0 / 0.22));"
+  ></div>
+
   <!-- 中央 logo（不挡交互） -->
   <div class="pointer-events-none absolute inset-0 grid place-items-center">
     <div class="select-none text-center text-qz-text/15">

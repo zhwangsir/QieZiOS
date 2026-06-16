@@ -51,6 +51,19 @@
     e.stopPropagation();
     remove(n.id);
   }
+
+  // 按扩展名挑图标，文件夹一律 📁
+  function iconFor(n: VNode): string {
+    if (n.type === 'dir') return '📁';
+    const ext = n.name.slice(n.name.lastIndexOf('.') + 1).toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return '🖼️';
+    if (['md', 'markdown'].includes(ext)) return '📝';
+    if (['json', 'js', 'ts', 'css', 'html', 'xml', 'yml'].includes(ext)) return '🧩';
+    if (['mp3', 'wav', 'ogg', 'flac'].includes(ext)) return '🎵';
+    if (['mp4', 'mov', 'webm', 'mkv'].includes(ext)) return '🎬';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '🗜️';
+    return '📄';
+  }
 </script>
 
 <div class="flex h-full flex-col text-qz-text">
@@ -87,7 +100,7 @@
           if (e.key === 'Enter') open(n);
         }}
       >
-        <div class="text-3xl">{n.type === 'dir' ? '📁' : '📄'}</div>
+        <div class="text-3xl">{iconFor(n)}</div>
 
         {#if renamingId === n.id}
           <!-- svelte-ignore a11y_autofocus -->

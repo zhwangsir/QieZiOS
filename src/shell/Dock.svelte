@@ -1,32 +1,55 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
   import { processes, launch, restore } from '../kernel/processes.svelte';
   import { appRegistry, type AppDef } from '../apps/registry';
 
-  // $derived：当前有进程在跑的 appId 集合（用来显示小圆点指示器）
+  // $derived：当前有进程在跑的 appId 集合（显示小圆点）
   const running = $derived(new Set(processes.map((p) => p.appId)));
+  // 可见 App（过滤掉 hidden，如记事本）
+  const apps = $derived(Object.entries(appRegistry).filter(([, a]) => !a.hidden));
+
+  // 鼠标悬停在第几个图标上（用于放大「波浪」效果）
+  let hovered = $state<number | null>(null);
+
+  // 离悬停点越近放得越大（macOS Dock 手感）
+  function scaleFor(i: number): number {
+    if (hovered === null) return 1;
+    const d = Math.abs(i - hovered);
+    return d === 0 ? 1.4 : d === 1 ? 1.2 : d === 2 ? 1.06 : 1;
+  }
 
   function onClick(appId: string, app: AppDef) {
     const mine = processes.filter((p) => p.appId === appId);
     if (mine.length === 0) {
       launch(appId, app.title, { width: app.width, height: app.height });
-      return;
+    } else {
+      restore(mine.reduce((a, b) => (a.z >= b.z ? a : b)).id);
     }
-    // 已在跑：把最上层那个还原 + 聚焦（含从最小化恢复）
-    const top = mine.reduce((a, b) => (a.z >= b.z ? a : b));
-    restore(top.id);
   }
 </script>
 
 <div
   class="absolute bottom-4 left-1/2 z-[9999] flex -translate-x-1/2 items-end gap-2 rounded-2xl border border-qz-border qz-glass px-3 py-2 shadow-2xl shadow-black/40"
+  role="toolbar"
+  tabindex="-1"
+  aria-label="程序坞"
+  onpointerleave={() => (hovered = null)}
 >
-  {#each Object.entries(appRegistry).filter(([, app]) => !app.hidden) as [appId, app] (appId)}
+  {#each apps as [appId, app], i (appId)}
     <button
-      class="group relative grid h-12 w-12 place-items-center rounded-xl text-2xl transition-transform duration-150 hover:-translate-y-1.5 active:translate-y-0"
+      class="group relative grid h-12 w-12 place-items-center rounded-xl text-2xl"
+      style="transform: scale({scaleFor(i)}); transform-origin: bottom; transition: transform 150ms var(--qz-ease);"
       title={app.title}
+      onpointerenter={() => (hovered = i)}
       onclick={() => onClick(appId, app)}
     >
-      <span class="transition-transform group-hover:scale-110">{app.icon}</span>
+      {#if hovered === i}
+        <span
+          class="pointer-events-none absolute -top-9 whitespace-nowrap rounded-md border border-qz-border qz-glass px-2 py-0.5 text-xs text-qz-text shadow-lg"
+          transition:fade={{ duration: 120 }}
+        >{app.title}</span>
+      {/if}
+      <span>{app.icon}</span>
       {#if running.has(appId)}
         <span class="absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-qz-text/70"></span>
       {/if}
