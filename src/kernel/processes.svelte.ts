@@ -117,6 +117,36 @@ export function cycleWindows() {
   bottom.z = ++nextZ;
 }
 
+// 关闭所有窗口
+export function closeAll() {
+  processes.splice(0, processes.length);
+}
+
+// 层叠排列：所有可见窗口取消最大化、错位摆放
+export function cascade() {
+  let i = 0;
+  for (const p of processes) {
+    if (p.minimized) continue;
+    p.maximized = false;
+    p.x = 80 + i * 32;
+    p.y = 60 + i * 32;
+    p.z = ++nextZ;
+    i++;
+  }
+}
+
+// 关闭某个 App 的全部窗口
+export function closeApp(appId: string) {
+  for (let i = processes.length - 1; i >= 0; i--) {
+    if (processes[i].appId === appId) processes.splice(i, 1);
+  }
+}
+
+// 最小化某个 App 的全部窗口
+export function minimizeApp(appId: string) {
+  for (const p of processes) if (p.appId === appId) p.minimized = true;
+}
+
 function byId(id: string): Process | undefined {
   return processes.find((p) => p.id === id);
 }

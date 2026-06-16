@@ -5,18 +5,50 @@
     close,
     minimize,
     cycleWindows,
+    closeAll,
+    cascade,
+    launch,
   } from '../kernel/processes.svelte';
+  import { createDir, createFile } from '../kernel/vfs.svelte';
   import { appRegistry } from '../apps/registry';
+  import { openMenu, closeMenu, menu } from './menu.svelte';
   import Window from './Window.svelte';
   import Dock from './Dock.svelte';
   import TopBar from './TopBar.svelte';
+  import ContextMenu from './ContextMenu.svelte';
   import { snapState } from './snapState.svelte';
 
   // 当前活动窗 id（派生）：传给每个 Window 决定是否高亮
   const active = $derived(activeId());
 
+  // 桌面空白处右键菜单（窗口内的右键由窗口/App 自己处理）
+  function onDesktopMenu(e: MouseEvent) {
+    if ((e.target as HTMLElement).closest('[data-window]')) return;
+    openMenu(e, [
+      { label: '新建文件夹', icon: '📁', onClick: () => createDir('root') },
+      { label: '新建文本文件', icon: '📄', onClick: () => createFile('root') },
+      {
+        label: '打开设置',
+        icon: '⚙️',
+        separator: true,
+        onClick: () =>
+          launch('settings', appRegistry.settings.title, {
+            width: appRegistry.settings.width,
+            height: appRegistry.settings.height,
+          }),
+      },
+      { label: '层叠窗口', icon: '🗂️', onClick: cascade },
+      { label: '关闭所有窗口', icon: '✕', danger: true, onClick: closeAll },
+    ]);
+  }
+
   // 全局快捷键。注意：在输入框/可编辑区里打字时不拦截。
   function onKey(e: KeyboardEvent) {
+    // 菜单开着时，Esc 先关菜单
+    if (menu.open) {
+      if (e.key === 'Escape') closeMenu();
+      return;
+    }
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
 
@@ -36,7 +68,12 @@
 <svelte:window onkeydown={onKey} />
 
 <!-- 桌面外壳：壁纸（吃 token）+ 顶栏 + 窗口层 + Dock -->
-<div class="relative h-full w-full overflow-hidden" style="background: var(--qz-wallpaper)">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="relative h-full w-full overflow-hidden"
+  style="background: var(--qz-wallpaper)"
+  oncontextmenu={onDesktopMenu}
+>
   <!-- 景深 vignette：壁纸四周/底部压暗一点，更有层次（不挡交互） -->
   <div
     class="pointer-events-none absolute inset-0"
@@ -76,4 +113,7 @@
   </div>
 
   <Dock />
+
+  <!-- 右键菜单（全局单例，谁右键就显示谁的菜单） -->
+  <ContextMenu />
 </div>

@@ -1,7 +1,14 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import { processes, launch, restore } from '../kernel/processes.svelte';
+  import {
+    processes,
+    launch,
+    restore,
+    minimizeApp,
+    closeApp,
+  } from '../kernel/processes.svelte';
   import { appRegistry, type AppDef } from '../apps/registry';
+  import { openMenu, type MenuItem } from './menu.svelte';
 
   // $derived：当前有进程在跑的 appId 集合（显示小圆点）
   const running = $derived(new Set(processes.map((p) => p.appId)));
@@ -26,6 +33,21 @@
       restore(mine.reduce((a, b) => (a.z >= b.z ? a : b)).id);
     }
   }
+
+  function onMenu(e: MouseEvent, appId: string, app: AppDef) {
+    const items: MenuItem[] = [
+      {
+        label: '打开新窗口',
+        icon: '➕',
+        onClick: () => launch(appId, app.title, { width: app.width, height: app.height }),
+      },
+    ];
+    if (processes.some((p) => p.appId === appId)) {
+      items.push({ label: '最小化全部', icon: '—', separator: true, onClick: () => minimizeApp(appId) });
+      items.push({ label: '关闭全部', icon: '✕', danger: true, onClick: () => closeApp(appId) });
+    }
+    openMenu(e, items);
+  }
 </script>
 
 <div
@@ -42,6 +64,7 @@
       title={app.title}
       onpointerenter={() => (hovered = i)}
       onclick={() => onClick(appId, app)}
+      oncontextmenu={(e) => onMenu(e, appId, app)}
     >
       {#if hovered === i}
         <span

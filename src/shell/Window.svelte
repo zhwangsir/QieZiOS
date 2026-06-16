@@ -1,7 +1,15 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { focus, toggleMaximize, setBounds, type Process } from '../kernel/processes.svelte';
+  import {
+    focus,
+    close,
+    minimize,
+    toggleMaximize,
+    setBounds,
+    type Process,
+  } from '../kernel/processes.svelte';
   import { snapState } from './snapState.svelte';
+  import { openMenu } from './menu.svelte';
   import { pop } from '../lib/motion';
   import WindowControls from './WindowControls.svelte';
 
@@ -99,6 +107,19 @@
     }
   }
 
+  // 标题栏右键菜单
+  function onTitleMenu(e: MouseEvent) {
+    openMenu(e, [
+      { label: '最小化', icon: '—', onClick: () => minimize(proc.id) },
+      {
+        label: proc.maximized ? '还原' : '最大化',
+        icon: '▢',
+        onClick: () => toggleMaximize(proc.id),
+      },
+      { label: '关闭', icon: '✕', danger: true, separator: true, onClick: () => close(proc.id) },
+    ]);
+  }
+
   // 最大化用 CSS 铺满（几何数值不动，取消时自然还原）；否则 transform 定位走 GPU
   const style = $derived(
     proc.maximized
@@ -114,6 +135,7 @@
      最小化/还原：靠下面 opacity+scale 的 CSS transition 平滑过渡（窗口保持挂载，不 display:none）。 -->
 <div
   bind:this={el}
+  data-window
   class="absolute flex flex-col select-none overflow-hidden border border-qz-border qz-glass shadow-2xl shadow-black/40"
   {style}
   style:will-change={interacting ? 'transform' : 'auto'}
@@ -139,6 +161,7 @@
     onpointermove={onMove}
     onpointerup={onUp}
     ondblclick={() => toggleMaximize(proc.id)}
+    oncontextmenu={onTitleMenu}
   >
     <WindowControls {proc} />
     <span class="flex-1 truncate text-[13px] font-medium text-qz-muted">{proc.title}</span>

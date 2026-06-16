@@ -10,6 +10,7 @@
     type VNode,
   } from '../kernel/vfs.svelte';
   import { launch } from '../kernel/processes.svelte';
+  import { openMenu } from '../shell/menu.svelte';
 
   let cwd = $state('root'); // 当前所在文件夹 id
   let renamingId = $state<string | null>(null);
@@ -50,6 +51,21 @@
   function del(n: VNode, e: Event) {
     e.stopPropagation();
     remove(n.id);
+  }
+
+  function onItemMenu(e: MouseEvent, n: VNode) {
+    openMenu(e, [
+      { label: '打开', icon: n.type === 'dir' ? '📂' : '↗', onClick: () => open(n) },
+      {
+        label: '重命名',
+        icon: '✏️',
+        onClick: () => {
+          renamingId = n.id;
+          renameText = n.name;
+        },
+      },
+      { label: '删除', icon: '🗑️', danger: true, separator: true, onClick: () => remove(n.id) },
+    ]);
   }
 
   // 按扩展名挑图标，文件夹一律 📁
@@ -96,6 +112,7 @@
         role="button"
         tabindex="0"
         ondblclick={() => open(n)}
+        oncontextmenu={(e) => onItemMenu(e, n)}
         onkeydown={(e) => {
           if (e.key === 'Enter') open(n);
         }}
