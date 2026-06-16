@@ -14,6 +14,7 @@ export interface Process {
   z: number;         // 叠放层级（越大越在上）
   minimized: boolean;
   maximized: boolean;
+  data?: unknown;    // 启动参数（如记事本要打开的文件 id）；会随会话一起持久化
 }
 
 import { persisted } from './persist.svelte';
@@ -29,7 +30,7 @@ let nextZ = processes.reduce((m, p) => Math.max(m, p.z), 0) + 1;
 export function launch(
   appId: string,
   title: string,
-  opts: { width?: number; height?: number } = {},
+  opts: { width?: number; height?: number; data?: unknown } = {},
 ) {
   const id = `${appId}-${crypto.randomUUID().slice(0, 8)}`;
   const offset = (processes.length % 6) * 28; // 层叠错位，避免新窗口完全重合
@@ -44,6 +45,7 @@ export function launch(
     z: ++nextZ,
     minimized: false,
     maximized: false,
+    data: opts.data,
   });
 }
 
@@ -79,6 +81,21 @@ export function toggleMaximize(id: string) {
   if (!p) return;
   p.maximized = !p.maximized;
   p.z = ++nextZ;
+}
+
+// 设置窗口几何/最大化状态。窗口拖拽/缩放/吸附都走它 ——
+// 让「改进程」这件事统一归内核，组件不直接改 proc（也避免 Svelte 的 ownership 警告）。
+export function setBounds(
+  id: string,
+  b: Partial<Pick<Process, 'x' | 'y' | 'width' | 'height' | 'maximized'>>,
+) {
+  const p = byId(id);
+  if (!p) return;
+  if (b.x !== undefined) p.x = b.x;
+  if (b.y !== undefined) p.y = b.y;
+  if (b.width !== undefined) p.width = b.width;
+  if (b.height !== undefined) p.height = b.height;
+  if (b.maximized !== undefined) p.maximized = b.maximized;
 }
 
 // 当前活动窗 id = 没最小化的里 z 最大那个。键盘快捷键、焦点高亮都靠它。

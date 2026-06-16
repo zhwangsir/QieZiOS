@@ -1,6 +1,8 @@
 import type { Component } from 'svelte';
 import Welcome from './Welcome.svelte';
 import Settings from './Settings.svelte';
+import Files from './Files.svelte';
+import TextEdit from './TextEdit.svelte';
 
 // App 注册表：appId → { 元信息 + 组件 }
 // · 桌面靠它「按 appId 查出组件」再渲染
@@ -12,9 +14,12 @@ export interface AppDef {
   component: Component;
   width?: number;
   height?: number;
+  hidden?: boolean; // 不在 Dock 显示（如记事本，只由文件管理器打开）
 }
 
 export const appRegistry: Record<string, AppDef> = {
   welcome: { title: '欢迎', icon: '🍆', component: Welcome, width: 460, height: 340 },
+  files: { title: '文件', icon: '📁', component: Files, width: 600, height: 420 },
   settings: { title: '设置', icon: '⚙️', component: Settings, width: 540, height: 580 },
+  textedit: { title: '记事本', icon: '📝', component: TextEdit, width: 480, height: 380, hidden: true },
 };

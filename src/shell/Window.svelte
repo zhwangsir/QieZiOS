@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { focus, toggleMaximize, type Process } from '../kernel/processes.svelte';
+  import { focus, toggleMaximize, setBounds, type Process } from '../kernel/processes.svelte';
   import { snapState } from './snapState.svelte';
   import { pop } from '../lib/motion';
   import WindowControls from './WindowControls.svelte';
@@ -26,8 +26,8 @@
 
   function flush() {
     raf = 0;
-    if (dragging) { proc.x = nx; proc.y = ny; }
-    else if (resizing) { proc.width = nw; proc.height = nh; }
+    if (dragging) setBounds(proc.id, { x: nx, y: ny });
+    else if (resizing) setBounds(proc.id, { width: nw, height: nh });
   }
 
   function startDrag(e: PointerEvent) {
@@ -92,11 +92,10 @@
   function applySnap() {
     if (!snapZone) return;
     if (snapZone === 'max') {
-      proc.maximized = true;
+      setBounds(proc.id, { maximized: true });
     } else if (snapState.preview) {
       const p = snapState.preview;
-      proc.maximized = false;
-      proc.x = p.x; proc.y = p.y; proc.width = p.w; proc.height = p.h;
+      setBounds(proc.id, { maximized: false, x: p.x, y: p.y, width: p.w, height: p.h });
     }
   }
 

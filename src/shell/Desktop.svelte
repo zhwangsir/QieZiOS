@@ -53,7 +53,7 @@
     {#each processes as proc (proc.id)}
       {@const App = appRegistry[proc.appId].component}
       <Window {proc} active={active === proc.id}>
-        <App />
+        <App data={proc.data} />
       </Window>
     {/each}
 
