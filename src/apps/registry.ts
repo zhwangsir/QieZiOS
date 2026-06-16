@@ -3,6 +3,8 @@ import Welcome from './Welcome.svelte';
 import Settings from './Settings.svelte';
 import Files from './Files.svelte';
 import TextEdit from './TextEdit.svelte';
+import Calculator from './Calculator.svelte';
+import Clock from './Clock.svelte';
 
 // App 注册表：appId → { 元信息 + 组件 }
 // · 桌面靠它「按 appId 查出组件」再渲染
@@ -20,6 +22,8 @@ export interface AppDef {
 export const appRegistry: Record<string, AppDef> = {
   welcome: { title: '欢迎', icon: '🍆', component: Welcome, width: 460, height: 340 },
   files: { title: '文件', icon: '📁', component: Files, width: 600, height: 420 },
+  calculator: { title: '计算器', icon: '🧮', component: Calculator, width: 260, height: 380 },
+  clock: { title: '时钟', icon: '🕐', component: Clock, width: 300, height: 380 },
   settings: { title: '设置', icon: '⚙️', component: Settings, width: 540, height: 580 },
   textedit: { title: '记事本', icon: '📝', component: TextEdit, width: 480, height: 380, hidden: true },
 };
