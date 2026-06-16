@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { children, rename, remove, type VNode } from '../kernel/vfs.svelte';
+  import { children, rename, trash, type VNode } from '../kernel/vfs.svelte';
   import { launch } from '../kernel/processes.svelte';
   import { openMenu } from './menu.svelte';
   import { iconPos } from './iconLayout.svelte';
@@ -70,10 +70,7 @@
         icon: '🗑️',
         danger: true,
         separator: true,
-        onClick: () => {
-          remove(n.id);
-          delete iconPos.pos[n.id];
-        },
+        onClick: () => trash(n.id),
       },
     ]);
   }

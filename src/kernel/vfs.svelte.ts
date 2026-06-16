@@ -11,11 +11,16 @@ export interface VNode {
   id: string;
   name: string;
   type: 'dir' | 'file';
-  parentId: string | null; // null 仅根节点
+  parentId: string | null; // null 仅根节点；'trash' = 在回收站
   content: string; // 文件正文；文件夹恒为空串
+  prevParent?: string | null; // 进回收站前的父级（用于还原）
   createdAt: number;
   updatedAt: number;
 }
+
+// 回收站用一个「哨兵 parentId」标记，不需要真节点：
+// children('trash') 即回收站内容；普通文件夹 children 自然不含它们（parentId 已变成 'trash'）。
+export const TRASH = 'trash';
 
 const t0 = Date.now();
 // 初始种子：让第一次打开文件管理器时不是空的
@@ -93,11 +98,34 @@ export function writeFile(id: string, content: string): void {
   }
 }
 
-// 删除（文件夹递归删子项）。根节点不可删。
-export function remove(id: string): void {
+// 软删除：移入回收站（记住原父级以便还原）。根节点不可删。
+export function trash(id: string): void {
+  const n = vfs.nodes[id];
+  if (!n || id === 'root') return;
+  n.prevParent = n.parentId;
+  n.parentId = TRASH;
+  n.updatedAt = Date.now();
+}
+
+// 从回收站还原到原位置（原父级没了就回根目录）
+export function restoreFromTrash(id: string): void {
+  const n = vfs.nodes[id];
+  if (!n) return;
+  n.parentId = n.prevParent && vfs.nodes[n.prevParent] ? n.prevParent : 'root';
+  n.prevParent = undefined;
+  n.updatedAt = Date.now();
+}
+
+// 彻底删除（文件夹递归删子项）。根节点不可删。
+export function purge(id: string): void {
   if (id === 'root') return;
-  for (const child of children(id)) remove(child.id);
+  for (const child of children(id)) purge(child.id);
   delete vfs.nodes[id];
+}
+
+// 清空回收站
+export function emptyTrash(): void {
+  for (const n of children(TRASH)) purge(n.id);
 }
 
 // 从根到该节点的路径段（面包屑用）

@@ -4,7 +4,7 @@
     createDir,
     createFile,
     rename,
-    remove,
+    trash,
     getNode,
     pathSegments,
     type VNode,
@@ -55,7 +55,7 @@
   }
   function del(n: VNode, e: Event) {
     e.stopPropagation();
-    remove(n.id);
+    trash(n.id);
   }
 
   function onItemMenu(e: MouseEvent, n: VNode) {
@@ -69,7 +69,7 @@
           renameText = n.name;
         },
       },
-      { label: '删除', icon: '🗑️', danger: true, separator: true, onClick: () => remove(n.id) },
+      { label: '删除', icon: '🗑️', danger: true, separator: true, onClick: () => trash(n.id) },
     ]);
   }
 
