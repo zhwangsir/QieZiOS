@@ -1,16 +1,12 @@
 <script lang="ts">
-  import { processes, minimize, restore, type Process } from '../kernel/processes.svelte';
+  import { processes, minimize, restore, activeId, type Process } from '../kernel/processes.svelte';
   import { appRegistry } from '../apps/registry';
 
-  // $derived：当前活动窗 = 没最小化的里 z 最大那个（null 表示没有活动窗）
-  const active = $derived(
-    processes
-      .filter((p) => !p.minimized)
-      .reduce<Process | null>((top, p) => (!top || p.z > top.z ? p : top), null),
-  );
+  // 当前活动窗 id（内核统一计算，键盘/焦点高亮/任务栏共用同一份逻辑）
+  const activeWin = $derived(activeId());
 
   function onChip(p: Process) {
-    if (active && active.id === p.id) {
+    if (activeWin === p.id) {
       minimize(p.id); // 点当前活动窗 → 收起
     } else {
       restore(p.id); // 否则 → 还原 + 聚焦置顶
@@ -37,7 +33,7 @@
   <div class="flex flex-1 items-center gap-1.5 overflow-hidden">
     {#each processes as p (p.id)}
       {@const icon = appRegistry[p.appId]?.icon ?? '▫'}
-      {@const isActive = active?.id === p.id}
+      {@const isActive = activeWin === p.id}
       <button
         class="flex min-w-0 max-w-40 items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
         class:opacity-50={p.minimized}

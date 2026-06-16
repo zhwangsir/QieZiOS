@@ -5,13 +5,15 @@
   import { pop } from '../lib/motion';
   import WindowControls from './WindowControls.svelte';
 
-  let { proc, children }: { proc: Process; children: Snippet } = $props();
+  // active：是不是当前活动窗（由 Desktop 传入，用来高亮焦点边框）
+  let { proc, active = false, children }: { proc: Process; active?: boolean; children: Snippet } =
+    $props();
 
   let el: HTMLElement; // 窗口根元素引用：用来拿父级窗口层的尺寸做边缘判定
   let dragging = $state(false);
   let resizing = $state(false);
   // $derived：派生状态。dragging/resizing 任一为真就是「正在交互」
-  const active = $derived(dragging || resizing);
+  const interacting = $derived(dragging || resizing);
 
   // 起点快照（普通变量，无需响应式）
   let sx = 0, sy = 0, ox = 0, oy = 0, ow = 0, oh = 0;
@@ -115,7 +117,10 @@
   bind:this={el}
   class="absolute flex flex-col select-none overflow-hidden border border-qz-border qz-glass shadow-2xl shadow-black/40"
   {style}
-  style:will-change={active ? 'transform' : 'auto'}
+  style:will-change={interacting ? 'transform' : 'auto'}
+  style:border-color={active
+    ? 'color-mix(in srgb, var(--color-qz-accent) 60%, var(--color-qz-border))'
+    : null}
   style:opacity={proc.minimized ? '0' : '1'}
   style:scale={proc.minimized ? '0.96' : '1'}
   style:pointer-events={proc.minimized ? 'none' : null}

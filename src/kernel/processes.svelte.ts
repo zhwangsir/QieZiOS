@@ -81,6 +81,25 @@ export function toggleMaximize(id: string) {
   p.z = ++nextZ;
 }
 
+// 当前活动窗 id = 没最小化的里 z 最大那个。键盘快捷键、焦点高亮都靠它。
+// 在 effect/模板里调用会自动订阅 processes（读了每个 p 的 z/minimized）。
+export function activeId(): string | null {
+  let top: Process | null = null;
+  for (const p of processes) {
+    if (p.minimized) continue;
+    if (!top || p.z > top.z) top = p;
+  }
+  return top ? top.id : null;
+}
+
+// 窗口轮换：把最底层的可见窗提到最前 → 反复调用即在所有窗口间循环（Alt+`）。
+export function cycleWindows() {
+  const visible = processes.filter((p) => !p.minimized);
+  if (visible.length < 2) return;
+  const bottom = visible.reduce((b, p) => (p.z < b.z ? p : b));
+  bottom.z = ++nextZ;
+}
+
 function byId(id: string): Process | undefined {
   return processes.find((p) => p.id === id);
 }

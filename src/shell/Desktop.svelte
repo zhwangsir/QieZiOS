@@ -1,11 +1,39 @@
 <script lang="ts">
-  import { processes } from '../kernel/processes.svelte';
+  import {
+    processes,
+    activeId,
+    close,
+    minimize,
+    cycleWindows,
+  } from '../kernel/processes.svelte';
   import { appRegistry } from '../apps/registry';
   import Window from './Window.svelte';
   import Dock from './Dock.svelte';
   import TopBar from './TopBar.svelte';
   import { snapState } from './snapState.svelte';
+
+  // 当前活动窗 id（派生）：传给每个 Window 决定是否高亮
+  const active = $derived(activeId());
+
+  // 全局快捷键。注意：在输入框/可编辑区里打字时不拦截。
+  function onKey(e: KeyboardEvent) {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+
+    if (e.key === 'Escape') {
+      const id = activeId();
+      if (id) close(id);
+    } else if ((e.key === 'm' || e.key === 'M') && (e.ctrlKey || e.metaKey)) {
+      const id = activeId();
+      if (id) { minimize(id); e.preventDefault(); }
+    } else if (e.key === '`' && (e.altKey || e.ctrlKey)) {
+      cycleWindows();
+      e.preventDefault();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onKey} />
 
 <!-- 桌面外壳：壁纸（吃 token）+ 顶栏 + 窗口层 + Dock -->
 <div class="relative h-full w-full overflow-hidden" style="background: var(--qz-wallpaper)">
@@ -24,7 +52,7 @@
   <div class="absolute inset-x-0 bottom-0 top-9 isolate">
     {#each processes as proc (proc.id)}
       {@const App = appRegistry[proc.appId].component}
-      <Window {proc}>
+      <Window {proc} active={active === proc.id}>
         <App />
       </Window>
     {/each}
