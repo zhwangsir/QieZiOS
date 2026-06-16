@@ -1,9 +1,57 @@
 @import "tailwindcss";
 
-:root { color-scheme: dark; }
-html, body { height: 100%; margin: 0; }
-#app { height: 100vh; }
+/* ───────────────────────────────────────────────────────────
+   设计 token —— 整个系统的「底座」
+   @theme 里的每一条会被 Tailwind 同时做成：
+     1) 工具类（--color-qz-accent → bg-qz-accent / text-qz-accent …）
+     2) :root 上的 CSS 变量（运行时可被 JS 覆盖 → 换肤/换壁纸）
+   这里写的只是「默认值」，theme.svelte.ts 会在运行时按用户设置覆盖它们。
+   ─────────────────────────────────────────────────────────── */
+@theme {
+  --color-qz-bg: #0b0b12;            /* 桌面底色（一般被壁纸盖住） */
+  --color-qz-surface: #1b1b27;       /* 窗口/面板基色（配 qz-glass 做磨砂） */
+  --color-qz-elevated: #2a2a3b;      /* 更高一层的表面（hover/控件） */
+  --color-qz-text: #f3f3f8;          /* 主文字 */
+  --color-qz-muted: #a6a6bd;         /* 次要文字 */
+  --color-qz-border: rgb(255 255 255 / 0.12); /* 发丝边框 */
+  --color-qz-accent: #8b5cf6;        /* 主色（用户可改） */
+  --color-qz-accent-contrast: #ffffff; /* 主色之上的文字色 */
+
+  --radius-qz: 14px;                 /* 全局圆角（用户可改） */
+}
+
+/* 非颜色/圆角类的运行时 token —— 同样会被 theme.svelte.ts 覆盖 */
+:root {
+  --qz-blur: 18px;                   /* 磨砂模糊强度 */
+  --qz-surface-opacity: 0.66;        /* 面板半透明度（玻璃感） */
+  --qz-dur: 180ms;                   /* 标准动效时长 */
+  --qz-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --qz-wallpaper: linear-gradient(135deg, #0f172a 0%, #1e1b4b 45%, #2e1065 100%);
+  color-scheme: dark;
+}
+
+/* 玻璃拟态面板：把「半透明表面色 + 背景模糊」收进一个工具类，
+   背后吃的全是运行时 token → 改设置即时生效、且只改 CSS 变量、0 组件重渲染。 */
+@utility qz-glass {
+  background-color: color-mix(
+    in srgb,
+    var(--color-qz-surface) calc(var(--qz-surface-opacity) * 100%),
+    transparent
+  );
+  backdrop-filter: blur(var(--qz-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--qz-blur)) saturate(140%);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+#app {
+  height: 100vh;
+}
 body {
   overflow: hidden;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--color-qz-text);
 }

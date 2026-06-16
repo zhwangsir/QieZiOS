@@ -18,7 +18,7 @@
 
 - **本地**：`D:\file\New Develop\QieZiOS`
 - **远程**：`https://github.com/zhwangsir/QieZiOS.git`（已设为 `origin`）
-- **状态**：P0 已**本地提交**（commit `c174f71` + 本文件提交），**尚未 push**（作者未授权推送；新会话要推送前先问）。
+- **状态**：历史 P0 已本地提交（`c174f71`）；**Phase A 重构（src 全部重写）已完成并验证，但尚未 commit / push**（作者未授权提交或推送；动手前先问）。
 - **与博客的关系**：完全独立于 `D:\file\New Develop\QieZiBlog`（一个已完成的 React 博客 WineryBlog）。**不要**把博客仓库改造成 OS。博客**以后作为系统里的一个 App 嵌入**——先用 `iframe`（零重写，React 博客跑在 Svelte 系统里完全没问题，这正是"平台兼容异构 App"的体现）。
 
 ---
@@ -42,35 +42,57 @@
 
 ## 四、架构（核心心智模型，务必理解）
 
-**小内核 + 万物皆 App（微内核思想）**：
+**小内核 + 万物皆 App（微内核思想）**，按职责分四层：
+
+| 层 | 目录 | 职责 |
+|---|---|---|
+| 内核 kernel | `src/kernel/` | 唯一真相源（信号驱动）：进程表 + 窗口生命周期 + 持久化 helper |
+| 系统服务 system | `src/system/` | 数据驱动、运行时可切：主题 token / 用户设置 / 壁纸 |
+| 外壳 shell | `src/shell/` | 可见的 OS chrome（全部吃 token）：Desktop / Dock / Window |
+| App 平台 apps | `src/apps/` | 万物皆 App：注册表 + App 组件 |
+
+渲染 / 换肤链路：
 
 ```
-进程表(内核状态)  ──遍历──►  Desktop  ──按 appId 查──►  registry(appId→组件)  ──塞进──►  Window  ──渲染──►  App(组件)
-                                  Dock  ──遍历 registry──►  每个 App 一个启动按钮
+processes(内核 $state) ──遍历──► Desktop ──按 appId 查──► registry ──塞进──► Window ──► App(组件)
+                                   Dock  ──遍历 registry──► 启动/还原按钮 + 在跑指示点
+settings(system) ──$effect──► 写 CSS token 到 :root ──► 整屏换肤（0 组件重渲染）
 ```
 
-一句话：**进程 = state 里的一个对象；窗口 = 把进程渲染成可拖拽的容器；App = 一个组件；加新 App = 往注册表登记一条。**
+一句话：**进程 = state 里的一个对象；窗口 = 把进程渲染成可拖容器；App = 一个组件；加新 App = 注册表登记一条；换肤 = 改 CSS 变量。**
 
 ---
 
-## 五、当前进度：✅ P0 完成 =「会动的最小桌面」
+## 五、当前进度：✅ Phase A 完成 =「会自定义、能记住的丝滑桌面」
 
-可开/拖/缩放/关窗口、多窗口叠放、Dock 启动 App、点击置顶。
+src 已全部重写。能力：开/拖/缩放/关窗口、最小化（Dock 找回）、最大化/还原（双击标题栏也行）、多窗叠放、点击置顶；**设置 App 实时改 主色/明暗/圆角/模糊/面板透明度/壁纸，刷新后仍在（localStorage 持久化）**。换肤只改 CSS 变量 → 0 组件重渲染。
 
 ### 文件（`src/`）
 | 文件 | 作用 |
 |---|---|
-| `kernel/processes.svelte.ts` | **内核状态**：`processes = $state([])` + `launch/close/focus` |
-| `apps/Hello.svelte` | 示例 App（就是个普通组件） |
-| `apps/registry.ts` | App 注册表 `appId → { title, icon, component }` |
-| `lib/Window.svelte` | 窗口：标题栏拖拽、右下角缩放、transform 定位、z-index 叠放 |
-| `lib/Desktop.svelte` | 桌面外壳：壁纸 + 遍历进程渲染窗口 + 底部 Dock |
-| `App.svelte` | 只渲染 `<Desktop/>` |
-| `lib/Counter.svelte`、`assets/*` | 脚手架残留 demo，未使用，**可删** |
+| `kernel/processes.svelte.ts` | 内核进程表 `$state` + `launch/close/focus/minimize/restore/toggleMaximize` |
+| `kernel/persist.svelte.ts` | `persisted()` 自动存盘 helper（`$state`+`$effect.root`+`$state.snapshot`）+ storage 抽象接口 |
+| `system/theme.svelte.ts` | 把设置算成 CSS token，`applyTokens()` 写进 `:root` |
+| `system/settings.svelte.ts` | 用户设置（持久化）+ 主色预设 |
+| `system/wallpaper.ts` | 壁纸预设（CSS 渐变） |
+| `shell/Window.svelte` | 窗口 chrome：拖/缩放(rAF 批处理)/最大化(CSS 铺满)/最小化；transform 定位 + `contain` |
+| `shell/WindowControls.svelte` | 红绿灯：关 / 最小化 / 最大化 |
+| `shell/Dock.svelte` | 启动 + 在跑指示点 + 点击还原聚焦 |
+| `shell/Desktop.svelte` | 壁纸 + 窗口层 + Dock |
+| `apps/registry.ts` | 注册表 `appId → { title, icon, component, width?, height? }` |
+| `apps/Welcome.svelte` / `apps/Settings.svelte` | 欢迎 App / 设置 App（自定义闭环） |
+| `app.css` | Tailwind v4 `@theme` token + `qz-glass` 玻璃工具类 |
+| `App.svelte` | `$effect` 应用主题 + 首启动开 Welcome + 挂 `<Desktop/>` |
+
+### 设计 token 机制（地基，务必懂）
+- `app.css` 的 `@theme` 定义 `--color-qz-*`/`--radius-qz` → Tailwind 同时生成工具类(`bg-qz-surface`…)和 `:root` 变量；非颜色 token(`--qz-blur`/`--qz-surface-opacity`/`--qz-wallpaper`)放普通 `:root`。
+- 运行时 `theme.svelte.ts` 把值写进 `<html>` 的 inline style 覆盖默认（inline 优先级最高 → 永远赢）。
+- 玻璃面板用 `qz-glass`：`color-mix` 算半透明表面色 + `backdrop-filter` 模糊，全吃运行时 token。
 
 ### 验证状态
-- `npm run build` ✅ 干净通过（JS ~43KB / gzip 17KB）。`npm run dev` 在 **5173** 验证过 HTTP 200、标题正确。
-- ⚠️ 之前后台的 dev server 进程已退出（疑似受预览工具干扰）——直接 `npm run dev` 重启即可。
+- `npm run check` ✅ 0 错 0 警；`npm run build` ✅ 干净（CSS 17KB、JS 56KB / gzip 22KB）。
+- 浏览器实测（DOM 级）：主题实时切换 / 持久化(刷新还在) / 窗口最小化-还原-最大化-关闭，全通过。
+- ⚠️ 预览工具的 `preview_screenshot` 在本机超时（页面本身完全正常）——看实际效果直接浏览器开 `localhost:5173`。
 
 ---
 
@@ -86,13 +108,12 @@ npm run check   # svelte-check 类型检查
 
 ---
 
-## 七、路线图
+## 七、路线图（围绕四大方向：性能 / 丝滑 / 自由度 / 美观）
 
-- ✅ **P0 地基**：内核(进程) + 可拖窗口 + Hello App + Dock。
-- **P1 外壳**（下一步）：任务栏(显示/切换已开窗口)、窗口最小化/最大化、再加 1–2 个 App(如"设置"换壁纸)、键盘焦点/Esc 关闭。
-- **P2 App 平台 + VFS**：契约式 App SDK + iframe/Module Federation 沙箱 + 虚拟文件系统(IndexedDB→OPFS/SQLite-WASM) + 文件管理器 App。
-- **P3 权限 + 后端**：能力权限体系 + Java/Node 后端(持久化/账号/多端同步)。
-- **P4 深度 + 风格**：主题系统、把胡桃博客做成 App(iframe)、嵌 WASM 跑真终端/Python、打包 Docker(自托管)+在线版。
+- ✅ **Phase A 地基**：内核重写 + 主题 token + 持久化 + 窗口管理(最小/最大化) + 设置 App。
+- **Phase B 丝滑外壳**（下一步）：边缘吸附(snap) + View Transitions 开关窗动画、任务栏(在跑窗口切换)、键盘焦点/Esc、**窗口会话还原**(重开恢复上次窗口位置)、性能 pass。
+- **Phase C App 平台 + VFS**：契约式 App SDK(能力声明) + 虚拟文件系统(IndexedDB→OPFS/SQLite-WASM) + 文件管理器 + iframe 沙箱(把胡桃博客嵌成 App)。
+- **Phase D 深度自定义 + 平台化**：主题编辑器/自定义 CSS/每 App 主题、Module Federation 第三方 App、Java/Node 后端(持久化/账号/同步)、WASM 终端、Docker 自托管 + 在线版。
 
 ---
 
@@ -100,9 +121,10 @@ npm run check   # svelte-check 类型检查
 
 - 作者背景：**Web 前端 + Java**，**Svelte 是新学的、不懂底层**。
 - **边做边教**：每引入一个 Svelte 5 新概念都要讲清楚、关键处让作者动手，不要只甩代码。
-- 已教过的 Svelte 5 概念：`$state`（组件内 + `.svelte.ts` 全局共享状态）、`$props()`、**小写事件属性**(`onclick`/`onpointerdown`)、`{#each}+{@const}+<Comp/>`(动态组件)、`{@render children()}`(snippet 插槽)。
+- 已教过的 Svelte 5 概念：`$state`（组件内 + `.svelte.ts` 全局共享状态）、`$props()`、**小写事件属性**(`onclick`/`onpointerdown`)、`{#each}+{@const}+<Comp/>`(动态组件)、`{@render children()}`(snippet 插槽)、`$derived`(派生状态)、`$effect`(副作用，如写 CSS token)、`$effect.root`(模块级 effect 作用域)、`$state.snapshot`(序列化前把代理拍平)、自定义 rune helper(`persisted()`)。
+- ⚠️ 注意：Phase A 这批代码是「我写、边写边注释讲解」产出的，**还没有真正让作者动手写过**。下个阶段要落实"关键处让作者动手"。
 - 每个阶段都要产出**能跑、能用、好看**的东西（作者很看重美观与手感）。
 
 ## 九、待决策
-1. 是否 `git push -u origin main`（作者未授权，先问）。
-2. P1 的具体范围与先后。
+1. 是否 commit 本次 Phase A 重构 + 是否 `git push -u origin main`（作者未授权提交/推送，先问）。
+2. Phase B 的具体范围与先后（snap / 任务栏 / 会话还原 / 开关窗动画，先做哪个）。
