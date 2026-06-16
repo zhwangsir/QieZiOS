@@ -12,7 +12,9 @@
   import { createDir, createFile } from '../kernel/vfs.svelte';
   import { appRegistry } from '../apps/registry';
   import { openMenu, closeMenu, menu } from './menu.svelte';
+  import { openSpotlight } from './spotlightState.svelte';
   import Window from './Window.svelte';
+  import Spotlight from './Spotlight.svelte';
   import Dock from './Dock.svelte';
   import TopBar from './TopBar.svelte';
   import ContextMenu from './ContextMenu.svelte';
@@ -48,6 +50,12 @@
     // 菜单开着时，Esc 先关菜单
     if (menu.open) {
       if (e.key === 'Escape') closeMenu();
+      return;
+    }
+    // Ctrl/Cmd+K 打开命令面板（即使焦点在输入框也响应）
+    if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) {
+      openSpotlight();
+      e.preventDefault();
       return;
     }
     const t = e.target as HTMLElement | null;
@@ -120,4 +128,7 @@
 
   <!-- 右键菜单（全局单例，谁右键就显示谁的菜单） -->
   <ContextMenu />
+
+  <!-- 命令面板（Ctrl/Cmd+K） -->
+  <Spotlight />
 </div>
