@@ -16,11 +16,14 @@ export interface Process {
   maximized: boolean;
 }
 
-// $state(...) = 信号：谁读它谁就在它变化时自动更新。
-// 写在 .svelte.ts 里 = 一份全局共享的响应式「内核状态」。
-export const processes = $state<Process[]>([]);
+import { persisted } from './persist.svelte';
 
-let nextZ = 1; // 普通变量即可：真正要响应式的是每个进程对象上的 z
+// 全局共享的响应式「内核状态」。用 persisted 包起来：
+// 开/拖/缩放/关窗口都会（防抖后）自动存盘，刷新后窗口布局原样还原（= 会话还原）。
+export const processes = persisted<Process[]>('qz.windows', [], 250);
+
+// 还原会话后，让 nextZ 从已有最大 z 之上接着发，新窗口才不会被压在底下。
+let nextZ = processes.reduce((m, p) => Math.max(m, p.z), 0) + 1;
 
 // 启动一个 App = 往进程表加一项（= 开一个窗口）
 export function launch(

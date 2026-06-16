@@ -18,7 +18,7 @@
 
 - **本地**：`D:\file\New Develop\QieZiOS`
 - **远程**：`https://github.com/zhwangsir/QieZiOS.git`（已设为 `origin`）
-- **状态**：历史 P0 已本地提交（`c174f71`）；**Phase A 重构（src 全部重写）已完成并验证，但尚未 commit / push**（作者未授权提交或推送；动手前先问）。
+- **状态**：Phase A 已提交（`3aba79d`，含 src 全部重写）；**Phase B-1（窗口会话还原 + 顶栏任务栏）已完成并验证，未 commit**。均**未 push**（作者未授权推送；推送前先问）。
 - **与博客的关系**：完全独立于 `D:\file\New Develop\QieZiBlog`（一个已完成的 React 博客 WineryBlog）。**不要**把博客仓库改造成 OS。博客**以后作为系统里的一个 App 嵌入**——先用 `iframe`（零重写，React 博客跑在 Svelte 系统里完全没问题，这正是"平台兼容异构 App"的体现）。
 
 ---
@@ -63,22 +63,23 @@ settings(system) ──$effect──► 写 CSS token 到 :root ──► 整屏
 
 ---
 
-## 五、当前进度：✅ Phase A 完成 =「会自定义、能记住的丝滑桌面」
+## 五、当前进度：✅ Phase A + B-1 =「会自定义、记得住布局的丝滑桌面」
 
-src 已全部重写。能力：开/拖/缩放/关窗口、最小化（Dock 找回）、最大化/还原（双击标题栏也行）、多窗叠放、点击置顶；**设置 App 实时改 主色/明暗/圆角/模糊/面板透明度/壁纸，刷新后仍在（localStorage 持久化）**。换肤只改 CSS 变量 → 0 组件重渲染。
+src 已全部重写。能力：开/拖/缩放/关窗口、最小化（Dock 或顶栏找回）、最大化/还原（双击标题栏也行）、多窗叠放、点击置顶；**顶栏任务栏**（每窗一个切换 chip + 实时时钟）；**设置 App 实时改 主色/明暗/圆角/模糊/面板透明度/壁纸**；**整套设置 + 打开的窗口布局都持久化，刷新后原样还原（会话还原）**。换肤只改 CSS 变量 → 0 组件重渲染。
 
 ### 文件（`src/`）
 | 文件 | 作用 |
 |---|---|
-| `kernel/processes.svelte.ts` | 内核进程表 `$state` + `launch/close/focus/minimize/restore/toggleMaximize` |
-| `kernel/persist.svelte.ts` | `persisted()` 自动存盘 helper（`$state`+`$effect.root`+`$state.snapshot`）+ storage 抽象接口 |
+| `kernel/processes.svelte.ts` | 内核进程表（`persisted` → 会话还原）+ `launch/close/focus/minimize/restore/toggleMaximize` |
+| `kernel/persist.svelte.ts` | `persisted()` 自动存盘 helper（`$state`+`$effect.root`+`$state.snapshot`+**防抖**+数组支持）+ storage 抽象接口 |
 | `system/theme.svelte.ts` | 把设置算成 CSS token，`applyTokens()` 写进 `:root` |
 | `system/settings.svelte.ts` | 用户设置（持久化）+ 主色预设 |
 | `system/wallpaper.ts` | 壁纸预设（CSS 渐变） |
 | `shell/Window.svelte` | 窗口 chrome：拖/缩放(rAF 批处理)/最大化(CSS 铺满)/最小化；transform 定位 + `contain` |
 | `shell/WindowControls.svelte` | 红绿灯：关 / 最小化 / 最大化 |
+| `shell/TopBar.svelte` | 顶栏任务栏：每窗一个切换 chip（活动高亮/最小化淡显）+ 实时时钟 |
 | `shell/Dock.svelte` | 启动 + 在跑指示点 + 点击还原聚焦 |
-| `shell/Desktop.svelte` | 壁纸 + 窗口层 + Dock |
+| `shell/Desktop.svelte` | 壁纸 + 顶栏 + 窗口层(下移避顶栏、`isolate` 隔离层叠) + Dock |
 | `apps/registry.ts` | 注册表 `appId → { title, icon, component, width?, height? }` |
 | `apps/Welcome.svelte` / `apps/Settings.svelte` | 欢迎 App / 设置 App（自定义闭环） |
 | `app.css` | Tailwind v4 `@theme` token + `qz-glass` 玻璃工具类 |
@@ -111,7 +112,7 @@ npm run check   # svelte-check 类型检查
 ## 七、路线图（围绕四大方向：性能 / 丝滑 / 自由度 / 美观）
 
 - ✅ **Phase A 地基**：内核重写 + 主题 token + 持久化 + 窗口管理(最小/最大化) + 设置 App。
-- **Phase B 丝滑外壳**（下一步）：边缘吸附(snap) + View Transitions 开关窗动画、任务栏(在跑窗口切换)、键盘焦点/Esc、**窗口会话还原**(重开恢复上次窗口位置)、性能 pass。
+- 🚧 **Phase B 丝滑外壳**（进行中）：✅ 顶栏任务栏(窗口切换) + ✅ 窗口会话还原；**待办**：边缘吸附(snap)、View Transitions 开关窗动画、键盘焦点/Esc、性能 pass。
 - **Phase C App 平台 + VFS**：契约式 App SDK(能力声明) + 虚拟文件系统(IndexedDB→OPFS/SQLite-WASM) + 文件管理器 + iframe 沙箱(把胡桃博客嵌成 App)。
 - **Phase D 深度自定义 + 平台化**：主题编辑器/自定义 CSS/每 App 主题、Module Federation 第三方 App、Java/Node 后端(持久化/账号/同步)、WASM 终端、Docker 自托管 + 在线版。
 
@@ -121,10 +122,10 @@ npm run check   # svelte-check 类型检查
 
 - 作者背景：**Web 前端 + Java**，**Svelte 是新学的、不懂底层**。
 - **边做边教**：每引入一个 Svelte 5 新概念都要讲清楚、关键处让作者动手，不要只甩代码。
-- 已教过的 Svelte 5 概念：`$state`（组件内 + `.svelte.ts` 全局共享状态）、`$props()`、**小写事件属性**(`onclick`/`onpointerdown`)、`{#each}+{@const}+<Comp/>`(动态组件)、`{@render children()}`(snippet 插槽)、`$derived`(派生状态)、`$effect`(副作用，如写 CSS token)、`$effect.root`(模块级 effect 作用域)、`$state.snapshot`(序列化前把代理拍平)、自定义 rune helper(`persisted()`)。
+- 已教过的 Svelte 5 概念：`$state`（组件内 + `.svelte.ts` 全局共享状态）、`$props()`、**小写事件属性**(`onclick`/`onpointerdown`)、`{#each}+{@const}+<Comp/>`(动态组件)、`{@render children()}`(snippet 插槽)、`$derived`(派生状态)、`$effect`(副作用，如写 CSS token)、**`$effect` 清理函数**(`return () => clearInterval`，如顶栏时钟)、`$effect.root`(模块级 effect 作用域)、`$state.snapshot`(序列化前把代理拍平)、自定义 rune helper(`persisted()`，含防抖写盘)。
 - ⚠️ 注意：Phase A 这批代码是「我写、边写边注释讲解」产出的，**还没有真正让作者动手写过**。下个阶段要落实"关键处让作者动手"。
 - 每个阶段都要产出**能跑、能用、好看**的东西（作者很看重美观与手感）。
 
 ## 九、待决策
-1. 是否 commit 本次 Phase A 重构 + 是否 `git push -u origin main`（作者未授权提交/推送，先问）。
-2. Phase B 的具体范围与先后（snap / 任务栏 / 会话还原 / 开关窗动画，先做哪个）。
+1. 是否 commit Phase B-1（会话还原 + 任务栏）；是否 `git push -u origin main`（push 未授权，先问）。
+2. Phase B 下一项先做哪个：边缘吸附(snap) / 开关窗动画(View Transitions) / 键盘焦点 + Esc。
