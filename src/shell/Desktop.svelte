@@ -4,6 +4,7 @@
   import Window from './Window.svelte';
   import Dock from './Dock.svelte';
   import TopBar from './TopBar.svelte';
+  import { snapState } from './snapState.svelte';
 </script>
 
 <!-- 桌面外壳：壁纸（吃 token）+ 顶栏 + 窗口层 + Dock -->
@@ -27,6 +28,17 @@
         <App />
       </Window>
     {/each}
+
+    <!-- 边缘吸附预览框：拖窗到边缘时出现，提示松手后窗口会落到哪里 -->
+    {#if snapState.preview}
+      <div
+        class="pointer-events-none absolute left-0 top-0 z-[9000] rounded-qz border-2 transition-[transform,width,height] duration-100"
+        style="transform: translate({snapState.preview.x}px, {snapState.preview.y}px);
+               width: {snapState.preview.w}px; height: {snapState.preview.h}px;
+               border-color: var(--color-qz-accent);
+               background: color-mix(in srgb, var(--color-qz-accent) 16%, transparent);"
+      ></div>
+    {/if}
   </div>
 
   <Dock />

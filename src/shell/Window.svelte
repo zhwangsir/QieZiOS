@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { focus, toggleMaximize, type Process } from '../kernel/processes.svelte';
+  import { snapState } from './snapState.svelte';
   import WindowControls from './WindowControls.svelte';
 
   let { proc, children }: { proc: Process; children: Snippet } = $props();
 
+  let el: HTMLElement; // 窗口根元素引用：用来拿父级窗口层的尺寸做边缘判定
   let dragging = $state(false);
   let resizing = $state(false);
   // $derived：派生状态。dragging/resizing 任一为真就是「正在交互」
@@ -14,6 +16,10 @@
   let sx = 0, sy = 0, ox = 0, oy = 0, ow = 0, oh = 0;
   // rAF 批处理：pointermove 触发极密，每帧只写一次几何，稳住帧率
   let raf = 0, nx = 0, ny = 0, nw = 0, nh = 0;
+
+  // 边缘吸附：当前拖到了哪个吸附区（null = 没吸附）
+  let snapZone: 'left' | 'right' | 'max' | null = null;
+  const SNAP_T = 18; // 边缘判定带宽度（px）
 
   function flush() {
     raf = 0;
@@ -39,6 +45,7 @@
     if (dragging) {
       nx = ox + (e.clientX - sx);
       ny = Math.max(0, oy + (e.clientY - sy)); // 不让标题栏被拖出屏幕顶
+      updateSnap(e); // 顺带判断是否进入了边缘吸附区
     } else if (resizing) {
       nw = Math.max(280, ow + (e.clientX - sx));
       nh = Math.max(180, oh + (e.clientY - sy));
@@ -48,8 +55,46 @@
     if (!raf) raf = requestAnimationFrame(flush);
   }
   function onUp() {
+    if (dragging) applySnap(); // 松手时若在吸附区 → 套用吸附几何
     dragging = false; resizing = false;
+    snapZone = null;
+    snapState.preview = null; // 收掉预览框
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
+  }
+
+  // 拖拽中：根据指针离窗口层各边的距离，决定吸附区并写预览框（layer 坐标系）
+  function updateSnap(e: PointerEvent) {
+    const layer = el?.parentElement;
+    if (!layer) return;
+    const r = layer.getBoundingClientRect();
+    const W = layer.clientWidth;
+    const H = layer.clientHeight;
+    const half = Math.round(W / 2);
+    if (e.clientY - r.top <= SNAP_T) {
+      snapZone = 'max';
+      snapState.preview = { x: 0, y: 0, w: W, h: H };
+    } else if (e.clientX - r.left <= SNAP_T) {
+      snapZone = 'left';
+      snapState.preview = { x: 0, y: 0, w: half, h: H };
+    } else if (r.right - e.clientX <= SNAP_T) {
+      snapZone = 'right';
+      snapState.preview = { x: W - half, y: 0, w: W - half, h: H };
+    } else {
+      snapZone = null;
+      snapState.preview = null;
+    }
+  }
+
+  // 松手套用：上边缘 → 最大化；左右边缘 → 半屏
+  function applySnap() {
+    if (!snapZone) return;
+    if (snapZone === 'max') {
+      proc.maximized = true;
+    } else if (snapState.preview) {
+      const p = snapState.preview;
+      proc.maximized = false;
+      proc.x = p.x; proc.y = p.y; proc.width = p.w; proc.height = p.h;
+    }
   }
 
   // 最大化用 CSS 铺满（几何数值不动，取消时自然还原）；否则 transform 定位走 GPU
@@ -64,6 +109,7 @@
 
 <!-- 整窗任意位置按下 → 置顶（捕获阶段，先于内部处理） -->
 <div
+  bind:this={el}
   class="absolute flex flex-col select-none overflow-hidden border border-qz-border qz-glass shadow-2xl shadow-black/40"
   class:hidden={proc.minimized}
   {style}
