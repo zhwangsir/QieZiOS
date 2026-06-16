@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
   import { focus, toggleMaximize, type Process } from '../kernel/processes.svelte';
   import { snapState } from './snapState.svelte';
+  import { pop } from '../lib/motion';
   import WindowControls from './WindowControls.svelte';
 
   let { proc, children }: { proc: Process; children: Snippet } = $props();
@@ -108,12 +109,19 @@
 </script>
 
 <!-- 整窗任意位置按下 → 置顶（捕获阶段，先于内部处理） -->
+<!-- 开/关：in:pop / out:pop（缩放淡入淡出，首屏已存在的窗口不播放 → 会话还原不闪）。
+     最小化/还原：靠下面 opacity+scale 的 CSS transition 平滑过渡（窗口保持挂载，不 display:none）。 -->
 <div
   bind:this={el}
   class="absolute flex flex-col select-none overflow-hidden border border-qz-border qz-glass shadow-2xl shadow-black/40"
-  class:hidden={proc.minimized}
   {style}
   style:will-change={active ? 'transform' : 'auto'}
+  style:opacity={proc.minimized ? '0' : '1'}
+  style:scale={proc.minimized ? '0.96' : '1'}
+  style:pointer-events={proc.minimized ? 'none' : null}
+  style:transition="opacity var(--qz-dur) var(--qz-ease), scale var(--qz-dur) var(--qz-ease)"
+  in:pop={{ duration: 190 }}
+  out:pop={{ duration: 150 }}
   onpointerdowncapture={() => focus(proc.id)}
 >
   <!-- 标题栏：按住拖动；双击最大化/还原 -->
