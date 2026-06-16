@@ -12,7 +12,12 @@
   import { launch } from '../kernel/processes.svelte';
   import { openMenu } from '../shell/menu.svelte';
 
-  let cwd = $state('root'); // 当前所在文件夹 id
+  // data = 可选的起始文件夹 id（桌面文件夹图标双击时传入）
+  let { data }: { data?: unknown } = $props();
+
+  // 只取一次初始值（窗口的 data 在 launch 时就定了、之后不变），故意非响应式
+  // svelte-ignore state_referenced_locally
+  let cwd = $state(typeof data === 'string' && getNode(data) ? data : 'root'); // 当前所在文件夹 id
   let renamingId = $state<string | null>(null);
   let renameText = $state('');
 

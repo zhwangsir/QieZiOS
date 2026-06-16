@@ -16,6 +16,7 @@
   import Dock from './Dock.svelte';
   import TopBar from './TopBar.svelte';
   import ContextMenu from './ContextMenu.svelte';
+  import DesktopIcons from './DesktopIcons.svelte';
   import { snapState } from './snapState.svelte';
 
   // 当前活动窗 id（派生）：传给每个 Window 决定是否高亮
@@ -87,6 +88,9 @@
       <div class="text-lg tracking-[0.4em]">QieZiOS</div>
     </div>
   </div>
+
+  <!-- 桌面图标（VFS 根目录的项；在窗口层之下） -->
+  <DesktopIcons />
 
   <TopBar />
 
