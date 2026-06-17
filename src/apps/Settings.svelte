@@ -51,7 +51,7 @@
 </script>
 
 <div class="flex h-full flex-col gap-6 overflow-auto p-6 text-sm">
-  <!-- AI（浏览器直连） -->
+  <!-- AI（浏览器直连，全开配置） -->
   <section class="flex flex-col gap-2">
     <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">AI 助手</h2>
     <input
@@ -60,19 +60,45 @@
       placeholder="Anthropic API Key（sk-ant-… 存本地浏览器）"
       bind:value={aiConfig.apiKey}
     />
-    <div class="flex gap-2">
+    <input
+      type="text"
+      class="w-full rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+      placeholder="接口地址（留空=官方；可填自己的代理/网关）"
+      bind:value={aiConfig.baseURL}
+    />
+    <input
+      type="text"
+      class="w-full rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+      placeholder="模型 id"
+      bind:value={aiConfig.model}
+    />
+    <div class="flex flex-wrap gap-1.5">
       {#each AI_MODELS as m (m.id)}
         <button
-          class="flex-1 rounded-qz border px-2 py-1.5 text-xs transition-colors"
-          class:bg-qz-elevated={aiConfig.model === m.id}
-          style="border-color: {aiConfig.model === m.id
-            ? 'var(--color-qz-accent)'
-            : 'var(--color-qz-border)'}"
+          class="rounded-md bg-qz-elevated px-2 py-1 text-[11px] transition hover:brightness-110"
+          class:ring-1={aiConfig.model === m.id}
+          class:ring-qz-accent={aiConfig.model === m.id}
           onclick={() => (aiConfig.model = m.id)}>{m.label}</button>
       {/each}
     </div>
+    <textarea
+      class="h-20 w-full resize-none rounded-qz bg-qz-surface px-2 py-1.5 text-xs leading-relaxed outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+      placeholder="额外人设/指令（叠加在默认系统提示之上，例如：说话简洁、用猫娘语气…）"
+      bind:value={aiConfig.systemPrompt}
+    ></textarea>
+    <div class="flex items-center justify-between text-xs text-qz-muted">
+      <span>单次最大 tokens</span>
+      <input
+        type="number"
+        min="1000"
+        max="32000"
+        step="1000"
+        class="w-24 rounded-qz bg-qz-surface px-2 py-1 text-right text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+        bind:value={aiConfig.maxTokens}
+      />
+    </div>
     <p class="text-[11px] leading-relaxed text-qz-muted">
-      key 只存本地、浏览器直连 Anthropic。助手能启动 App、增删改文件、改主题。
+      key 只存本地、浏览器直连。改接口地址可走自己的代理/网关；模型可填任意 id；人设叠加但保留工具能力。
     </p>
   </section>
 

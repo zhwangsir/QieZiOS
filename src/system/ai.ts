@@ -12,7 +12,8 @@ export type AiEvent =
   | { type: 'tool'; name: string }
   | { type: 'error'; message: string };
 
-const SYSTEM_PROMPT = `你是 QieZiOS（一个跑在浏览器里的桌面系统 🍆）的内置 AI 助手。
+// 默认系统提示：告诉 AI 它能用工具驱动系统。用户的自定义人设会叠加在它之后（工具能力始终保留）。
+const DEFAULT_SYSTEM_PROMPT = `你是 QieZiOS（一个跑在浏览器里的桌面系统 🍆）的内置 AI 助手。
 你可以用提供的工具实际操作这个系统：启动 App、增删改文件、改外观主题。
 当用户的请求需要操作系统时，直接调用相应工具去做，再用简短中文说明你做了什么。
 启动 App 前先用 list_apps 查 id。回答简洁、口语化、用中文。`;
@@ -26,16 +27,24 @@ export async function runAgent(
     return;
   }
 
-  const client = new Anthropic({ apiKey: aiConfig.apiKey, dangerouslyAllowBrowser: true });
+  const client = new Anthropic({
+    apiKey: aiConfig.apiKey,
+    baseURL: aiConfig.baseURL?.trim() || undefined, // 留空走官方
+    dangerouslyAllowBrowser: true,
+  });
   const messages: Anthropic.MessageParam[] = [...history];
+
+  // 默认提示 + 用户自定义人设（叠加，保留工具能力）
+  const persona = aiConfig.systemPrompt?.trim();
+  const system = persona ? `${DEFAULT_SYSTEM_PROMPT}\n\n${persona}` : DEFAULT_SYSTEM_PROMPT;
 
   try {
     // 最多 8 轮（防工具调用死循环）
     for (let turn = 0; turn < 8; turn++) {
       const stream = client.messages.stream({
         model: aiConfig.model || 'claude-opus-4-8',
-        max_tokens: 8000,
-        system: SYSTEM_PROMPT,
+        max_tokens: aiConfig.maxTokens || 8000,
+        system,
         tools: TOOL_DEFS as Anthropic.Tool[],
         messages,
       });
