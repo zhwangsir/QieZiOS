@@ -5,6 +5,7 @@
     createFile,
     rename,
     trash,
+    move,
     getNode,
     pathSegments,
     type VNode,
@@ -20,6 +21,14 @@
   let cwd = $state(typeof data === 'string' && getNode(data) ? data : 'root'); // 当前所在文件夹 id
   let renamingId = $state<string | null>(null);
   let renameText = $state('');
+  let dragOverId = $state<string | null>(null); // 拖放时高亮的目标文件夹
+
+  function onDrop(e: DragEvent, destId: string) {
+    e.preventDefault();
+    const src = e.dataTransfer?.getData('text/plain');
+    if (src) move(src, destId);
+    dragOverId = null;
+  }
 
   const items = $derived(children(cwd));
   const crumbs = $derived(pathSegments(cwd));
@@ -95,6 +104,8 @@
         {#if i > 0}<span class="opacity-40">›</span>{/if}
         <button
           class="truncate rounded px-1 py-0.5 hover:bg-qz-elevated hover:text-qz-text"
+          ondragover={(e) => e.preventDefault()}
+          ondrop={(e) => onDrop(e, c.id)}
           onclick={() => (cwd = c.id)}>{c.name}</button>
       {/each}
     </div>
@@ -114,8 +125,14 @@
     {#each items as n (n.id)}
       <div
         class="group/item relative flex flex-col items-center gap-1 rounded-lg p-2 hover:bg-qz-elevated"
+        style={dragOverId === n.id ? 'box-shadow: inset 0 0 0 2px var(--color-qz-accent)' : ''}
         role="button"
         tabindex="0"
+        draggable={renamingId !== n.id}
+        ondragstart={(e) => e.dataTransfer?.setData('text/plain', n.id)}
+        ondragover={n.type === 'dir' ? (e) => { e.preventDefault(); dragOverId = n.id; } : undefined}
+        ondragleave={n.type === 'dir' ? () => { if (dragOverId === n.id) dragOverId = null; } : undefined}
+        ondrop={n.type === 'dir' ? (e) => onDrop(e, n.id) : undefined}
         ondblclick={() => open(n)}
         oncontextmenu={(e) => onItemMenu(e, n)}
         onkeydown={(e) => {

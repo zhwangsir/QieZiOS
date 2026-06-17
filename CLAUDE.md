@@ -65,14 +65,14 @@ settings(system) ──$effect──► 写 CSS token 到 :root ──► 整屏
 
 ## 五、当前进度：✅ Phase A + B 完成 · C 起步 =「会自定义、记得住布局、有文件系统的丝滑桌面」
 
-src 已全部重写。能力：开/拖/缩放/关窗口、最小化（Dock 或顶栏找回）、最大化/还原（双击标题栏也行）、多窗叠放、点击置顶；**边缘吸附**（拖到左/右/上边缘 → 半屏/最大化，带预览框）；**开关窗 + 最小化动画**（缩放淡入淡出）；**键盘快捷键**（Esc 关窗 / Ctrl·Cmd+M 最小化 / Alt+\` 轮换窗口）+ **活动窗焦点高亮**（主色边框）；**顶栏任务栏**（每窗一个切换 chip + 实时时钟）；**设置 App 实时改 主色/明暗/圆角/模糊/透明度/界面缩放/壁纸，并能保存命名主题预设(应用/删除) + JSON 导入导出**；**虚拟文件系统 + 文件管理器 + 记事本**（新建/重命名/删除/进文件夹/双击文本文件编辑，内容自动存）；**右键菜单**（桌面/窗口标题栏/文件项/Dock 各有菜单）；**桌面图标**（VFS 根目录的项，双击打开、拖动排列、位置持久化）；**计算器 + 模拟时钟 App**；**回收站**（删除=软删除，可还原/彻底删除/清空）；**Spotlight 命令面板**（Ctrl·Cmd+K 搜索启动 App + 打开文件）；Dock 悬停放大、细滚动条、文件类型图标、景深 vignette 等视觉打磨；**整套设置 + 窗口布局 + 文件 + 图标位置都持久化，刷新后原样还原**。换肤只改 CSS 变量 → 0 组件重渲染。
+src 已全部重写。能力：开/拖/缩放/关窗口、最小化（Dock 或顶栏找回）、最大化/还原（双击标题栏也行）、多窗叠放、点击置顶；**边缘吸附**（拖到左/右/上边缘 → 半屏/最大化，带预览框）；**开关窗 + 最小化动画**（缩放淡入淡出）；**键盘快捷键**（Esc 关窗 / Ctrl·Cmd+M 最小化 / Alt+\` 轮换窗口）+ **活动窗焦点高亮**（主色边框）；**顶栏任务栏**（每窗一个切换 chip + 实时时钟）；**设置 App 实时改 主色/明暗/圆角/模糊/透明度/界面缩放/壁纸，并能保存命名主题预设(应用/删除) + JSON 导入导出**；**虚拟文件系统 + 文件管理器 + 记事本**（新建/重命名/删除/**拖拽移动**/进文件夹/双击文本文件编辑，内容自动存）；**右键菜单**（桌面/窗口标题栏/文件项/Dock 各有菜单）；**桌面图标**（VFS 根目录的项，双击打开、拖动排列、位置持久化）；**计算器 + 模拟时钟 App**；**回收站**（删除=软删除，可还原/彻底删除/清空）；**Spotlight 命令面板**（Ctrl·Cmd+K 搜索启动 App + 打开文件）；Dock 悬停放大、细滚动条、文件类型图标、景深 vignette 等视觉打磨；**整套设置 + 窗口布局 + 文件 + 图标位置都持久化，刷新后原样还原**。换肤只改 CSS 变量 → 0 组件重渲染。
 
 ### 文件（`src/`）
 | 文件 | 作用 |
 |---|---|
 | `kernel/processes.svelte.ts` | 内核进程表（`persisted` → 会话还原）+ `launch/close/focus/minimize/restore/toggleMaximize/setBounds/activeId/cycleWindows`；进程含 `data` 启动参数 |
 | `kernel/persist.svelte.ts` | `persisted()` 自动存盘 helper（`$state`+`$effect.root`+`$state.snapshot`+**防抖**+数组支持）+ storage 抽象接口 |
-| `kernel/vfs.svelte.ts` | 虚拟文件系统：inode 风格扁平节点表（parentId 串树）+ `persisted` 持久化 + CRUD（children/createDir/createFile/rename/pathSegments…）+ 回收站（`trash`/`restoreFromTrash`/`purge`/`emptyTrash`，`parentId='trash'` 哨兵） |
+| `kernel/vfs.svelte.ts` | 虚拟文件系统：inode 风格扁平节点表（parentId 串树）+ `persisted` 持久化 + CRUD（children/createDir/createFile/rename/`move`(防环)/pathSegments…）+ 回收站（`trash`/`restoreFromTrash`/`purge`/`emptyTrash`，`parentId='trash'` 哨兵） |
 | `system/theme.svelte.ts` | 把设置算成 CSS token，`applyTokens()` 写进 `:root` |
 | `system/settings.svelte.ts` | 用户设置（持久化）+ 主色预设 |
 | `system/wallpaper.ts` | 壁纸预设（CSS 渐变） |
@@ -122,7 +122,7 @@ npm run check   # svelte-check 类型检查
 
 - ✅ **Phase A 地基**：内核重写 + 主题 token + 持久化 + 窗口管理(最小/最大化) + 设置 App。
 - ✅ **Phase B 丝滑外壳**：顶栏任务栏 + 会话还原 + 边缘吸附 + 开关窗/最小化动画 + 键盘快捷键/焦点高亮。（性能 pass 推后到需要时再做。）
-- 🚧 **Phase C App 平台 + VFS**（进行中）：✅ 虚拟文件系统(localStorage，可换 IndexedDB→OPFS/SQLite-WASM) + ✅ 文件管理器 + ✅ 记事本 + ✅ App 启动参数(`data`)；**待办**：契约式 App SDK(能力声明) + 拖拽移动文件/回收站。
+- 🚧 **Phase C App 平台 + VFS**（进行中）：✅ 虚拟文件系统(localStorage，可换 IndexedDB→OPFS/SQLite-WASM) + ✅ 文件管理器 + ✅ 记事本 + ✅ App 启动参数(`data`) + ✅ 拖拽移动文件 + ✅ 回收站；**待办**：契约式 App SDK(能力声明)。
 - ✅ **打磨轮**（作者要求"专注完善当前系统"，⚠️**胡桃博客不在本项目内做**）：右键菜单系统 + 桌面图标 + 计算器/时钟 App + 视觉手感 pass(Dock 放大/滚动条/文件图标/景深)。
 - **Phase D 深度自定义 + 平台化**：主题编辑器/自定义 CSS/每 App 主题、Module Federation 第三方 App、Java/Node 后端(持久化/账号/同步)、WASM 终端、Docker 自托管 + 在线版。
 

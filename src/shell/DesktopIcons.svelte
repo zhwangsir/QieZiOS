@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { children, rename, trash, type VNode } from '../kernel/vfs.svelte';
+  import { children, rename, trash, move, type VNode } from '../kernel/vfs.svelte';
   import { launch } from '../kernel/processes.svelte';
   import { openMenu } from './menu.svelte';
   import { iconPos } from './iconLayout.svelte';
@@ -48,8 +48,25 @@
         if (dragId) iconPos.pos[dragId] = { x: nx, y: ny };
       });
   }
-  function onUp() {
-    if (dragId && moved) iconPos.pos[dragId] = { x: nx, y: ny }; // 同步落最终位置（不依赖 rAF）
+  // 用图标位置做命中判定（图标层铺满桌面、坐标即视口坐标，不依赖 DOM 命中测试）
+  const ICON_W = 80;
+  const ICON_H = 74;
+  function folderAt(x: number, y: number): string | null {
+    for (let i = 0; i < items.length; i++) {
+      const n = items[i];
+      if (n.type !== 'dir' || n.id === dragId) continue;
+      const p = posOf(n, i);
+      if (x >= p.x && x <= p.x + ICON_W && y >= p.y && y <= p.y + ICON_H) return n.id;
+    }
+    return null;
+  }
+
+  function onUp(e: PointerEvent) {
+    if (dragId) {
+      const targetId = folderAt(e.clientX, e.clientY);
+      if (targetId) move(dragId, targetId); // 松手在某文件夹图标上 → 移入它
+      else if (moved) iconPos.pos[dragId] = { x: nx, y: ny }; // 否则只是重新摆放
+    }
     dragId = null;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
   }

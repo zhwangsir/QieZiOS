@@ -90,6 +90,28 @@ export function rename(id: string, name: string): void {
   }
 }
 
+// dest 是否是 id 的子孙（移动时防止把文件夹拖进自己里面 → 成环）
+function isInside(dest: string, id: string): boolean {
+  let cur: VNode | undefined = vfs.nodes[dest];
+  while (cur && cur.parentId) {
+    if (cur.parentId === id) return true;
+    cur = vfs.nodes[cur.parentId];
+  }
+  return false;
+}
+
+// 移动到另一个文件夹（拖拽用）。目标必须是文件夹，且不能是自己/自己的子孙。
+export function move(id: string, destId: string): void {
+  const n = vfs.nodes[id];
+  const dest = vfs.nodes[destId];
+  if (!n || id === 'root' || id === destId) return;
+  if (!dest || dest.type !== 'dir') return;
+  if (n.parentId === destId) return;
+  if (id === destId || isInside(destId, id)) return;
+  n.parentId = destId;
+  n.updatedAt = Date.now();
+}
+
 export function writeFile(id: string, content: string): void {
   const n = vfs.nodes[id];
   if (n && n.type === 'file') {
