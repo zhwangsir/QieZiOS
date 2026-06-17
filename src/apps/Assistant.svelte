@@ -1,6 +1,5 @@
 <script lang="ts">
-  import type Anthropic from '@anthropic-ai/sdk';
-  import { runAgent, type AiEvent } from '../system/ai';
+  import { runAgent, type AiEvent, type ChatTurn } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
   import { chat } from '../system/assistantChat.svelte';
   import { renderMarkdown } from '../lib/markdown';
@@ -45,7 +44,7 @@
     const i = chat.msgs.length - 1; // 助手占位下标（通过下标改 → 触发响应式）
 
     // 历史：把已有对话转成 API 消息（纯文本，工具上下文由 runAgent 内部维护）
-    const history: Anthropic.MessageParam[] = chat.msgs
+    const history: ChatTurn[] = chat.msgs
       .slice(0, i)
       .filter((m) => m.text)
       .map((m) => ({ role: m.role, content: m.text }));
@@ -55,6 +54,8 @@
       history,
       (e: AiEvent) => {
         if (e.type === 'text') chat.msgs[i].text += e.text;
+        else if (e.type === 'reasoning')
+          chat.msgs[i].reasoning = (chat.msgs[i].reasoning ?? '') + e.text;
         else if (e.type === 'tool') chat.msgs[i].tools.push(e.name);
         else if (e.type === 'error')
           chat.msgs[i].text += (chat.msgs[i].text ? '\n\n' : '') + '⚠️ ' + e.message;
@@ -108,9 +109,17 @@
               {/each}
             </div>
           {/if}
+          {#if m.role === 'assistant' && m.reasoning}
+            <details class="mb-1 text-[11px] text-qz-muted">
+              <summary class="cursor-pointer select-none opacity-70 hover:opacity-100">💭 思考过程</summary>
+              <div class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap border-l-2 border-qz-border pl-2 opacity-80">{m.reasoning}</div>
+            </details>
+          {/if}
           {#if m.role === 'assistant'}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            {@html renderMarkdown(m.text || (busy && mi === chat.msgs.length - 1 ? '…' : ''))}
+            {@html renderMarkdown(
+              (m.text ?? '').replace(/^\s+/, '') || (busy && mi === chat.msgs.length - 1 ? '…' : ''),
+            )}
           {:else}{m.text}{/if}
         </div>
       </div>

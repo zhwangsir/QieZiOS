@@ -4,6 +4,7 @@ import { persisted } from '../kernel/persist.svelte';
 export interface ChatMsg {
   role: 'user' | 'assistant';
   text: string;
+  reasoning?: string; // 推理模型的思考过程（可折叠展示）
   tools: string[];
 }
 

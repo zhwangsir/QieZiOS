@@ -2,7 +2,8 @@
   import { settings, accentPresets, SETTINGS_KEYS, type Settings } from '../system/settings.svelte';
   import { wallpapers } from '../system/wallpaper';
   import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
-  import { aiConfig, AI_MODELS } from '../system/aiConfig.svelte';
+  import { aiConfig, AI_MODELS, AI_PRESETS, ENV_AI_KEY, type AiPreset } from '../system/aiConfig.svelte';
+  import { runAgent } from '../system/ai';
 
   const modes: Array<['dark' | 'light', string]> = [
     ['dark', '暗色'],
@@ -12,6 +13,39 @@
   let presetName = $state('');
   let importText = $state('');
   let importError = $state(false);
+
+  // AI 配色：用一句话描述外观 → 让带 set_theme 工具的 agent 直接改主题
+  let themeWish = $state('');
+  let aiBusy = $state(false);
+  let aiErr = $state('');
+
+  // 一键套用某个 AI 服务预设（provider+地址+模型；工作站预设还会从环境变量填 key）
+  function applyAiPreset(p: AiPreset) {
+    aiConfig.provider = p.provider;
+    aiConfig.baseURL = p.baseURL;
+    aiConfig.model = p.model;
+    if (p.useEnvKey && ENV_AI_KEY) aiConfig.apiKey = ENV_AI_KEY;
+  }
+
+  async function aiTheme() {
+    const wish = themeWish.trim();
+    if (!wish || aiBusy) return;
+    aiBusy = true;
+    aiErr = '';
+    await runAgent(
+      [
+        {
+          role: 'user',
+          content: `把系统外观改成：${wish}。直接调用 set_theme 工具调整 mode/accent/wallpaperId/radius/blur，不用多问、不用确认。`,
+        },
+      ],
+      (e) => {
+        if (e.type === 'error') aiErr = e.message;
+      },
+    );
+    aiBusy = false;
+    themeWish = '';
+  }
 
   const exportJson = $derived(JSON.stringify($state.snapshot(settings), null, 2));
 
@@ -51,19 +85,42 @@
 </script>
 
 <div class="flex h-full flex-col gap-6 overflow-auto p-6 text-sm">
-  <!-- AI（浏览器直连，全开配置） -->
+  <!-- AI（双协议 + 全开配置） -->
   <section class="flex flex-col gap-2">
     <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">AI 助手</h2>
+
+    <!-- 一键预设 -->
+    <div class="flex flex-wrap gap-1.5">
+      {#each AI_PRESETS as p (p.label)}
+        <button
+          class="rounded-md bg-qz-elevated px-2 py-1 text-[11px] transition hover:brightness-110"
+          onclick={() => applyAiPreset(p)}>{p.label}</button>
+      {/each}
+    </div>
+
+    <!-- 协议 -->
+    <div class="flex gap-2 text-xs">
+      {#each [['openai', 'OpenAI 兼容'], ['anthropic', 'Anthropic']] as [val, label] (val)}
+        <button
+          class="flex-1 rounded-qz border px-3 py-1.5 transition-colors"
+          class:bg-qz-elevated={aiConfig.provider === val}
+          style="border-color: {aiConfig.provider === val
+            ? 'var(--color-qz-accent)'
+            : 'var(--color-qz-border)'}"
+          onclick={() => (aiConfig.provider = val as typeof aiConfig.provider)}>{label}</button>
+      {/each}
+    </div>
+
     <input
       type="password"
       class="w-full rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
-      placeholder="Anthropic API Key（sk-ant-… 存本地浏览器）"
+      placeholder="API Key（存本地浏览器；Anthropic 填 sk-ant-…，网关填 Bearer）"
       bind:value={aiConfig.apiKey}
     />
     <input
       type="text"
       class="w-full rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
-      placeholder="接口地址（留空=官方；可填自己的代理/网关）"
+      placeholder="接口地址（Anthropic 留空=官方；OpenAI 兼容填 /aiproxy/lm/v1 走同源代理）"
       bind:value={aiConfig.baseURL}
     />
     <input
@@ -98,8 +155,34 @@
       />
     </div>
     <p class="text-[11px] leading-relaxed text-qz-muted">
-      key 只存本地、浏览器直连。改接口地址可走自己的代理/网关；模型可填任意 id；人设叠加但保留工具能力。
+      key 只存本地。Anthropic 浏览器直连；OpenAI 兼容网关因 CORS 走同源代理（/aiproxy，见 vite.config）。模型可填任意
+      id；人设叠加但保留工具能力。
     </p>
+  </section>
+
+  <!-- AI 配色：一句话换肤（复用 set_theme 工具） -->
+  <section class="flex flex-col gap-2">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">🪄 AI 配色</h2>
+    <div class="flex gap-2">
+      <input
+        class="min-w-0 flex-1 rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent disabled:opacity-50"
+        placeholder="一句话描述想要的外观，如「深色赛博朋克、霓虹紫」"
+        bind:value={themeWish}
+        disabled={aiBusy || !aiConfig.apiKey}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') aiTheme();
+        }}
+      />
+      <button
+        class="rounded-qz bg-qz-accent px-3 py-1.5 text-xs font-medium text-qz-accent-contrast transition-transform active:scale-95 disabled:opacity-40"
+        onclick={aiTheme}
+        disabled={aiBusy || !themeWish.trim() || !aiConfig.apiKey}>{aiBusy ? '配色中…' : '生成'}</button>
+    </div>
+    {#if !aiConfig.apiKey}
+      <p class="text-[11px] text-qz-muted">先在上面配置 AI 才能用。</p>
+    {:else if aiErr}
+      <p class="text-[11px] text-red-400">⚠️ {aiErr}</p>
+    {/if}
   </section>
 
   <!-- 明 / 暗 -->
