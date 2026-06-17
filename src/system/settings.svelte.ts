@@ -11,6 +11,7 @@ export interface Settings {
   radius: number;           // 全局圆角（px）
   blur: number;             // 磨砂模糊（px）
   surfaceOpacity: number;   // 面板半透明度（0~1）
+  fontScale: number;        // 界面缩放（根字号倍率，0.85~1.2）
   wallpaperId: string;      // 当前壁纸 id
 }
 
@@ -20,8 +21,12 @@ const defaults: Settings = {
   radius: 14,
   blur: 18,
   surfaceOpacity: 0.66,
+  fontScale: 1,
   wallpaperId: 'aurora',
 };
+
+// 可被「应用主题预设 / 导入」覆盖的字段（白名单，避免塞进奇怪的键）
+export const SETTINGS_KEYS = Object.keys(defaults) as (keyof Settings)[];
 
 // 一份全局共享、会自动存盘的响应式设置对象
 export const settings = persisted<Settings>('qz.settings', defaults);

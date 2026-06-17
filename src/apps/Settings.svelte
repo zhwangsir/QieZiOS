@@ -1,11 +1,52 @@
 <script lang="ts">
-  import { settings, accentPresets } from '../system/settings.svelte';
+  import { settings, accentPresets, SETTINGS_KEYS, type Settings } from '../system/settings.svelte';
   import { wallpapers } from '../system/wallpaper';
+  import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
 
   const modes: Array<['dark' | 'light', string]> = [
     ['dark', '暗色'],
     ['light', '明色'],
   ];
+
+  let presetName = $state('');
+  let importText = $state('');
+  let importError = $state(false);
+
+  const exportJson = $derived(JSON.stringify($state.snapshot(settings), null, 2));
+
+  // 只挑白名单里的键覆盖到 settings（避免塞进奇怪字段）
+  function applySettings(src: Partial<Settings>) {
+    const picked: Record<string, unknown> = {};
+    for (const k of SETTINGS_KEYS) if (src[k] !== undefined) picked[k] = src[k];
+    Object.assign(settings, picked);
+  }
+
+  function savePreset() {
+    const name = presetName.trim() || `主题 ${themePresets.list.length + 1}`;
+    themePresets.list.push({
+      id: crypto.randomUUID(),
+      name,
+      settings: $state.snapshot(settings) as Settings,
+    });
+    presetName = '';
+  }
+  function applyPreset(p: ThemePreset) {
+    applySettings(p.settings);
+  }
+  function deletePreset(id: string) {
+    const i = themePresets.list.findIndex((p) => p.id === id);
+    if (i !== -1) themePresets.list.splice(i, 1);
+  }
+
+  function importJson() {
+    try {
+      applySettings(JSON.parse(importText));
+      importText = '';
+      importError = false;
+    } catch {
+      importError = true;
+    }
+  }
 </script>
 
 <div class="flex h-full flex-col gap-6 overflow-auto p-6 text-sm">
@@ -79,6 +120,21 @@
     />
   </section>
 
+  <!-- 界面缩放 -->
+  <section class="flex flex-col gap-1.5">
+    <div class="flex justify-between text-xs text-qz-muted">
+      <span>界面缩放</span><span>{Math.round(settings.fontScale * 100)}%</span>
+    </div>
+    <input
+      type="range"
+      min="0.85"
+      max="1.2"
+      step="0.01"
+      bind:value={settings.fontScale}
+      class="w-full accent-qz-accent"
+    />
+  </section>
+
   <!-- 壁纸 -->
   <section class="flex flex-col gap-2">
     <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">壁纸</h2>
@@ -93,6 +149,60 @@
           onclick={() => (settings.wallpaperId = w.id)}
         ></button>
       {/each}
+    </div>
+  </section>
+
+  <!-- 我的主题：把当前外观存成命名预设 -->
+  <section class="flex flex-col gap-2">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">我的主题</h2>
+    <div class="flex gap-2">
+      <input
+        class="min-w-0 flex-1 rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+        placeholder="主题名称"
+        bind:value={presetName}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') savePreset();
+        }}
+      />
+      <button
+        class="rounded-qz bg-qz-accent px-3 py-1.5 text-xs font-medium text-qz-accent-contrast transition-transform active:scale-95"
+        onclick={savePreset}>保存当前</button>
+    </div>
+    {#if themePresets.list.length}
+      <div class="flex flex-col gap-1">
+        {#each themePresets.list as p (p.id)}
+          <div class="flex items-center gap-2 rounded-qz bg-qz-surface px-2 py-1.5">
+            <span
+              class="h-4 w-4 shrink-0 rounded-full border border-qz-border"
+              style="background: {p.settings.accent}"
+            ></span>
+            <span class="flex-1 truncate text-xs">{p.name}</span>
+            <button class="rounded px-2 py-0.5 text-xs text-qz-accent hover:bg-qz-elevated" onclick={() => applyPreset(p)}>应用</button>
+            <button class="rounded px-2 py-0.5 text-xs text-red-400 hover:bg-qz-elevated" onclick={() => deletePreset(p.id)}>删除</button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
+  <!-- 导入 / 导出（JSON） -->
+  <section class="flex flex-col gap-2">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">导入 / 导出</h2>
+    <textarea
+      class="h-28 w-full resize-none rounded-qz bg-qz-surface p-2 font-mono text-[11px] leading-relaxed outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+      class:ring-red-400={importError}
+      spellcheck="false"
+      bind:value={importText}
+      placeholder={exportJson}
+    ></textarea>
+    <div class="flex items-center gap-2">
+      <button
+        class="rounded-qz bg-qz-elevated px-3 py-1.5 text-xs hover:brightness-110"
+        onclick={() => (importText = exportJson)}>填入当前(导出)</button>
+      <button
+        class="rounded-qz bg-qz-accent px-3 py-1.5 text-xs font-medium text-qz-accent-contrast active:scale-95"
+        onclick={importJson}>应用 JSON</button>
+      {#if importError}<span class="text-xs text-red-400">JSON 无效</span>{/if}
     </div>
   </section>
 </div>

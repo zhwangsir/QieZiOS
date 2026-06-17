@@ -12,6 +12,8 @@
   $effect(() => {
     applyTokens(activeTokens());
     document.documentElement.style.colorScheme = settings.mode;
+    // 界面缩放：改根字号 → 所有 rem 尺寸（字号/间距）整体缩放
+    document.documentElement.style.fontSize = `${(16 * settings.fontScale).toFixed(2)}px`;
   });
 
   // 首次进入：自动开「欢迎」App，桌面不空着
