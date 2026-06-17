@@ -2,6 +2,7 @@
   import { settings, accentPresets, SETTINGS_KEYS, type Settings } from '../system/settings.svelte';
   import { wallpapers } from '../system/wallpaper';
   import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
+  import { aiConfig, AI_MODELS } from '../system/aiConfig.svelte';
 
   const modes: Array<['dark' | 'light', string]> = [
     ['dark', '暗色'],
@@ -50,6 +51,31 @@
 </script>
 
 <div class="flex h-full flex-col gap-6 overflow-auto p-6 text-sm">
+  <!-- AI（浏览器直连） -->
+  <section class="flex flex-col gap-2">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">AI 助手</h2>
+    <input
+      type="password"
+      class="w-full rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+      placeholder="Anthropic API Key（sk-ant-… 存本地浏览器）"
+      bind:value={aiConfig.apiKey}
+    />
+    <div class="flex gap-2">
+      {#each AI_MODELS as m (m.id)}
+        <button
+          class="flex-1 rounded-qz border px-2 py-1.5 text-xs transition-colors"
+          class:bg-qz-elevated={aiConfig.model === m.id}
+          style="border-color: {aiConfig.model === m.id
+            ? 'var(--color-qz-accent)'
+            : 'var(--color-qz-border)'}"
+          onclick={() => (aiConfig.model = m.id)}>{m.label}</button>
+      {/each}
+    </div>
+    <p class="text-[11px] leading-relaxed text-qz-muted">
+      key 只存本地、浏览器直连 Anthropic。助手能启动 App、增删改文件、改主题。
+    </p>
+  </section>
+
   <!-- 明 / 暗 -->
   <section class="flex flex-col gap-2">
     <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">外观</h2>
