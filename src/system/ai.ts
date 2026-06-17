@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 import { aiConfig } from './aiConfig.svelte';
 import { TOOL_DEFS, executeTool } from './aiTools';
 
@@ -21,13 +21,16 @@ const DEFAULT_SYSTEM_PROMPT = `你是 QieZiOS（一个跑在浏览器里的桌�
 export async function runAgent(
   history: Anthropic.MessageParam[],
   onEvent: (e: AiEvent) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!aiConfig.apiKey) {
     onEvent({ type: 'error', message: '请先在「设置 → AI」里填入 Anthropic API Key' });
     return;
   }
 
-  const client = new Anthropic({
+  // 懒加载 SDK：只有第一次用 AI 时才下载这个 chunk（首屏不背它）
+  const { default: AnthropicClient } = await import('@anthropic-ai/sdk');
+  const client = new AnthropicClient({
     apiKey: aiConfig.apiKey,
     baseURL: aiConfig.baseURL?.trim() || undefined, // 留空走官方
     dangerouslyAllowBrowser: true,
@@ -41,13 +44,17 @@ export async function runAgent(
   try {
     // 最多 8 轮（防工具调用死循环）
     for (let turn = 0; turn < 8; turn++) {
-      const stream = client.messages.stream({
-        model: aiConfig.model || 'claude-opus-4-8',
-        max_tokens: aiConfig.maxTokens || 8000,
-        system,
-        tools: TOOL_DEFS as Anthropic.Tool[],
-        messages,
-      });
+      if (signal?.aborted) break;
+      const stream = client.messages.stream(
+        {
+          model: aiConfig.model || 'claude-opus-4-8',
+          max_tokens: aiConfig.maxTokens || 8000,
+          system,
+          tools: TOOL_DEFS as Anthropic.Tool[],
+          messages,
+        },
+        { signal },
+      );
       stream.on('text', (t) => onEvent({ type: 'text', text: t }));
       const msg = await stream.finalMessage();
       messages.push({ role: 'assistant', content: msg.content });
@@ -66,6 +73,8 @@ export async function runAgent(
       messages.push({ role: 'user', content: results });
     }
   } catch (e) {
+    // 用户主动停止：不当错误
+    if (signal?.aborted || (e instanceof Error && e.name === 'AbortError')) return;
     onEvent({ type: 'error', message: e instanceof Error ? e.message : String(e) });
   }
 }
