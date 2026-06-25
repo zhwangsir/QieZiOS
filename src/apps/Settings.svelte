@@ -4,6 +4,8 @@
   import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
   import { aiConfig, AI_MODELS, AI_PRESETS, ENV_AI_KEY, type AiPreset } from '../system/aiConfig.svelte';
   import { runAgent } from '../system/ai';
+  import { syncToken, pushSync, pullSync } from '../system/sync';
+  import { sys } from '../system/sys';
 
   const modes: Array<['dark' | 'light', string]> = [
     ['dark', '暗色'],
@@ -25,6 +27,34 @@
     aiConfig.baseURL = p.baseURL;
     aiConfig.model = p.model;
     if (p.useEnvKey && ENV_AI_KEY) aiConfig.apiKey = ENV_AI_KEY;
+  }
+
+  // 云同步（雏形，需 npm run serve 部署）
+  let syncBusy = $state(false);
+  let syncMsg = $state('');
+  async function doPush() {
+    syncBusy = true;
+    syncMsg = '';
+    try {
+      const n = await pushSync();
+      syncMsg = `已上传 ${n} 项到云端`;
+      sys.notify('云同步', { body: syncMsg, level: 'success' });
+    } catch (e) {
+      syncMsg = e instanceof Error ? e.message : String(e);
+    }
+    syncBusy = false;
+  }
+  async function doPull() {
+    syncBusy = true;
+    syncMsg = '';
+    try {
+      const n = await pullSync();
+      syncMsg = `已从云端恢复 ${n} 项，即将刷新…`;
+      setTimeout(() => location.reload(), 800);
+    } catch (e) {
+      syncMsg = e instanceof Error ? e.message : String(e);
+      syncBusy = false;
+    }
   }
 
   async function aiTheme() {
@@ -338,6 +368,26 @@
         class="rounded-qz bg-qz-accent px-3 py-1.5 text-xs font-medium text-qz-accent-contrast active:scale-95"
         onclick={importJson}>应用 JSON</button>
       {#if importError}<span class="text-xs text-red-400">JSON 无效</span>{/if}
+    </div>
+  </section>
+
+  <!-- 云同步（雏形，需 npm run serve 部署） -->
+  <section class="flex flex-col gap-2">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">☁️ 云同步</h2>
+    <p class="text-[11px] leading-relaxed text-qz-muted">
+      把桌面布局/文件/主题/已装 App 同步到自托管后端，多设备共享。token = <code>{syncToken()}</code>（当密钥，别外泄）。
+      不含 AI key。⚠️ 需 <code>npm run serve</code> 部署后可用。
+    </p>
+    <div class="flex items-center gap-2">
+      <button
+        class="rounded-qz bg-qz-accent px-3 py-1.5 text-xs font-medium text-qz-accent-contrast active:scale-95 disabled:opacity-40"
+        disabled={syncBusy}
+        onclick={doPush}>上传到云</button>
+      <button
+        class="rounded-qz bg-qz-elevated px-3 py-1.5 text-xs hover:brightness-110 disabled:opacity-40"
+        disabled={syncBusy}
+        onclick={doPull}>从云恢复</button>
+      {#if syncMsg}<span class="text-[11px] text-qz-muted">{syncMsg}</span>{/if}
     </div>
   </section>
 </div>

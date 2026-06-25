@@ -12,7 +12,7 @@
 // ───────────────────────────────────────────────────────────
 import http from 'node:http';
 import https from 'node:https';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +21,49 @@ const DIST = join(ROOT, '..', 'dist');
 const PORT = Number(process.env.PORT) || 8787;
 const TARGET = process.env.AI_PROXY_TARGET || 'https://dgmt.top';
 const AI_KEY = process.env.AI_KEY || '';
+
+// 跨设备同步：按 token 存一份状态快照（文件持久化，重启不丢）。雏形：无鉴权，靠 token 当密钥。
+const SYNC_FILE = join(ROOT, 'sync-store.json');
+let syncStore = {};
+try {
+  syncStore = JSON.parse(readFileSync(SYNC_FILE, 'utf8'));
+} catch {
+  /* 首次无文件：空 */
+}
+
+function sync(req, res, url) {
+  const token = url.pathname.slice('/sync/'.length).replace(/[^\w-]/g, '');
+  if (!token) {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    return res.end('{"error":"missing token"}');
+  }
+  if (req.method === 'GET') {
+    const blob = syncStore[token];
+    res.writeHead(blob ? 200 : 404, { 'content-type': 'application/json' });
+    return res.end(blob ? JSON.stringify(blob) : '{"error":"not found"}');
+  }
+  if (req.method === 'PUT' || req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => {
+      body += c;
+      if (body.length > 8_000_000) req.destroy(); // 8MB 上限
+    });
+    req.on('end', () => {
+      try {
+        syncStore[token] = { data: JSON.parse(body), updatedAt: Date.now() };
+        writeFileSync(SYNC_FILE, JSON.stringify(syncStore));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end('{"ok":true}');
+      } catch {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end('{"error":"bad json"}');
+      }
+    });
+    return;
+  }
+  res.writeHead(405);
+  res.end('method not allowed');
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -78,6 +121,7 @@ http
   .createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/aiproxy/')) proxy(req, res, url);
+    else if (url.pathname.startsWith('/sync/')) sync(req, res, url);
     else serveStatic(req, res, url);
   })
   .listen(PORT, () => {
