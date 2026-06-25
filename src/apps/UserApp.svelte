@@ -14,7 +14,7 @@
 </script>
 
 {#if app}
-  <Sandbox code={app.code} {caps} />
+  <Sandbox code={app.code} {caps} {appId} />
 {:else}
   <div class="grid h-full place-items-center text-sm text-qz-muted">这个 App 不存在或已删除</div>
 {/if}

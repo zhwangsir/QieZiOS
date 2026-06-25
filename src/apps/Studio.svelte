@@ -150,7 +150,9 @@
       代码跑在沙箱 iframe，用全局 <code class="text-qz-text">qz</code> 调系统：
       <code class="text-qz-text">qz.launchApp(id)</code> · <code class="text-qz-text">qz.listApps()</code> ·
       <code class="text-qz-text">qz.createFile(name,内容)</code> · <code class="text-qz-text">qz.writeFile(id,内容)</code> ·
-      <code class="text-qz-text">qz.setTheme(&#123;accent,mode&#125;)</code> · <code class="text-qz-text">await qz.ask('问题')</code>（AI）。都返回 Promise。
+      <code class="text-qz-text">qz.setTheme(&#123;accent,mode&#125;)</code> · <code class="text-qz-text">await qz.ask('问题')</code>（AI）。都返回 Promise。<br />
+      <span class="text-qz-text">IPC：</span><code class="text-qz-text">qz.emit('事件', 数据)</code> ·
+      <code class="text-qz-text">qz.on('事件', (数据,来自)=&gt;…)</code>（App 间 / 和系统消息互通）。
     </div>
   {/if}
 
@@ -160,7 +162,7 @@
       <CodeMirror bind:value={studioDraft.code} />
     </div>
     <div class="h-full w-1/2">
-      <Sandbox code={previewCode} {runKey} caps={previewCaps} />
+      <Sandbox code={previewCode} {runKey} caps={previewCaps} appId="studio-preview" />
     </div>
   </div>
 </div>

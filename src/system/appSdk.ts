@@ -14,12 +14,18 @@ import { emit } from '../kernel/bus.svelte';
 // 放进 <head> → 用户代码运行时 qz 已就绪。
 const GUEST_SDK = `<script>
 (function () {
-  var _id = 0, _pending = {};
+  var _id = 0, _pending = {}, _subs = {};
   window.addEventListener('message', function (e) {
     var m = e.data;
-    if (!m || m.__qz !== 'res' || !_pending[m.id]) return;
-    var p = _pending[m.id]; delete _pending[m.id];
-    if (m.error) p.reject(new Error(m.error)); else p.resolve(m.result);
+    if (!m) return;
+    if (m.__qz === 'res' && _pending[m.id]) {
+      var p = _pending[m.id]; delete _pending[m.id];
+      if (m.error) p.reject(new Error(m.error)); else p.resolve(m.result);
+    } else if (m.__qz === 'evt') {
+      // 收到一条 app 事件 → 派发给本地订阅者（具体事件 + 通配 '*'）
+      var hs = (_subs[m.event] || []).concat(_subs['*'] || []);
+      for (var i = 0; i < hs.length; i++) { try { hs[i](m.data, m.from, m.event); } catch (err) {} }
+    }
   });
   function call(name, input) {
     return new Promise(function (resolve, reject) {
@@ -36,7 +42,14 @@ const GUEST_SDK = `<script>
     createFile: function (name, content, parentId) { return call('create_file', { name: name, content: content, parentId: parentId }); },
     writeFile: function (fileId, content) { return call('write_file', { fileId: fileId, content: content }); },
     setTheme: function (t) { return call('set_theme', t || {}); },
-    ask: function (prompt) { return call('__ask', { prompt: prompt }); }
+    ask: function (prompt) { return call('__ask', { prompt: prompt }); },
+    // ── IPC：跨沙箱事件（app↔app / app↔系统），走宿主的事件总线 ──
+    emit: function (event, data) { parent.postMessage({ __qz: 'emit', event: event, data: data }, '*'); },
+    on: function (event, handler) {
+      (_subs[event] = _subs[event] || []).push(handler);
+      parent.postMessage({ __qz: 'sub', event: event }, '*');
+      return function () { var a = _subs[event]; if (a) { var i = a.indexOf(handler); if (i >= 0) a.splice(i, 1); } };
+    }
   };
 })();
 <\/script>`;
