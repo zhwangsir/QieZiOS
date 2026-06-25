@@ -20,6 +20,7 @@ export const appList: AppMeta[] = [
   { id: 'myapps', title: '我的 App', icon: '🧩', width: 480, height: 420 },
   { id: 'settings', title: '设置', icon: '⚙️', width: 540, height: 580 },
   { id: 'textedit', title: '记事本', icon: '📝', width: 480, height: 380, hidden: true },
+  { id: 'imageviewer', title: '图片', icon: '🖼️', width: 540, height: 440, hidden: true },
   { id: 'userapp', title: 'App', icon: '🧩', width: 460, height: 380, hidden: true },
 ];
 

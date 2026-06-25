@@ -1,4 +1,5 @@
 import { persisted } from './persist.svelte';
+import { putBlob, getBlob, deleteBlob } from './blobStore';
 
 // ───────────────────────────────────────────────────────────
 // 虚拟文件系统（VFS）· 又是一张「表」
@@ -12,7 +13,11 @@ export interface VNode {
   name: string;
   type: 'dir' | 'file';
   parentId: string | null; // null 仅根节点；'trash' = 在回收站
-  content: string; // 文件正文；文件夹恒为空串
+  content: string; // 文本正文；二进制文件/文件夹恒为空串
+  kind?: 'binary'; // 标记二进制文件（默认 undefined = 文本）
+  blobId?: string; // 二进制字节在 blobStore（IndexedDB）里的 key
+  mime?: string; // 二进制文件的 MIME 类型
+  size?: number; // 二进制文件字节数
   prevParent?: string | null; // 进回收站前的父级（用于还原）
   createdAt: number;
   updatedAt: number;
@@ -82,6 +87,41 @@ export function createFile(parentId: string, name = '新建文本.txt', content 
   return id;
 }
 
+// 二进制文件：把字节存进 blobStore，节点表里只留引用。异步（写 IndexedDB）。
+export async function createBinaryFile(parentId: string, name: string, blob: Blob): Promise<string> {
+  const id = crypto.randomUUID();
+  const blobId = crypto.randomUUID();
+  await putBlob(blobId, blob);
+  const t = Date.now();
+  vfs.nodes[id] = {
+    id,
+    name: uniqueName(parentId, name),
+    type: 'file',
+    parentId,
+    content: '',
+    kind: 'binary',
+    blobId,
+    mime: blob.type,
+    size: blob.size,
+    createdAt: t,
+    updatedAt: t,
+  };
+  return id;
+}
+
+// 取回二进制文件的字节（给图片查看器/Live2D 等用）
+export function readBlob(node: VNode): Promise<Blob | undefined> {
+  return node.blobId ? getBlob(node.blobId) : Promise.resolve(undefined);
+}
+
+// 是否图片（按 MIME 或扩展名）
+const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif'];
+export function isImage(node: VNode): boolean {
+  if (node.mime?.startsWith('image/')) return true;
+  const ext = node.name.slice(node.name.lastIndexOf('.') + 1).toLowerCase();
+  return IMG_EXT.includes(ext);
+}
+
 export function rename(id: string, name: string): void {
   const n = vfs.nodes[id];
   if (n && name.trim()) {
@@ -138,16 +178,27 @@ export function restoreFromTrash(id: string): void {
   n.updatedAt = Date.now();
 }
 
-// 彻底删除（文件夹递归删子项）。根节点不可删。
+// 彻底删除（文件夹递归删子项）。根节点不可删。二进制文件顺手清掉 IndexedDB 里的字节。
 export function purge(id: string): void {
   if (id === 'root') return;
   for (const child of children(id)) purge(child.id);
+  const n = vfs.nodes[id];
+  if (n?.blobId) void deleteBlob(n.blobId); // fire-and-forget，不阻塞 UI
   delete vfs.nodes[id];
 }
 
 // 清空回收站
 export function emptyTrash(): void {
   for (const n of children(TRASH)) purge(n.id);
+}
+
+if (import.meta.env.DEV) {
+  (globalThis as unknown as { __qzVfs: unknown }).__qzVfs = {
+    createBinaryFile,
+    readBlob,
+    isImage,
+    getNode,
+  };
 }
 
 // 从根到该节点的路径段（面包屑用）

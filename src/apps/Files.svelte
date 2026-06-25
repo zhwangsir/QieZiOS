@@ -4,6 +4,8 @@
     children,
     createDir,
     createFile,
+    createBinaryFile,
+    isImage,
     rename,
     trash,
     move,
@@ -102,6 +104,8 @@ ${JSON.stringify(files)}`;
     if (renamingId) return;
     if (n.type === 'dir') {
       goTo(n.id);
+    } else if (isImage(n)) {
+      launch('imageviewer', n.name, { width: 540, height: 440, data: n.id });
     } else {
       // 记事本固定尺寸（避免 Files 依赖 registry 造成循环 import）
       launch('textedit', n.name, { width: 480, height: 380, data: n.id });
@@ -113,6 +117,19 @@ ${JSON.stringify(files)}`;
   }
   function newFile() {
     startEditNew(createFile(cwd));
+  }
+
+  // 上传二进制文件（图片等）→ 字节进 IndexedDB、节点进当前文件夹
+  let fileInput = $state<HTMLInputElement>();
+  let uploading = $state(false);
+  async function onUpload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    if (!files.length) return;
+    uploading = true;
+    for (const f of files) await createBinaryFile(cwd, f.name, f);
+    uploading = false;
+    input.value = ''; // 清空 → 允许重复选同一文件
   }
   function startEditNew(id: string) {
     renamingId = id;
@@ -180,6 +197,11 @@ ${JSON.stringify(files)}`;
     <button
       class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110"
       onclick={newFile}>＋文件</button>
+    <button
+      class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110 disabled:opacity-50"
+      disabled={uploading}
+      onclick={() => fileInput?.click()}>{uploading ? '上传中…' : '⬆上传'}</button>
+    <input bind:this={fileInput} type="file" accept="image/*" multiple class="hidden" onchange={onUpload} />
   </div>
 
   <!-- 搜索：输入即过滤当前文件夹；🤖 跨全盘语义搜索 -->
