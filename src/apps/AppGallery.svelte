@@ -3,6 +3,21 @@
   import { launch } from '../kernel/processes.svelte';
   import { sys } from '../system/sys';
   import { CAPABILITIES } from '../system/appSdk';
+  import { exportUserApp, importUserAppFile } from './appShare';
+
+  let fileInput = $state<HTMLInputElement>();
+  async function onImport(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    for (const f of files) {
+      const id = await importUserAppFile(f);
+      sys.notify(id ? '已导入 App' : '导入失败', {
+        body: id ? f.name : `${f.name} 不是有效的 .qzapp.json`,
+        level: id ? 'success' : 'warn',
+      });
+    }
+    input.value = '';
+  }
 
   // App 声明的能力 → 图标列表（未声明字段的旧 App 视作全部）
   function capIcons(a: UserApp): string {
@@ -27,9 +42,14 @@
 <div class="flex h-full flex-col text-qz-text">
   <div class="flex shrink-0 items-center justify-between border-b border-qz-border px-3 py-2">
     <span class="text-xs text-qz-muted">🧩 我的 App · {userApps.list.length}</span>
-    <button
-      class="rounded-md bg-qz-accent px-2.5 py-1 text-xs font-medium text-qz-accent-contrast active:scale-95"
-      onclick={newApp}>＋ 新建</button>
+    <div class="flex gap-1.5">
+      <button class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110" onclick={() => fileInput?.click()}
+        >⬇ 导入</button>
+      <button
+        class="rounded-md bg-qz-accent px-2.5 py-1 text-xs font-medium text-qz-accent-contrast active:scale-95"
+        onclick={newApp}>＋ 新建</button>
+    </div>
+    <input bind:this={fileInput} type="file" accept=".json,application/json" multiple class="hidden" onchange={onImport} />
   </div>
 
   {#if userApps.list.length === 0}
@@ -54,6 +74,10 @@
             <button
               class="rounded px-1.5 py-0.5 text-[10px] text-qz-accent hover:bg-qz-surface"
               onclick={() => editApp(a)}>编辑</button>
+            <button
+              class="rounded px-1.5 py-0.5 text-[10px] hover:bg-qz-surface"
+              title="导出为 .qzapp.json 分享"
+              onclick={() => exportUserApp(a)}>导出</button>
             <button
               class="rounded px-1.5 py-0.5 text-[10px] text-red-400 hover:bg-qz-surface"
               onclick={() => removeUserApp(a.id)}>删除</button>
