@@ -26,6 +26,7 @@ export function loadCubismCore(): Promise<void> {
 
 export interface Pet {
   destroy(): void;
+  react(): void; // 触发一个随机动作（AI 回应时让桌宠动一下）
 }
 
 export async function createPet(
@@ -70,6 +71,14 @@ export async function createPet(
       try {
         // removeView=false：canvas 由 Svelte 管，别让 Pixi 摘掉它
         app.destroy(false, { children: true, texture: true, baseTexture: true });
+      } catch {
+        /* ignore */
+      }
+    },
+    react() {
+      try {
+        // 随机播一个动作组（模型没动作就静默忽略）
+        model.internalModel?.motionManager?.startRandomMotion?.();
       } catch {
         /* ignore */
       }
