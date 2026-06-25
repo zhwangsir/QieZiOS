@@ -1,6 +1,6 @@
 import { executeTool } from './aiTools';
 import { complete } from './ai';
-import { logSys } from '../kernel/log.svelte';
+import { emit } from '../kernel/bus.svelte';
 
 // ───────────────────────────────────────────────────────────
 // App SDK · 契约式运行时（D2 平台地基）
@@ -102,10 +102,10 @@ export async function handleGuestCall(win: Window, data: unknown, allow: Set<str
     win.postMessage({ __qz: 'res', id: data.id, ...patch }, '*');
   try {
     if (!allow.has(data.name)) {
-      logSys('appsdk', `拒绝能力 ${data.name}（未声明）`, 'warn');
+      emit('app.denied', { tool: data.name });
       throw new Error('能力未授权：' + data.name);
     }
-    logSys('appsdk', `App 调用 ${data.name}`);
+    emit('app.call', { tool: data.name });
     let result: unknown;
     if (data.name === '__ask') {
       result = await complete(String(data.input?.prompt ?? ''), {});

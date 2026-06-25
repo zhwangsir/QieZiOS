@@ -20,7 +20,7 @@ export interface Process {
 }
 
 import { persisted } from './persist.svelte';
-import { logSys } from './log.svelte';
+import { emit } from './bus.svelte';
 
 // 全局共享的响应式「内核状态」。用 persisted 包起来：
 // 开/拖/缩放/关窗口都会（防抖后）自动存盘，刷新后窗口布局原样还原（= 会话还原）。
@@ -61,13 +61,13 @@ export function launch(
     startedAt: Date.now(),
     data: opts.data,
   });
-  logSys('kernel', `启动 ${appId}（pid ${pid}）`);
+  emit('proc.launch', { pid, appId });
 }
 
 export function close(id: string) {
   const i = processes.findIndex((p) => p.id === id);
   if (i !== -1) {
-    logSys('kernel', `退出 ${processes[i].appId}（pid ${processes[i].pid}）`);
+    emit('proc.exit', { pid: processes[i].pid, appId: processes[i].appId });
     processes.splice(i, 1);
   }
 }
@@ -82,7 +82,7 @@ export function minimize(id: string) {
   const p = byId(id);
   if (p && !p.minimized) {
     p.minimized = true;
-    logSys('kernel', `挂起 ${p.appId}（pid ${p.pid}）`);
+    emit('proc.minimize', { pid: p.pid, appId: p.appId });
   }
 }
 
@@ -90,7 +90,7 @@ export function minimize(id: string) {
 export function restore(id: string) {
   const p = byId(id);
   if (p) {
-    if (p.minimized) logSys('kernel', `恢复 ${p.appId}（pid ${p.pid}）`);
+    if (p.minimized) emit('proc.restore', { pid: p.pid, appId: p.appId });
     p.minimized = false;
     p.z = ++nextZ;
   }

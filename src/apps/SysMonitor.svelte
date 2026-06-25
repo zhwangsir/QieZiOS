@@ -1,13 +1,14 @@
 <script lang="ts">
   import { processes, restore, minimize, close, activeId } from '../kernel/processes.svelte';
   import { klog, type LogLevel } from '../kernel/log.svelte';
+  import { eventLog } from '../kernel/bus.svelte';
   import { vfs, TRASH } from '../kernel/vfs.svelte';
   import { appMeta } from './appList';
   import { userApps, getUserApp } from './userApps.svelte';
 
   // ⚠️ 不能 import registry/desktopApps（registry 会 import 本组件 → 成环）。
   // 图标改用纯数据的 appMeta + userApps，二者都不 import registry。
-  let tab = $state<'proc' | 'log' | 'info'>('proc');
+  let tab = $state<'proc' | 'log' | 'evt' | 'info'>('proc');
 
   // 秒级心跳：驱动「运行时长」与存储统计刷新
   let now = $state(Date.now());
@@ -79,12 +80,26 @@
     klog.entries.length;
     if (logScroller && tab === 'log') logScroller.scrollTop = logScroller.scrollHeight;
   });
+  // 事件流自动滚到底
+  let evtScroller = $state<HTMLElement>();
+  $effect(() => {
+    eventLog.items.length;
+    if (evtScroller && tab === 'evt') evtScroller.scrollTop = evtScroller.scrollHeight;
+  });
+  function payloadStr(p: unknown): string {
+    if (p == null) return '';
+    try {
+      return JSON.stringify(p);
+    } catch {
+      return String(p);
+    }
+  }
 </script>
 
 <div class="flex h-full flex-col text-qz-text">
   <!-- 标签页 -->
   <div class="flex shrink-0 gap-1 border-b border-qz-border px-2 py-1.5 text-xs">
-    {#each [['proc', '进程'], ['log', '日志'], ['info', '概况']] as [key, label] (key)}
+    {#each [['proc', '进程'], ['log', '日志'], ['evt', '事件'], ['info', '概况']] as [key, label] (key)}
       <button
         class="rounded-md px-3 py-1 transition-colors"
         class:bg-qz-elevated={tab === key}
@@ -135,6 +150,19 @@
       {/each}
       {#if klog.entries.length === 0}
         <div class="grid place-items-center py-12 text-sm text-qz-muted">暂无日志</div>
+      {/if}
+    </div>
+  {:else if tab === 'evt'}
+    <div bind:this={evtScroller} class="min-h-0 flex-1 overflow-auto p-2 font-mono text-[11px] leading-relaxed">
+      {#each eventLog.items as e (e.seq)}
+        <div class="flex gap-2">
+          <span class="shrink-0 text-qz-muted/70 tabular-nums">{fmtTime(e.ts)}</span>
+          <span class="shrink-0 text-qz-accent">{e.event}</span>
+          <span class="truncate text-qz-muted">{payloadStr(e.payload)}</span>
+        </div>
+      {/each}
+      {#if eventLog.items.length === 0}
+        <div class="grid place-items-center py-12 text-sm text-qz-muted">暂无事件</div>
       {/if}
     </div>
   {:else}

@@ -4,7 +4,7 @@
   import { activeTokens, applyTokens } from './system/theme.svelte';
   import { processes, launch } from './kernel/processes.svelte';
   import { vfs } from './kernel/vfs.svelte';
-  import { logSys } from './kernel/log.svelte';
+  import { sys } from './system/sys';
   import { appRegistry } from './apps/registry';
   import Desktop from './shell/Desktop.svelte';
 
@@ -18,17 +18,17 @@
     document.documentElement.style.fontSize = `${(16 * settings.fontScale).toFixed(2)}px`;
   });
 
-  // 开机 init 序列（记进系统日志，任务管理器里能看到这段引导）
+  // 开机 init 序列：走总线发事件 → 日志/事件检查器都会收到（事件驱动）
   onMount(() => {
-    logSys('kernel', 'QieZiOS 内核启动');
-    logSys('vfs', `挂载文件系统（${Object.keys(vfs.nodes).length} 个节点）`);
+    sys.bus.emit('sys.boot');
+    sys.bus.emit('sys.mount', { nodes: Object.keys(vfs.nodes).length });
     if (processes.length === 0) {
       const w = appRegistry.welcome;
       launch('welcome', w.title, { width: w.width, height: w.height });
     } else {
-      logSys('kernel', `会话还原：${processes.length} 个进程`);
+      sys.bus.emit('sys.restore', { count: processes.length });
     }
-    logSys('shell', '外壳就绪');
+    sys.bus.emit('sys.ready');
   });
 </script>
 
