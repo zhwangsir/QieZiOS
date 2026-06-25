@@ -78,3 +78,16 @@ body {
   background: color-mix(in srgb, var(--color-qz-text) 40%, transparent);
   background-clip: padding-box;
 }
+
+/* 无障碍：尊重系统「减少动态效果」偏好 → 关掉所有 CSS 过渡/动画。
+   JS 过渡（窗口 pop、通知 fly/fade）另在组件里读 viewport.reducedMotion 置 0。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,6 +1,10 @@
 <script lang="ts">
   import { fly, fade } from 'svelte/transition';
   import { notifications, dismissNote, type NoteLevel } from '../system/notifications.svelte';
+  import { viewport } from '../system/viewport.svelte';
+
+  // 尊重「减少动态效果」：关掉进出动画
+  const dur = $derived(viewport.reducedMotion ? 0 : 1);
 
   // 左边一条彩色竖线标示等级
   const accent: Record<NoteLevel, string> = {
@@ -16,8 +20,8 @@
     <button
       class="pointer-events-auto w-full rounded-qz border border-qz-border qz-glass px-3 py-2 text-left shadow-xl shadow-black/30"
       style="border-left: 3px solid {accent[n.level]};"
-      in:fly={{ x: 24, duration: 180 }}
-      out:fade={{ duration: 150 }}
+      in:fly={{ x: 24, duration: 180 * dur }}
+      out:fade={{ duration: 150 * dur }}
       title="点击关闭"
       onclick={() => dismissNote(n.id)}
     >

@@ -1,4 +1,5 @@
 import { cubicOut } from 'svelte/easing';
+import { viewport } from '../system/viewport.svelte';
 
 // 窗口开/关动画（Svelte 自定义过渡）。
 // 只动 opacity 和【独立的 scale 属性】——注意不是 transform: scale()，
@@ -6,7 +7,7 @@ import { cubicOut } from 'svelte/easing';
 // scale / translate / rotate 是各自独立的 CSS 属性，能和 transform 叠加，且都走 GPU 合成器。
 export function pop(_node: HTMLElement, { duration = 190 }: { duration?: number } = {}) {
   return {
-    duration,
+    duration: viewport.reducedMotion ? 0 : duration, // 尊重「减少动态效果」
     easing: cubicOut,
     // t: 0→1（进入）或 1→0（离开），Svelte 已用 easing 处理过
     css: (t: number) => `opacity: ${t}; scale: ${0.92 + 0.08 * t};`,
