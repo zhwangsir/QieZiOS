@@ -4,6 +4,7 @@ import Welcome from './Welcome.svelte';
 import Assistant from './Assistant.svelte';
 import Settings from './Settings.svelte';
 import Files from './Files.svelte';
+import Terminal from './Terminal.svelte';
 import TextEdit from './TextEdit.svelte';
 import Calculator from './Calculator.svelte';
 import Clock from './Clock.svelte';
@@ -31,6 +32,7 @@ const components: Record<string, Component> = {
   welcome: Welcome,
   assistant: Assistant,
   files: Files,
+  terminal: Terminal,
   calculator: Calculator,
   clock: Clock,
   trash: Trash,

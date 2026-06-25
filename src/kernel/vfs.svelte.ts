@@ -219,3 +219,32 @@ export function pathSegments(id: string): VNode[] {
   }
   return segs;
 }
+
+// ── 路径字符串 ⇄ 节点 id（给 Shell / 终端 / 一切按路径操作的命令用）─────────
+// 把路径串解析成节点 id：支持 / 绝对、相对、`.`、`..`、root。找不到返回 undefined。
+export function resolvePath(cwd: string, path: string): string | undefined {
+  const p = (path ?? '').trim();
+  if (p === '' || p === '.') return cwd;
+  if (p === '/' || p === '~') return 'root';
+  let curId = p.startsWith('/') ? 'root' : cwd;
+  for (const part of p.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') {
+      const n = vfs.nodes[curId];
+      // 到根就停在根；不越过回收站
+      curId = n?.parentId && n.parentId !== 'trash' ? n.parentId : 'root';
+      continue;
+    }
+    const hit = children(curId).find((k) => k.name === part);
+    if (!hit) return undefined;
+    curId = hit.id;
+  }
+  return curId;
+}
+
+// 节点 → 绝对路径串（root = "/"）
+export function pathOf(id: string): string {
+  if (id === 'root') return '/';
+  const segs = pathSegments(id);
+  return '/' + segs.slice(1).map((s) => s.name).join('/');
+}
