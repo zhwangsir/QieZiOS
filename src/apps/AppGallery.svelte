@@ -2,6 +2,15 @@
   import { userApps, removeUserApp, type UserApp } from './userApps.svelte';
   import { launch } from '../kernel/processes.svelte';
   import { appMeta } from './appList';
+  import { CAPABILITIES } from '../system/appSdk';
+
+  // App 声明的能力 → 图标列表（未声明字段的旧 App 视作全部）
+  function capIcons(a: UserApp): string {
+    const keys = a.caps ?? CAPABILITIES.map((c) => c.key);
+    return CAPABILITIES.filter((c) => keys.includes(c.key))
+      .map((c) => c.icon)
+      .join(' ');
+  }
 
   function openApp(a: UserApp) {
     launch('userapp', a.name, { width: a.width, height: a.height, data: { appId: a.id } });
@@ -41,6 +50,7 @@
           <button class="grid h-14 w-14 place-items-center text-4xl" title="启动" onclick={() => openApp(a)}
             >{a.icon}</button>
           <span class="line-clamp-1 w-full text-center text-xs" title={a.name}>{a.name}</span>
+          <span class="text-[10px] leading-none opacity-60" title="此 App 拥有的能力">{capIcons(a)}</span>
           <div class="flex gap-1 opacity-0 transition group-hover/app:opacity-100">
             <button
               class="rounded px-1.5 py-0.5 text-[10px] text-qz-accent hover:bg-qz-surface"

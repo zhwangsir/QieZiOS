@@ -1,6 +1,7 @@
 <script lang="ts">
   import { studioDraft, STARTER_CODE } from '../system/studioDraft.svelte';
   import { saveUserApp, getUserApp } from './userApps.svelte';
+  import { CAPABILITIES, ALL_CAP_KEYS, capsToTools } from '../system/appSdk';
   import Sandbox from './Sandbox.svelte';
   import CodeMirror from './CodeMirror.svelte';
 
@@ -11,6 +12,12 @@
   let previewCode = $state(studioDraft.code); // 喂给 Sandbox 的代码（只在「运行」时更新，不随打字变）
   let runKey = $state(0);
   let showHelp = $state(false);
+  let showCaps = $state(false);
+
+  // 当前选中的能力（新草稿默认全开，方便试；编辑时载入该 App 声明的）
+  let capKeys = $state<string[]>([...ALL_CAP_KEYS]);
+  // 预览用的允许工具集——capKeys 一变就重算，正在跑的预览下次调用即按新权限放行
+  const previewCaps = $derived(capsToTools(capKeys));
 
   // 保存为 App 的表单
   let showSave = $state(false);
@@ -19,7 +26,7 @@
   let editId = $state<string | null>(null);
   let editName = $state('');
 
-  // 以「编辑」打开时，把目标 App 的代码载入草稿（只做一次）
+  // 以「编辑」打开时，把目标 App 的代码 + 声明的能力载入（只做一次）
   let loaded = false;
   $effect(() => {
     if (loaded) return;
@@ -34,10 +41,15 @@
       editId = a.id;
       editName = a.name;
       saveIcon = a.icon;
+      capKeys = a.caps ? [...a.caps] : [...ALL_CAP_KEYS];
       studioDraft.code = a.code;
       run();
     }
   });
+
+  function toggleCap(k: string) {
+    capKeys = capKeys.includes(k) ? capKeys.filter((x) => x !== k) : [...capKeys, k];
+  }
 
   function run() {
     previewCode = studioDraft.code;
@@ -61,6 +73,7 @@
       name,
       icon: saveIcon.trim() || '🧩',
       code: studioDraft.code,
+      caps: capKeys,
     });
     editName = name;
     showSave = false;
@@ -80,9 +93,31 @@
     <button class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110" onclick={resetCode}
       >重置示例</button>
     <button
+      class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110"
+      class:ring-1={showCaps}
+      class:ring-qz-accent={showCaps}
+      onclick={() => (showCaps = !showCaps)}>🔐 能力 {capKeys.length}/{ALL_CAP_KEYS.length}</button>
+    <button
       class="ml-auto rounded-md px-2 py-1 text-xs text-qz-muted hover:bg-qz-elevated"
       onclick={() => (showHelp = !showHelp)}>{showHelp ? '收起' : '？SDK'}</button>
   </div>
+
+  <!-- 能力声明：勾哪个，预览/装上后才放行哪个；没勾的 qz 调用会被宿主拒掉 -->
+  {#if showCaps}
+    <div class="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-qz-border bg-qz-surface/60 px-3 py-2">
+      <span class="text-[11px] text-qz-muted">这个 App 可以：</span>
+      {#each CAPABILITIES as c (c.key)}
+        <button
+          class="rounded-md px-2 py-1 text-[11px] transition"
+          class:bg-qz-accent={capKeys.includes(c.key)}
+          class:text-qz-accent-contrast={capKeys.includes(c.key)}
+          class:bg-qz-elevated={!capKeys.includes(c.key)}
+          class:opacity-50={!capKeys.includes(c.key)}
+          title={c.desc}
+          onclick={() => toggleCap(c.key)}>{c.icon} {c.label}</button>
+      {/each}
+    </div>
+  {/if}
 
   <!-- 保存表单 -->
   {#if showSave}
@@ -125,7 +160,7 @@
       <CodeMirror bind:value={studioDraft.code} />
     </div>
     <div class="h-full w-1/2">
-      <Sandbox code={previewCode} {runKey} />
+      <Sandbox code={previewCode} {runKey} caps={previewCaps} />
     </div>
   </div>
 </div>

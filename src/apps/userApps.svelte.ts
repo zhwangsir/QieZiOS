@@ -6,6 +6,7 @@ export interface UserApp {
   name: string;
   icon: string;
   code: string;
+  caps: string[]; // 声明的能力 key（见 appSdk 的 CAPABILITIES）
   width: number;
   height: number;
   createdAt: number;
@@ -23,6 +24,7 @@ export function saveUserApp(input: {
   name: string;
   icon: string;
   code: string;
+  caps: string[];
   width?: number;
   height?: number;
 }): string {
@@ -31,6 +33,7 @@ export function saveUserApp(input: {
     existing.name = input.name;
     existing.icon = input.icon;
     existing.code = input.code;
+    existing.caps = input.caps;
     if (input.width) existing.width = input.width;
     if (input.height) existing.height = input.height;
     return existing.id;
@@ -41,6 +44,7 @@ export function saveUserApp(input: {
     name: input.name,
     icon: input.icon,
     code: input.code,
+    caps: input.caps,
     width: input.width ?? 480,
     height: input.height ?? 400,
     createdAt: Date.now(),

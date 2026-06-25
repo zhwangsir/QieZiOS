@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { buildSrcdoc, handleGuestCall, DEFAULT_CAPS } from '../system/appSdk';
+  import { buildSrcdoc, handleGuestCall } from '../system/appSdk';
 
   // 通用沙箱：把一段用户代码跑进隔离 iframe，并架好宿主 RPC 闸。
   // Studio 预览 和 已安装的 UserApp 都复用它。
+  // caps：允许的工具名集合（按 App 声明的能力算出）；没在集合里的调用一律被拒。
   // runKey：每次自增可强制重建 iframe（同样 code 也重跑）。
-  let { code, runKey = 0 }: { code: string; runKey?: number } = $props();
+  let { code, caps, runKey = 0 }: { code: string; caps: Set<string>; runKey?: number } = $props();
 
   let iframeEl = $state<HTMLIFrameElement>();
   let srcdoc = $state('');
@@ -24,7 +25,7 @@
     function onMsg(e: MessageEvent) {
       const win = iframeEl?.contentWindow;
       if (!win || e.source !== win) return;
-      handleGuestCall(win, e.data, DEFAULT_CAPS);
+      handleGuestCall(win, e.data, caps);
     }
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);

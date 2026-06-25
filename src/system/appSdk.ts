@@ -52,16 +52,37 @@ export function buildSrcdoc(userCode: string): string {
   );
 }
 
-// 默认授权的能力（MVP：现有安全工具全开；将来按 App 的能力声明收紧）
-export const DEFAULT_CAPS = new Set<string>([
-  'list_apps',
-  'launch_app',
-  'list_files',
-  'create_folder',
-  'create_file',
-  'write_file',
-  'set_theme',
-]);
+// 能力分组：给用户/开发者看的粗粒度权限 → 背后映射到具体工具名。
+// App 声明它要哪些 cap key，宿主据此放行对应工具；没声明的工具一律拒绝。
+export interface Capability {
+  key: string;
+  label: string;
+  desc: string;
+  icon: string;
+  tools: string[];
+}
+export const CAPABILITIES: Capability[] = [
+  { key: 'apps', label: '启动 App', desc: '列出并打开其它 App', icon: '🚀', tools: ['list_apps', 'launch_app'] },
+  {
+    key: 'files',
+    label: '读写文件',
+    desc: '增删改查文件与文件夹',
+    icon: '📁',
+    tools: ['list_files', 'create_folder', 'create_file', 'write_file'],
+  },
+  { key: 'theme', label: '换肤', desc: '修改系统主题/壁纸', icon: '🎨', tools: ['set_theme'] },
+  { key: 'ai', label: 'AI', desc: '调用 AI 问答', icon: '🤖', tools: ['__ask'] },
+];
+export const ALL_CAP_KEYS = CAPABILITIES.map((c) => c.key);
+
+// 声明的 cap key 列表 → 允许的工具名集合。
+// capKeys 为 undefined（旧 App 没声明字段）→ 全给（向后兼容，不弄坏老 App）。
+export function capsToTools(capKeys: string[] | undefined): Set<string> {
+  if (!capKeys) return new Set(CAPABILITIES.flatMap((c) => c.tools));
+  const allow = new Set<string>();
+  for (const c of CAPABILITIES) if (capKeys.includes(c.key)) c.tools.forEach((t) => allow.add(t));
+  return allow;
+}
 
 interface GuestCall {
   __qz: 'call';
@@ -79,13 +100,12 @@ export async function handleGuestCall(win: Window, data: unknown, allow: Set<str
   const post = (patch: Record<string, unknown>) =>
     win.postMessage({ __qz: 'res', id: data.id, ...patch }, '*');
   try {
+    if (!allow.has(data.name)) throw new Error('能力未授权：' + data.name);
     let result: unknown;
     if (data.name === '__ask') {
       result = await complete(String(data.input?.prompt ?? ''), {});
-    } else if (allow.has(data.name)) {
-      result = await executeTool(data.name, data.input ?? {});
     } else {
-      throw new Error('能力未授权：' + data.name);
+      result = await executeTool(data.name, data.input ?? {});
     }
     post({ result });
   } catch (e) {

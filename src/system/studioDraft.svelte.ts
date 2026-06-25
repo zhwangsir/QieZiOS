@@ -27,10 +27,12 @@ export const STARTER_CODE = `<style>
 <script>
   const out = document.getElementById('out');
   const show = (x) => (out.textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 2));
-  async function openCalc() { await qz.launchApp('calculator'); show('已调用 launch_app(calculator)'); }
-  async function goGreen() { await qz.setTheme({ accent: '#22c55e', mode: 'dark' }); show('已把主色改成绿色'); }
-  async function showApps() { show(await qz.listApps()); }
-  async function askAi() { show('思考中…'); show(await qz.ask('用一句话介绍茄子')); }
+  // 包一层 try/catch：没声明对应能力时，qz 调用会被宿主拒绝（✋），这里就能看到
+  async function guard(fn) { try { await fn(); } catch (e) { show('✋ ' + e.message); } }
+  function openCalc() { guard(async () => { await qz.launchApp('calculator'); show('已打开计算器'); }); }
+  function goGreen() { guard(async () => { await qz.setTheme({ accent: '#22c55e', mode: 'dark' }); show('已把主色改成绿色'); }); }
+  function showApps() { guard(async () => show(await qz.listApps())); }
+  function askAi() { guard(async () => { show('思考中…'); show(await qz.ask('用一句话介绍茄子')); }); }
 <\/script>`;
 
 export const studioDraft = persisted<{ code: string }>('qz.studio', { code: STARTER_CODE }, 400);
