@@ -53,14 +53,29 @@
     reply = '';
     busy = true;
     ctrl = new AbortController();
+    let mouth: ReturnType<typeof setInterval> | null = null;
+    const stopMouth = () => {
+      if (mouth) {
+        clearInterval(mouth);
+        mouth = null;
+      }
+      petInst?.setMouth(0);
+    };
     try {
       await complete(q, {
         system: '你是 QieZiOS 的桌面伙伴，一只机灵可爱的小助手。用一两句俏皮、温暖的中文回应主人，别太长。',
-        onText: (t) => (reply += t),
+        onText: (t) => {
+          reply += t;
+          // 首个正文块开始 → 做简单口型（best-effort，模型无该参数则无视）
+          if (!mouth) mouth = setInterval(() => petInst?.setMouth(Math.random() * 0.8), 120);
+        },
         signal: ctrl.signal,
       });
-      petInst?.react();
+      stopMouth();
+      petInst?.react(); // 动作
+      petInst?.expression(); // 表情
     } catch (e) {
+      stopMouth();
       if (!(e instanceof Error && e.name === 'AbortError'))
         reply = '⚠️ ' + (e instanceof Error ? e.message : String(e));
     }

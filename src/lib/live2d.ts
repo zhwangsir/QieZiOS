@@ -27,6 +27,8 @@ export function loadCubismCore(): Promise<void> {
 export interface Pet {
   destroy(): void;
   react(): void; // 触发一个随机动作（AI 回应时让桌宠动一下）
+  expression(): void; // 切一个随机表情（回应完表达情绪）
+  setMouth(open: number): void; // 设嘴张开度 0..1（说话时做简单口型）
 }
 
 export async function createPet(
@@ -79,6 +81,21 @@ export async function createPet(
       try {
         // 随机播一个动作组（模型没动作就静默忽略）
         model.internalModel?.motionManager?.startRandomMotion?.();
+      } catch {
+        /* ignore */
+      }
+    },
+    expression() {
+      try {
+        model.expression?.(); // 不传名字 = 随机表情（模型没表情就忽略）
+      } catch {
+        /* ignore */
+      }
+    },
+    setMouth(open: number) {
+      try {
+        const v = Math.max(0, Math.min(1, open));
+        model.internalModel?.coreModel?.setParameterValueById?.('ParamMouthOpenY', v);
       } catch {
         /* ignore */
       }
