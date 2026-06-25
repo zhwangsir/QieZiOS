@@ -1,0 +1,56 @@
+<script lang="ts">
+  import { userApps, removeUserApp, type UserApp } from './userApps.svelte';
+  import { launch } from '../kernel/processes.svelte';
+  import { appMeta } from './appList';
+
+  function openApp(a: UserApp) {
+    launch('userapp', a.name, { width: a.width, height: a.height, data: { appId: a.id } });
+  }
+  function editApp(a: UserApp) {
+    const s = appMeta.studio;
+    launch('studio', s.title, { width: s.width, height: s.height, data: { editAppId: a.id } });
+  }
+  function newApp() {
+    const s = appMeta.studio;
+    launch('studio', s.title, { width: s.width, height: s.height });
+  }
+</script>
+
+<div class="flex h-full flex-col text-qz-text">
+  <div class="flex shrink-0 items-center justify-between border-b border-qz-border px-3 py-2">
+    <span class="text-xs text-qz-muted">🧩 我的 App · {userApps.list.length}</span>
+    <button
+      class="rounded-md bg-qz-accent px-2.5 py-1 text-xs font-medium text-qz-accent-contrast active:scale-95"
+      onclick={newApp}>＋ 新建</button>
+  </div>
+
+  {#if userApps.list.length === 0}
+    <div class="grid flex-1 place-items-center px-6 text-center text-sm text-qz-muted">
+      <div>
+        <div class="mb-2 text-4xl">🛠️</div>
+        还没有装上的 App。去「开发者」里写一个，点「保存为 App」就会出现在这里。
+      </div>
+    </div>
+  {:else}
+    <div
+      class="grid flex-1 content-start gap-2 overflow-auto p-3"
+      style="grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));"
+    >
+      {#each userApps.list as a (a.id)}
+        <div class="group/app flex flex-col items-center gap-1 rounded-xl p-3 hover:bg-qz-elevated">
+          <button class="grid h-14 w-14 place-items-center text-4xl" title="启动" onclick={() => openApp(a)}
+            >{a.icon}</button>
+          <span class="line-clamp-1 w-full text-center text-xs" title={a.name}>{a.name}</span>
+          <div class="flex gap-1 opacity-0 transition group-hover/app:opacity-100">
+            <button
+              class="rounded px-1.5 py-0.5 text-[10px] text-qz-accent hover:bg-qz-surface"
+              onclick={() => editApp(a)}>编辑</button>
+            <button
+              class="rounded px-1.5 py-0.5 text-[10px] text-red-400 hover:bg-qz-surface"
+              onclick={() => removeUserApp(a.id)}>删除</button>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+</div>

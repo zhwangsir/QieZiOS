@@ -9,6 +9,8 @@ import Calculator from './Calculator.svelte';
 import Clock from './Clock.svelte';
 import Trash from './Trash.svelte';
 import Studio from './Studio.svelte';
+import AppGallery from './AppGallery.svelte';
+import UserApp from './UserApp.svelte';
 
 // App 注册表 = 元数据(appList) + 组件。
 // · 桌面靠它「按 appId 查出组件」再渲染；Dock 靠它列出可启动 App。
@@ -25,8 +27,10 @@ const components: Record<string, Component> = {
   clock: Clock,
   trash: Trash,
   studio: Studio,
+  myapps: AppGallery,
   settings: Settings,
   textedit: TextEdit,
+  userapp: UserApp,
 };
 
 export const appRegistry: Record<string, AppDef> = Object.fromEntries(

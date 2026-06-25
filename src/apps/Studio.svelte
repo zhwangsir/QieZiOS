@@ -1,32 +1,68 @@
 <script lang="ts">
   import { studioDraft, STARTER_CODE } from '../system/studioDraft.svelte';
-  import { buildSrcdoc, handleGuestCall, DEFAULT_CAPS } from '../system/appSdk';
+  import { saveUserApp, getUserApp } from './userApps.svelte';
+  import Sandbox from './Sandbox.svelte';
 
-  let iframeEl = $state<HTMLIFrameElement>();
+  // data.editAppId = 从「我的 App」点编辑进来 → 载入那个 App 的代码、之后保存即更新它
+  let { data }: { data?: unknown } = $props();
+
   // svelte-ignore state_referenced_locally
-  let srcdoc = $state(buildSrcdoc(studioDraft.code)); // 初次进来就先跑一遍
+  let previewCode = $state(studioDraft.code); // 喂给 Sandbox 的代码（只在「运行」时更新，不随打字变）
+  let runKey = $state(0);
   let showHelp = $state(false);
 
-  // 宿主 RPC 闸：只收自己这个 iframe 的消息，路由给 handleGuestCall
+  // 保存为 App 的表单
+  let showSave = $state(false);
+  let saveName = $state('');
+  let saveIcon = $state('🧩');
+  let editId = $state<string | null>(null);
+  let editName = $state('');
+
+  // 以「编辑」打开时，把目标 App 的代码载入草稿（只做一次）
+  let loaded = false;
   $effect(() => {
-    function onMsg(e: MessageEvent) {
-      const win = iframeEl?.contentWindow;
-      if (!win || e.source !== win) return;
-      handleGuestCall(win, e.data, DEFAULT_CAPS);
+    if (loaded) return;
+    const id =
+      data && typeof data === 'object' && 'editAppId' in data
+        ? String((data as { editAppId: unknown }).editAppId)
+        : '';
+    if (!id) return;
+    const a = getUserApp(id);
+    if (a) {
+      loaded = true;
+      editId = a.id;
+      editName = a.name;
+      saveIcon = a.icon;
+      studioDraft.code = a.code;
+      run();
     }
-    window.addEventListener('message', onMsg);
-    return () => window.removeEventListener('message', onMsg);
   });
 
   function run() {
-    // 先清空再设，强制 iframe 重建（同样的 srcdoc 不会触发重载）。
-    // 用 setTimeout 而非 rAF：后台/隐藏标签页里 rAF 会被冻结，setTimeout 仍会触发。
-    srcdoc = '';
-    setTimeout(() => (srcdoc = buildSrcdoc(studioDraft.code)), 0);
+    previewCode = studioDraft.code;
+    runKey++;
   }
   function resetCode() {
     studioDraft.code = STARTER_CODE;
+    editId = null;
+    editName = '';
     run();
+  }
+
+  function openSave() {
+    saveName = editName || '';
+    showSave = true;
+  }
+  function doSave() {
+    const name = saveName.trim() || '未命名 App';
+    editId = saveUserApp({
+      id: editId ?? undefined,
+      name,
+      icon: saveIcon.trim() || '🧩',
+      code: studioDraft.code,
+    });
+    editName = name;
+    showSave = false;
   }
 
   // Tab 键插两个空格（别让焦点跳走）
@@ -43,16 +79,44 @@
 <div class="flex h-full flex-col text-qz-text">
   <!-- 工具栏 -->
   <div class="flex shrink-0 items-center gap-2 border-b border-qz-border px-3 py-1.5">
-    <span class="text-xs text-qz-muted">🛠️ 开发者</span>
+    <span class="text-xs text-qz-muted">🛠️ 开发者{editName ? ` · 编辑「${editName}」` : ''}</span>
     <button
       class="rounded-md bg-qz-accent px-2.5 py-1 text-xs font-medium text-qz-accent-contrast transition-transform active:scale-95"
       onclick={run}>▶ 运行</button>
+    <button class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110" onclick={openSave}
+      >💾 {editId ? '更新 App' : '保存为 App'}</button>
     <button class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110" onclick={resetCode}
       >重置示例</button>
     <button
       class="ml-auto rounded-md px-2 py-1 text-xs text-qz-muted hover:bg-qz-elevated"
       onclick={() => (showHelp = !showHelp)}>{showHelp ? '收起' : '？SDK'}</button>
   </div>
+
+  <!-- 保存表单 -->
+  {#if showSave}
+    <div class="flex shrink-0 items-center gap-2 border-b border-qz-border bg-qz-surface/60 px-3 py-2">
+      <input
+        class="w-12 rounded-md bg-qz-surface px-2 py-1 text-center text-base outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+        bind:value={saveIcon}
+        maxlength="2"
+        aria-label="图标"
+      />
+      <input
+        class="min-w-0 flex-1 rounded-md bg-qz-surface px-2 py-1 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+        placeholder="App 名称"
+        bind:value={saveName}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') doSave();
+          else if (e.key === 'Escape') (showSave = false);
+        }}
+      />
+      <button
+        class="rounded-md bg-qz-accent px-3 py-1 text-xs font-medium text-qz-accent-contrast active:scale-95"
+        onclick={doSave}>{editId ? '更新' : '保存'}</button>
+      <button class="rounded-md px-2 py-1 text-xs text-qz-muted hover:bg-qz-elevated" onclick={() => (showSave = false)}
+        >取消</button>
+    </div>
+  {/if}
 
   {#if showHelp}
     <div class="shrink-0 border-b border-qz-border bg-qz-surface/60 px-3 py-2 text-[11px] leading-relaxed text-qz-muted">
@@ -72,12 +136,8 @@
       spellcheck="false"
       placeholder="在这里写你的 App（HTML + CSS + JS）…"
     ></textarea>
-    <iframe
-      bind:this={iframeEl}
-      title="预览"
-      class="h-full w-1/2 bg-white"
-      sandbox="allow-scripts"
-      {srcdoc}
-    ></iframe>
+    <div class="h-full w-1/2">
+      <Sandbox code={previewCode} {runKey} />
+    </div>
   </div>
 </div>

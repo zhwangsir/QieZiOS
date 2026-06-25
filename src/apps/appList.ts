@@ -17,8 +17,10 @@ export const appList: AppMeta[] = [
   { id: 'clock', title: '时钟', icon: '🕐', width: 300, height: 380 },
   { id: 'trash', title: '回收站', icon: '🗑️', width: 420, height: 380 },
   { id: 'studio', title: '开发者', icon: '🛠️', width: 760, height: 500 },
+  { id: 'myapps', title: '我的 App', icon: '🧩', width: 480, height: 420 },
   { id: 'settings', title: '设置', icon: '⚙️', width: 540, height: 580 },
   { id: 'textedit', title: '记事本', icon: '📝', width: 480, height: 380, hidden: true },
+  { id: 'userapp', title: 'App', icon: '🧩', width: 460, height: 380, hidden: true },
 ];
 
 export const appMeta: Record<string, AppMeta> = Object.fromEntries(
