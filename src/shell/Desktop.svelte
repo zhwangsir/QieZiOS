@@ -18,6 +18,7 @@
   import Spotlight from './Spotlight.svelte';
   import Dock from './Dock.svelte';
   import TopBar from './TopBar.svelte';
+  import Notifications from './Notifications.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import DesktopIcons from './DesktopIcons.svelte';
   import { snapState } from './snapState.svelte';
@@ -137,4 +138,7 @@
 
   <!-- 命令面板（Ctrl/Cmd+K） -->
   <Spotlight />
+
+  <!-- 系统通知 toast 层（通知中心服务驱动） -->
+  <Notifications />
 </div>

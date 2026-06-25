@@ -33,6 +33,10 @@ export const sys = {
   },
   bus: { emit, on },
   log: logSys,
+  // 发一条系统通知（通知中心服务会接住并弹 toast）
+  notify(title: string, opts: { body?: string; level?: 'info' | 'success' | 'warn' | 'error'; timeout?: number } = {}) {
+    emit('notify', { title, ...opts });
+  },
 };
 
 if (import.meta.env.DEV) {

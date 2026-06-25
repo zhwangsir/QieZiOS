@@ -4,7 +4,9 @@
   import { activeTokens, applyTokens } from './system/theme.svelte';
   import { processes, launch } from './kernel/processes.svelte';
   import { vfs } from './kernel/vfs.svelte';
+  import { startServices } from './kernel/services.svelte';
   import { sys } from './system/sys';
+  import './system/services'; // 登记系统自带服务（通知中心等）
   import { appRegistry } from './apps/registry';
   import Desktop from './shell/Desktop.svelte';
 
@@ -22,6 +24,7 @@
   onMount(() => {
     sys.bus.emit('sys.boot');
     sys.bus.emit('sys.mount', { nodes: Object.keys(vfs.nodes).length });
+    startServices(); // 启动后台服务（通知中心等）
     if (processes.length === 0) {
       const w = appRegistry.welcome;
       launch('welcome', w.title, { width: w.width, height: w.height });
@@ -29,6 +32,7 @@
       sys.bus.emit('sys.restore', { count: processes.length });
     }
     sys.bus.emit('sys.ready');
+    sys.notify('QieZiOS 已就绪 🍆', { body: '系统服务已启动', level: 'success' });
   });
 </script>
 

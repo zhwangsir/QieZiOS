@@ -2,6 +2,7 @@
   import { processes, restore, minimize, close, activeId } from '../kernel/processes.svelte';
   import { klog, type LogLevel } from '../kernel/log.svelte';
   import { eventLog } from '../kernel/bus.svelte';
+  import { services, stopService } from '../kernel/services.svelte';
   import { vfs, TRASH } from '../kernel/vfs.svelte';
   import { appMeta } from './appList';
   import { userApps, getUserApp } from './userApps.svelte';
@@ -136,7 +137,24 @@
         </div>
       {/each}
       {#if processes.length === 0}
-        <div class="grid place-items-center py-12 text-sm text-qz-muted">没有运行中的进程</div>
+        <div class="px-3 py-6 text-center text-sm text-qz-muted">没有窗口进程</div>
+      {/if}
+
+      <!-- 后台服务：无窗口的常驻进程 -->
+      <div class="mt-2 border-t border-qz-border px-3 py-1.5 text-[11px] text-qz-muted">后台服务（无窗口）</div>
+      {#each services.running as s (s.id)}
+        <div class="flex items-center gap-2 border-b border-qz-border/50 px-3 py-1.5 text-xs hover:bg-qz-elevated/50">
+          <span class="w-10 text-qz-muted">⚙</span>
+          <span class="flex-1 truncate">{s.name}</span>
+          <span class="w-12 text-emerald-400">运行</span>
+          <span class="w-14 text-right tabular-nums text-qz-muted">{fmtUptime(now - s.startedAt)}</span>
+          <span class="flex w-24 justify-end">
+            <button class="rounded px-1.5 py-0.5 text-[10px] text-red-400 hover:bg-qz-surface" onclick={() => stopService(s.id)}>停止</button>
+          </span>
+        </div>
+      {/each}
+      {#if services.running.length === 0}
+        <div class="px-3 py-3 text-center text-[11px] text-qz-muted">无运行中的服务</div>
       {/if}
     </div>
   {:else if tab === 'log'}
@@ -168,7 +186,7 @@
   {:else}
     <div class="min-h-0 flex-1 overflow-auto p-3">
       <div class="grid grid-cols-2 gap-2 text-sm">
-        {#each [['进程', `${stats.proc}（${stats.running} 运行 / ${stats.suspended} 挂起）`], ['文件', `${stats.files}`], ['文件夹', `${stats.dirs}`], ['回收站', `${stats.trashed}`], ['已装 App', `${stats.apps}`], ['日志条数', `${stats.logs}`], ['localStorage', `${storageKB()} KB`]] as [k, v] (k)}
+        {#each [['进程', `${stats.proc}（${stats.running} 运行 / ${stats.suspended} 挂起）`], ['后台服务', `${services.running.length}`], ['文件', `${stats.files}`], ['文件夹', `${stats.dirs}`], ['回收站', `${stats.trashed}`], ['已装 App', `${stats.apps}`], ['日志条数', `${stats.logs}`], ['localStorage', `${storageKB()} KB`]] as [k, v] (k)}
           <div class="rounded-qz bg-qz-surface px-3 py-2">
             <div class="text-[11px] text-qz-muted">{k}</div>
             <div class="mt-0.5 tabular-nums">{v}</div>

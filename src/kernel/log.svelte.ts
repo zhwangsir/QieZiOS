@@ -44,6 +44,9 @@ function fmt(event: string, p: any): { source: string; msg: string; level: LogLe
     case 'fs.trash': return { source: 'vfs', msg: `删除 ${p?.name} → 回收站`, level: 'warn' };
     case 'app.call': return { source: 'appsdk', msg: `App 调用 ${p?.tool}`, level: 'info' };
     case 'app.denied': return { source: 'appsdk', msg: `拒绝能力 ${p?.tool}（未声明）`, level: 'warn' };
+    case 'svc.start': return { source: 'service', msg: `服务启动 ${p?.name}`, level: 'info' };
+    case 'svc.stop': return { source: 'service', msg: `服务停止 ${p?.name}`, level: 'warn' };
+    case 'notify': return { source: 'notify', msg: `通知：${p?.title}`, level: 'info' };
     default:
       // 用户 App 经 IPC 发的事件（app:*）也落日志，方便观测
       if (event.startsWith('app:'))
