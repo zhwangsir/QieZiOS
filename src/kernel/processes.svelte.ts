@@ -4,7 +4,8 @@
 // 这里只放「裸操作」原语；更上层的编排（如 Dock 的点击逻辑）放到外壳里。
 // ───────────────────────────────────────────────────────────
 export interface Process {
-  id: string;        // 进程唯一 id
+  id: string;        // 进程唯一 id（uuid 串）
+  pid: number;       // 数字 PID（每次开机重排，便于人看 / 任务管理器展示）
   appId: string;     // 对应注册表里的哪个 App
   title: string;
   x: number;         // 窗口左上角（用 transform 移动 → 走 GPU 合成器）
@@ -14,14 +15,24 @@ export interface Process {
   z: number;         // 叠放层级（越大越在上）
   minimized: boolean;
   maximized: boolean;
+  startedAt: number; // 启动时间戳（任务管理器算运行时长）
   data?: unknown;    // 启动参数（如记事本要打开的文件 id）；会随会话一起持久化
 }
 
 import { persisted } from './persist.svelte';
+import { logSys } from './log.svelte';
 
 // 全局共享的响应式「内核状态」。用 persisted 包起来：
 // 开/拖/缩放/关窗口都会（防抖后）自动存盘，刷新后窗口布局原样还原（= 会话还原）。
 export const processes = persisted<Process[]>('qz.windows', [], 250);
+
+// PID 每次开机重排（符合真系统语义：PID 不跨重启保留）。
+let pidCounter = 0;
+const nextPid = () => ++pidCounter;
+for (const p of processes) {
+  p.pid = nextPid();
+  if (p.startedAt == null) p.startedAt = Date.now();
+}
 
 // 还原会话后，让 nextZ 从已有最大 z 之上接着发，新窗口才不会被压在底下。
 let nextZ = processes.reduce((m, p) => Math.max(m, p.z), 0) + 1;
@@ -33,9 +44,11 @@ export function launch(
   opts: { width?: number; height?: number; data?: unknown } = {},
 ) {
   const id = `${appId}-${crypto.randomUUID().slice(0, 8)}`;
+  const pid = nextPid();
   const offset = (processes.length % 6) * 28; // 层叠错位，避免新窗口完全重合
   processes.push({
     id,
+    pid,
     appId,
     title,
     x: 140 + offset,
@@ -45,13 +58,18 @@ export function launch(
     z: ++nextZ,
     minimized: false,
     maximized: false,
+    startedAt: Date.now(),
     data: opts.data,
   });
+  logSys('kernel', `启动 ${appId}（pid ${pid}）`);
 }
 
 export function close(id: string) {
   const i = processes.findIndex((p) => p.id === id);
-  if (i !== -1) processes.splice(i, 1);
+  if (i !== -1) {
+    logSys('kernel', `退出 ${processes[i].appId}（pid ${processes[i].pid}）`);
+    processes.splice(i, 1);
+  }
 }
 
 // 聚焦：提到最上层
@@ -62,13 +80,17 @@ export function focus(id: string) {
 
 export function minimize(id: string) {
   const p = byId(id);
-  if (p) p.minimized = true;
+  if (p && !p.minimized) {
+    p.minimized = true;
+    logSys('kernel', `挂起 ${p.appId}（pid ${p.pid}）`);
+  }
 }
 
 // 还原：取消最小化并聚焦（Dock 点图标时也走它）
 export function restore(id: string) {
   const p = byId(id);
   if (p) {
+    if (p.minimized) logSys('kernel', `恢复 ${p.appId}（pid ${p.pid}）`);
     p.minimized = false;
     p.z = ++nextZ;
   }

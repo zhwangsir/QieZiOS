@@ -13,6 +13,7 @@ import AppGallery from './AppGallery.svelte';
 import UserApp from './UserApp.svelte';
 import ImageViewer from './ImageViewer.svelte';
 import Companion from './Companion.svelte';
+import SysMonitor from './SysMonitor.svelte';
 
 // App 注册表 = 元数据(appList) + 组件。
 // · 桌面靠它「按 appId 查出组件」再渲染；Dock 靠它列出可启动 App。
@@ -32,6 +33,7 @@ const components: Record<string, Component> = {
   studio: Studio,
   myapps: AppGallery,
   companion: Companion,
+  sysmon: SysMonitor,
   settings: Settings,
   textedit: TextEdit,
   imageviewer: ImageViewer,

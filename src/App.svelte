@@ -3,6 +3,8 @@
   import { settings } from './system/settings.svelte';
   import { activeTokens, applyTokens } from './system/theme.svelte';
   import { processes, launch } from './kernel/processes.svelte';
+  import { vfs } from './kernel/vfs.svelte';
+  import { logSys } from './kernel/log.svelte';
   import { appRegistry } from './apps/registry';
   import Desktop from './shell/Desktop.svelte';
 
@@ -16,12 +18,17 @@
     document.documentElement.style.fontSize = `${(16 * settings.fontScale).toFixed(2)}px`;
   });
 
-  // 首次进入：自动开「欢迎」App，桌面不空着
+  // 开机 init 序列（记进系统日志，任务管理器里能看到这段引导）
   onMount(() => {
+    logSys('kernel', 'QieZiOS 内核启动');
+    logSys('vfs', `挂载文件系统（${Object.keys(vfs.nodes).length} 个节点）`);
     if (processes.length === 0) {
       const w = appRegistry.welcome;
       launch('welcome', w.title, { width: w.width, height: w.height });
+    } else {
+      logSys('kernel', `会话还原：${processes.length} 个进程`);
     }
+    logSys('shell', '外壳就绪');
   });
 </script>
 

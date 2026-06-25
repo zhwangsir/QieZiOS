@@ -1,5 +1,6 @@
 import { persisted } from './persist.svelte';
 import { putBlob, getBlob, deleteBlob } from './blobStore';
+import { logSys } from './log.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 虚拟文件系统（VFS）· 又是一张「表」
@@ -76,14 +77,18 @@ function uniqueName(parentId: string, base: string): string {
 export function createDir(parentId: string, name = '新建文件夹'): string {
   const id = crypto.randomUUID();
   const t = Date.now();
-  vfs.nodes[id] = { id, name: uniqueName(parentId, name), type: 'dir', parentId, content: '', createdAt: t, updatedAt: t };
+  const finalName = uniqueName(parentId, name);
+  vfs.nodes[id] = { id, name: finalName, type: 'dir', parentId, content: '', createdAt: t, updatedAt: t };
+  logSys('vfs', `新建文件夹 ${finalName}`);
   return id;
 }
 
 export function createFile(parentId: string, name = '新建文本.txt', content = ''): string {
   const id = crypto.randomUUID();
   const t = Date.now();
-  vfs.nodes[id] = { id, name: uniqueName(parentId, name), type: 'file', parentId, content, createdAt: t, updatedAt: t };
+  const finalName = uniqueName(parentId, name);
+  vfs.nodes[id] = { id, name: finalName, type: 'file', parentId, content, createdAt: t, updatedAt: t };
+  logSys('vfs', `新建文件 ${finalName}`);
   return id;
 }
 
@@ -93,9 +98,10 @@ export async function createBinaryFile(parentId: string, name: string, blob: Blo
   const blobId = crypto.randomUUID();
   await putBlob(blobId, blob);
   const t = Date.now();
+  const finalName = uniqueName(parentId, name);
   vfs.nodes[id] = {
     id,
-    name: uniqueName(parentId, name),
+    name: finalName,
     type: 'file',
     parentId,
     content: '',
@@ -106,6 +112,7 @@ export async function createBinaryFile(parentId: string, name: string, blob: Blo
     createdAt: t,
     updatedAt: t,
   };
+  logSys('vfs', `上传 ${finalName}（${(blob.size / 1024).toFixed(1)}KB → IndexedDB）`);
   return id;
 }
 
@@ -167,6 +174,7 @@ export function trash(id: string): void {
   n.prevParent = n.parentId;
   n.parentId = TRASH;
   n.updatedAt = Date.now();
+  logSys('vfs', `删除 ${n.name} → 回收站`, 'warn');
 }
 
 // 从回收站还原到原位置（原父级没了就回根目录）
