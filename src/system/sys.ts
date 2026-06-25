@@ -5,6 +5,7 @@ import { logSys } from '../kernel/log.svelte';
 import { settings } from './settings.svelte';
 import { wallpapers } from './wallpaper';
 import { clipboard, currentClip } from './clipboard.svelte';
+import { schedules, addSchedule, removeSchedule } from './schedules.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 系统调用门面 · 把内核/系统的能力收成「一张系统调用表」。
@@ -38,6 +39,24 @@ export const sys = {
     },
     read: () => currentClip(),
     history: () => clipboard.items,
+  },
+  // 定时器：in=多少毫秒后一次性 / every=每隔多少毫秒循环。到点由 schedd 服务发 notify。
+  schedule: {
+    add(opts: { title: string; body?: string; in?: number; every?: number }): string {
+      const full = addSchedule({
+        title: opts.title,
+        body: opts.body,
+        fireAt: opts.in != null ? Date.now() + opts.in : undefined,
+        every: opts.every,
+      });
+      emit('sched.add', full);
+      return full.id;
+    },
+    cancel(id: string) {
+      removeSchedule(id);
+      emit('sched.cancel', { id });
+    },
+    list: () => schedules.items,
   },
   bus: { emit, on },
   log: logSys,

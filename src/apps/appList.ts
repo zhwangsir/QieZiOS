@@ -21,6 +21,7 @@ export const appList: AppMeta[] = [
   { id: 'companion', title: '伙伴', icon: '🧚', width: 360, height: 480 },
   { id: 'sysmon', title: '任务管理器', icon: '📊', width: 560, height: 460 },
   { id: 'clipboard', title: '剪贴板', icon: '📋', width: 360, height: 420 },
+  { id: 'reminders', title: '提醒', icon: '⏰', width: 340, height: 420 },
   { id: 'settings', title: '设置', icon: '⚙️', width: 540, height: 580 },
   { id: 'textedit', title: '记事本', icon: '📝', width: 480, height: 380, hidden: true },
   { id: 'imageviewer', title: '图片', icon: '🖼️', width: 540, height: 440, hidden: true },

@@ -1,7 +1,8 @@
 import { registerService } from '../kernel/services.svelte';
-import { on } from '../kernel/bus.svelte';
+import { on, emit } from '../kernel/bus.svelte';
 import { pushNote, type NoteLevel } from './notifications.svelte';
 import { pushClip } from './clipboard.svelte';
+import { schedules, removeSchedule, type Schedule } from './schedules.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 系统自带服务的注册处（import 本模块即登记；App 在开机时 startServices()）。
@@ -35,5 +36,49 @@ registerService({
   name: '剪贴板',
   start() {
     return on('clip.copy', (p) => pushClip((p as { text?: string })?.text ?? ''));
+  },
+});
+
+// 定时器：常驻服务，给每个日程武装计时器，到点经总线发 notify。
+// 开机时重新武装所有持久化的日程（一次性的过期就立刻补发），并订阅运行时的 add/cancel。
+registerService({
+  id: 'schedd',
+  name: '定时器',
+  start() {
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const fire = (s: Schedule) => emit('notify', { title: s.title || '提醒', body: s.body, level: 'info' });
+    const arm = (s: Schedule) => {
+      if (timers.has(s.id)) return;
+      if (s.every && s.every > 0) {
+        timers.set(s.id, setInterval(() => fire(s), Math.max(1000, s.every)));
+      } else if (s.fireAt) {
+        const delay = Math.max(0, Math.min(s.fireAt - Date.now(), 2_000_000_000)); // setTimeout 上限
+        timers.set(
+          s.id,
+          setTimeout(() => {
+            fire(s);
+            timers.delete(s.id);
+            removeSchedule(s.id);
+          }, delay),
+        );
+      }
+    };
+    const disarm = (id: string) => {
+      const t = timers.get(id);
+      if (t !== undefined) {
+        clearTimeout(t);
+        clearInterval(t);
+        timers.delete(id);
+      }
+    };
+    for (const s of schedules.items) arm(s);
+    const offs = [
+      on('sched.add', (p) => arm(p as Schedule)),
+      on('sched.cancel', (p) => disarm((p as { id: string }).id)),
+    ];
+    return () => {
+      for (const id of [...timers.keys()]) disarm(id);
+      offs.forEach((o) => o());
+    };
   },
 });

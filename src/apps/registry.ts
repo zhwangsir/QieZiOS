@@ -15,6 +15,7 @@ import ImageViewer from './ImageViewer.svelte';
 import Companion from './Companion.svelte';
 import SysMonitor from './SysMonitor.svelte';
 import Clipboard from './Clipboard.svelte';
+import Reminders from './Reminders.svelte';
 
 // App 注册表 = 元数据(appList) + 组件。
 // · 桌面靠它「按 appId 查出组件」再渲染；Dock 靠它列出可启动 App。
@@ -36,6 +37,7 @@ const components: Record<string, Component> = {
   companion: Companion,
   sysmon: SysMonitor,
   clipboard: Clipboard,
+  reminders: Reminders,
   settings: Settings,
   textedit: TextEdit,
   imageviewer: ImageViewer,

@@ -48,6 +48,8 @@ function fmt(event: string, p: any): { source: string; msg: string; level: LogLe
     case 'svc.stop': return { source: 'service', msg: `服务停止 ${p?.name}`, level: 'warn' };
     case 'notify': return { source: 'notify', msg: `通知：${p?.title}`, level: 'info' };
     case 'clip.copy': return { source: 'clip', msg: `复制：${String(p?.text ?? '').slice(0, 40)}`, level: 'info' };
+    case 'sched.add': return { source: 'sched', msg: `定时「${p?.title}」${p?.every ? `每 ${Math.round(p.every / 1000)}s` : ''}`, level: 'info' };
+    case 'sched.cancel': return { source: 'sched', msg: `取消定时 ${p?.id}`, level: 'info' };
     default:
       // 用户 App 经 IPC 发的事件（app:*）也落日志，方便观测
       if (event.startsWith('app:'))
