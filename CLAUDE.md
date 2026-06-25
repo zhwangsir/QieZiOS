@@ -19,7 +19,7 @@
 - **本地**：`D:\file\New Develop\QieZiOS`
 - **远程**：`https://github.com/zhwangsir/QieZiOS.git`（已设为 `origin`）
 - **状态**：已 **push 到 `origin/main`（同步）**。包含 Phase A `3aba79d`、Phase B、Phase C VFS `06847ec`、打磨①②③④、回收站 `8cd017e`、Spotlight、文件拖拽移动、主题编辑器、**Phase D AI 助手 MVP → 双协议(Anthropic + OpenAI 兼容/minimax) + AI 织进各 App**。**作者已给全部授权 → 可自由 commit + push，不再每次问**。
-- **AI 默认走作者自建网关**：OpenAI 兼容 `https://dgmt.top/lm/v1`，模型 `minimax/minimax-m2.7`。Bearer 存在**仓库外**的 `.env.local`(被 `*.local` gitignore)；浏览器经 `/aiproxy` 同源代理转发(网关无 CORS 头,直连会被拦)：**dev** 走 Vite 代理、**生产**走 `server/index.mjs`(`npm run serve`)。换网关只改 `.env.local`(dev) 或 `AI_PROXY_TARGET`(prod)。
+- **AI 当前默认走本地 LM Studio**（局域网，OpenAI 兼容，`.env.local` 的 `VITE_AI_PROXY_TARGET` 指向它），模型 `zai-org/glm-4.6v-flash`（推理+视觉 flash 模型；本地服务**无需 key**）。设置→AI 有「本地 · GLM-4.6V」一键预设。**备用**：作者自建 minimax 网关 `https://dgmt.top/lm/v1`(`minimax/minimax-m2.7`，Bearer 在 `.env.local` 注释里，切回即取消注释+重启 dev)。两者都经 `/aiproxy` 同源代理转发(绕过 CORS)：**dev** 走 Vite 代理、**生产**走 `server/index.mjs`。换端点只改 `.env.local`(dev) 或 `AI_PROXY_TARGET`(prod)。⚠️ flash 模型在 Assistant 的工具 agent loop 里偏爱反复调同一工具、易撞 8 轮上限——普通对话/各 App 内嵌 AI 流畅，复杂"驱动系统"任务换大模型更稳。**key 守卫已改 provider 感知**：仅 Anthropic 强制要 key，OpenAI 兼容端点可留空(本地/无鉴权)。
 - **与博客的关系**：完全独立于 `D:\file\New Develop\QieZiBlog`（一个已完成的 React 博客 WineryBlog）。**不要**把博客仓库改造成 OS。博客**以后作为系统里的一个 App 嵌入**——先用 `iframe`（零重写，React 博客跑在 Svelte 系统里完全没问题，这正是"平台兼容异构 App"的体现）。
 
 ---
