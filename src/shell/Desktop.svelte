@@ -19,6 +19,8 @@
   import Dock from './Dock.svelte';
   import TopBar from './TopBar.svelte';
   import Notifications from './Notifications.svelte';
+  import DesktopPet from './DesktopPet.svelte';
+  import { pet } from '../system/pet.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import DesktopIcons from './DesktopIcons.svelte';
   import { snapState } from './snapState.svelte';
@@ -41,6 +43,12 @@
             width: appRegistry.settings.width,
             height: appRegistry.settings.height,
           }),
+      },
+      {
+        label: pet.enabled ? '隐藏桌宠' : '显示桌宠',
+        icon: '🧚',
+        separator: true,
+        onClick: () => (pet.enabled = !pet.enabled),
       },
       { label: '层叠窗口', icon: '🗂️', onClick: cascade },
       { label: '关闭所有窗口', icon: '✕', danger: true, onClick: closeAll },
@@ -141,4 +149,7 @@
 
   <!-- 系统通知 toast 层（通知中心服务驱动） -->
   <Notifications />
+
+  <!-- Live2D 桌面浮层桌宠（可拖/可关） -->
+  <DesktopPet />
 </div>

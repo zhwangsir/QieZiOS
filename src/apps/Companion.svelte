@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createPet, type Pet } from '../lib/live2d';
   import { companion, DEFAULT_MODEL } from '../system/companion.svelte';
+  import { pet as desktopPet } from '../system/pet.svelte';
 
   let canvas = $state<HTMLCanvasElement>();
   let container = $state<HTMLElement>();
@@ -46,6 +47,10 @@
       class="shrink-0 rounded-md bg-qz-accent px-2.5 py-1 text-[11px] font-medium text-qz-accent-contrast active:scale-95 disabled:opacity-50"
       disabled={status === 'loading'}
       onclick={load}>{status === 'loading' ? '召唤中…' : '加载'}</button>
+    <button
+      class="shrink-0 rounded-md bg-qz-elevated px-2 py-1 text-[11px] hover:brightness-110"
+      title="把桌宠浮到桌面上"
+      onclick={() => (desktopPet.enabled = true)}>📌 钉到桌面</button>
   </div>
 
   <div bind:this={container} class="relative min-h-0 flex-1">
