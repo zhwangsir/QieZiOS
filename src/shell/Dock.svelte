@@ -3,6 +3,7 @@
   import { processes, restore, minimizeApp, closeApp } from '../kernel/processes.svelte';
   import { type AppDef } from '../apps/registry';
   import { visibleAppDefs, launchAppDef } from '../apps/desktopApps.svelte';
+  import { viewport } from '../system/viewport.svelte';
   import { openMenu, type MenuItem } from './menu.svelte';
 
   // $derived：当前有进程在跑的 appId 集合（显示小圆点）
@@ -43,6 +44,8 @@
 
 <div
   class="absolute bottom-4 left-1/2 z-[9999] flex -translate-x-1/2 items-end gap-2 rounded-2xl border border-qz-border qz-glass px-3 py-2 shadow-2xl shadow-black/40"
+  class:max-w-[94vw]={viewport.isMobile}
+  class:overflow-x-auto={viewport.isMobile}
   role="toolbar"
   tabindex="-1"
   aria-label="程序坞"

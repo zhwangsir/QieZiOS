@@ -11,6 +11,7 @@
   import { snapState } from './snapState.svelte';
   import { openMenu } from './menu.svelte';
   import { pop } from '../lib/motion';
+  import { viewport } from '../system/viewport.svelte';
   import WindowControls from './WindowControls.svelte';
 
   // active：是不是当前活动窗（由 Desktop 传入，用来高亮焦点边框）
@@ -39,7 +40,7 @@
   }
 
   function startDrag(e: PointerEvent) {
-    if (proc.maximized) return; // 最大化时标题栏不拖
+    if (proc.maximized || viewport.isMobile) return; // 最大化 / 移动模式不拖
     focus(proc.id);
     dragging = true;
     sx = e.clientX; sy = e.clientY; ox = proc.x; oy = proc.y;
@@ -120,9 +121,11 @@
     ]);
   }
 
-  // 最大化用 CSS 铺满（几何数值不动，取消时自然还原）；否则 transform 定位走 GPU
+  // 移动模式 或 最大化 → CSS 铺满；否则 transform 定位走 GPU。
+  // 移动模式下所有窗口铺满 + 按 z 叠放 → 顶层那个可见，靠顶栏/Dock 切换（手机 App 切换器手感）。
+  const fullscreen = $derived(viewport.isMobile || proc.maximized);
   const style = $derived(
-    proc.maximized
+    fullscreen
       ? `inset: 0; z-index: ${proc.z}; border-radius: 0;`
       : `top: 0; left: 0; transform: translate(${proc.x}px, ${proc.y}px);` +
         ` width: ${proc.width}px; height: ${proc.height}px; z-index: ${proc.z};` +
@@ -172,8 +175,8 @@
     {@render children()}
   </div>
 
-  <!-- 右下角缩放手柄（最大化时隐藏） -->
-  {#if !proc.maximized}
+  <!-- 右下角缩放手柄（最大化 / 移动模式隐藏） -->
+  {#if !fullscreen}
     <div
       class="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
       role="separator"
