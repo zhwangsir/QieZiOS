@@ -1,7 +1,4 @@
-import { launch } from '../kernel/processes.svelte';
-import { children, createDir, createFile, getNode, writeFile } from '../kernel/vfs.svelte';
-import { settings } from './settings.svelte';
-import { wallpapers } from './wallpaper';
+import { sys } from './sys';
 import { appMeta } from '../apps/appList';
 
 // ───────────────────────────────────────────────────────────
@@ -93,23 +90,23 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       const appId = String(input.appId);
       const a = appMeta[appId];
       if (!a) return { error: '未知 appId：' + appId };
-      launch(appId, a.title, { width: a.width, height: a.height });
+      sys.proc.launch(appId, a.title, { width: a.width, height: a.height });
       return { ok: true, launched: appId };
     }
 
     case 'list_files':
-      return children(String(input.folderId ?? 'root')).map((n) => ({
+      return sys.fs.list(String(input.folderId ?? 'root')).map((n) => ({
         id: n.id,
         name: n.name,
         type: n.type,
       }));
 
     case 'create_folder':
-      return { id: createDir(String(input.parentId ?? 'root'), String(input.name)) };
+      return { id: sys.fs.mkdir(String(input.parentId ?? 'root'), String(input.name)) };
 
     case 'create_file':
       return {
-        id: createFile(
+        id: sys.fs.create(
           String(input.parentId ?? 'root'),
           String(input.name),
           String(input.content ?? ''),
@@ -117,21 +114,14 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       };
 
     case 'write_file': {
-      const n = getNode(String(input.fileId));
-      if (!n) return { error: '文件不存在' };
-      writeFile(String(input.fileId), String(input.content));
+      if (!sys.fs.read(String(input.fileId))) return { error: '文件不存在' };
+      sys.fs.write(String(input.fileId), String(input.content));
       return { ok: true };
     }
 
-    case 'set_theme': {
-      if (input.mode === 'dark' || input.mode === 'light') settings.mode = input.mode;
-      if (typeof input.accent === 'string') settings.accent = input.accent;
-      if (typeof input.wallpaperId === 'string' && wallpapers.some((w) => w.id === input.wallpaperId))
-        settings.wallpaperId = input.wallpaperId;
-      if (typeof input.radius === 'number') settings.radius = input.radius;
-      if (typeof input.blur === 'number') settings.blur = input.blur;
+    case 'set_theme':
+      sys.ui.setTheme(input as Parameters<typeof sys.ui.setTheme>[0]);
       return { ok: true };
-    }
 
     default:
       return { error: '未知工具：' + name };

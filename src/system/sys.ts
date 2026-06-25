@@ -4,6 +4,7 @@ import { emit, on } from '../kernel/bus.svelte';
 import { logSys } from '../kernel/log.svelte';
 import { settings } from './settings.svelte';
 import { wallpapers } from './wallpaper';
+import { clipboard, currentClip } from './clipboard.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 系统调用门面 · 把内核/系统的能力收成「一张系统调用表」。
@@ -24,12 +25,19 @@ export const sys = {
   fs: { list: children, read: getNode, mkdir: createDir, create: createFile, write: writeFile },
   ui: {
     setTheme(p: ThemePatch) {
-      if (p.mode) settings.mode = p.mode;
+      if (p.mode === 'dark' || p.mode === 'light') settings.mode = p.mode;
       if (typeof p.accent === 'string') settings.accent = p.accent;
       if (p.wallpaperId && wallpapers.some((w) => w.id === p.wallpaperId)) settings.wallpaperId = p.wallpaperId;
       if (typeof p.radius === 'number') settings.radius = p.radius;
       if (typeof p.blur === 'number') settings.blur = p.blur;
     },
+  },
+  clipboard: {
+    copy(text: string) {
+      emit('clip.copy', { text });
+    },
+    read: () => currentClip(),
+    history: () => clipboard.items,
   },
   bus: { emit, on },
   log: logSys,

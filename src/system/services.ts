@@ -1,6 +1,7 @@
 import { registerService } from '../kernel/services.svelte';
 import { on } from '../kernel/bus.svelte';
 import { pushNote, type NoteLevel } from './notifications.svelte';
+import { pushClip } from './clipboard.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 系统自带服务的注册处（import 本模块即登记；App 在开机时 startServices()）。
@@ -25,5 +26,14 @@ registerService({
       }),
     ];
     return () => offs.forEach((off) => off());
+  },
+});
+
+// 剪贴板：常驻服务，订阅 clip.copy → 维护剪贴板历史（像个剪贴板管理器守护进程）。
+registerService({
+  id: 'clipd',
+  name: '剪贴板',
+  start() {
+    return on('clip.copy', (p) => pushClip((p as { text?: string })?.text ?? ''));
   },
 });

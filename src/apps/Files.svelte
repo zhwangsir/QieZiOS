@@ -17,6 +17,7 @@
   import { openMenu } from '../shell/menu.svelte';
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
+  import { sys } from '../system/sys';
 
   // data = 可选的起始文件夹 id（桌面文件夹图标双击时传入）
   let { data }: { data?: unknown } = $props();
@@ -160,6 +161,7 @@ ${JSON.stringify(files)}`;
           renameText = n.name;
         },
       },
+      { label: '复制名称', icon: '📋', onClick: () => sys.clipboard.copy(n.name) },
       { label: '删除', icon: '🗑️', danger: true, separator: true, onClick: () => trash(n.id) },
     ]);
   }
