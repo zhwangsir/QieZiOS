@@ -6,7 +6,8 @@
 
   type Result =
     | { kind: 'app'; id: string; title: string; icon: string }
-    | { kind: 'file'; node: VNode; icon: string };
+    | { kind: 'file'; node: VNode; icon: string }
+    | { kind: 'ai'; query: string };
 
   let query = $state('');
   let selected = $state(0);
@@ -31,11 +32,16 @@
           .slice(0, 6)
           .map((n) => ({ kind: 'file', node: n, icon: n.type === 'dir' ? '📁' : '📄' }))
       : [];
-    return [...apps, ...files].slice(0, 10);
+    // 有输入就在末尾挂一个「问 AI」入口（放最后，不抢 App 的默认 Enter）
+    const ai: Result[] = query.trim() ? [{ kind: 'ai', query: query.trim() }] : [];
+    return [...apps, ...files].slice(0, 9).concat(ai);
   });
 
   function activate(r: Result) {
-    if (r.kind === 'app') {
+    if (r.kind === 'ai') {
+      const a = appRegistry['assistant'];
+      launch('assistant', a.title, { width: a.width, height: a.height, data: { ask: r.query } });
+    } else if (r.kind === 'app') {
       const a = appRegistry[r.id];
       launch(r.id, a.title, { width: a.width, height: a.height });
     } else if (r.node.type === 'dir') {
@@ -77,23 +83,26 @@
       <!-- svelte-ignore a11y_autofocus -->
       <input
         class="w-full bg-transparent px-4 py-3 text-base text-qz-text outline-none placeholder:text-qz-muted"
-        placeholder="搜索 App 和文件…"
+        placeholder="搜索 App、文件，或问 AI…"
         bind:value={query}
         autofocus
         onkeydown={onKey}
       />
       {#if results.length}
         <div class="max-h-80 overflow-auto border-t border-qz-border p-1">
-          {#each results as r, i (r.kind === 'app' ? 'a' + r.id : 'f' + r.node.id)}
+          {#each results as r, i (r.kind === 'app' ? 'a' + r.id : r.kind === 'file' ? 'f' + r.node.id : 'ai')}
             <button
               class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm"
               class:bg-qz-elevated={i === selected}
               onpointerenter={() => (selected = i)}
               onclick={() => activate(r)}
             >
-              <span class="text-lg">{r.icon}</span>
-              <span class="flex-1 truncate">{r.kind === 'app' ? r.title : r.node.name}</span>
-              <span class="text-xs text-qz-muted">{r.kind === 'app' ? 'App' : '文件'}</span>
+              <span class="text-lg">{r.kind === 'ai' ? '🤖' : r.icon}</span>
+              <span class="flex-1 truncate">
+                {#if r.kind === 'app'}{r.title}{:else if r.kind === 'file'}{r.node.name}{:else}问 AI：{r.query}{/if}
+              </span>
+              <span class="text-xs text-qz-muted"
+                >{r.kind === 'app' ? 'App' : r.kind === 'file' ? '文件' : 'AI'}</span>
             </button>
           {/each}
         </div>

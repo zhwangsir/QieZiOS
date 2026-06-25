@@ -6,12 +6,27 @@
   import { launch } from '../kernel/processes.svelte';
   import { appMeta } from './appList';
 
+  // data = 可选启动参数：{ ask: string } → 挂载后自动发这条（Spotlight「问 AI」用）
+  let { data }: { data?: unknown } = $props();
+
   let input = $state('');
   let busy = $state(false);
   let ctrl: AbortController | null = null;
   let scroller: HTMLElement;
 
   const hasKey = $derived(!!aiConfig.apiKey);
+
+  // 自动提问：只在挂载时跑一次（data 启动后不变，effect 自然只触发一次；autoAsked 兜底防重）
+  let autoAsked = false;
+  $effect(() => {
+    if (autoAsked) return;
+    const q =
+      data && typeof data === 'object' && 'ask' in data ? String((data as { ask: unknown }).ask).trim() : '';
+    if (q) {
+      autoAsked = true;
+      ask(q);
+    }
+  });
 
   // 新内容时滚到底
   $effect(() => {
@@ -38,6 +53,11 @@
     const text = input.trim();
     if (!text || busy) return;
     input = '';
+    await ask(text);
+  }
+
+  async function ask(text: string) {
+    if (!text || busy) return;
     busy = true;
     chat.msgs.push({ role: 'user', text, tools: [] });
     chat.msgs.push({ role: 'assistant', text: '', tools: [] });

@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    vfs,
     children,
     createDir,
     createFile,
@@ -12,6 +13,8 @@
   } from '../kernel/vfs.svelte';
   import { launch } from '../kernel/processes.svelte';
   import { openMenu } from '../shell/menu.svelte';
+  import { complete } from '../system/ai';
+  import { aiConfig } from '../system/aiConfig.svelte';
 
   // data = 可选的起始文件夹 id（桌面文件夹图标双击时传入）
   let { data }: { data?: unknown } = $props();
@@ -23,6 +26,13 @@
   let renameText = $state('');
   let dragOverId = $state<string | null>(null); // 拖放时高亮的目标文件夹
 
+  // 搜索：q 即时按名字过滤当前文件夹；aiHits 非空时改为展示 AI 语义搜索命中的文件（全盘）
+  let q = $state('');
+  let aiHits = $state<string[] | null>(null);
+  let aiBusy = $state(false);
+  let aiErr = $state('');
+  const hasKey = $derived(!!aiConfig.apiKey);
+
   function onDrop(e: DragEvent, destId: string) {
     e.preventDefault();
     const src = e.dataTransfer?.getData('text/plain');
@@ -30,13 +40,68 @@
     dragOverId = null;
   }
 
-  const items = $derived(children(cwd));
+  const items = $derived.by(() => {
+    if (aiHits) return aiHits.map((id) => getNode(id)).filter((n): n is VNode => !!n && n.parentId !== 'trash');
+    const base = children(cwd);
+    const needle = q.trim().toLowerCase();
+    return needle ? base.filter((n) => n.name.toLowerCase().includes(needle)) : base;
+  });
   const crumbs = $derived(pathSegments(cwd));
+
+  // 导航即退出 AI 搜索结果（保留 q 作为新文件夹的名字过滤）
+  function goTo(id: string) {
+    aiHits = null;
+    aiErr = '';
+    cwd = id;
+  }
+  function clearSearch() {
+    q = '';
+    aiHits = null;
+    aiErr = '';
+  }
+
+  // AI 语义搜索：把全盘文本文件的名字+内容片段交给模型，按相关性挑 id
+  async function aiSearch() {
+    const query = q.trim();
+    if (!query || aiBusy || !hasKey) return;
+    aiBusy = true;
+    aiErr = '';
+    aiHits = null;
+    const files = Object.values(vfs.nodes)
+      .filter((n) => n.type === 'file' && n.parentId !== 'trash')
+      .slice(0, 40)
+      .map((n) => ({ id: n.id, name: n.name, snippet: (n.content ?? '').slice(0, 400) }));
+    if (!files.length) {
+      aiErr = '没有可搜索的文本文件';
+      aiBusy = false;
+      return;
+    }
+    const prompt = `用户查询：「${query}」
+
+下面是文件列表（JSON，含 id/name/snippet）。按与查询的相关性挑出最相关的文件，只返回它们的 id、按相关度从高到低排列。
+严格只输出一个 JSON 数组（如 ["id1","id2"]），不要解释、不要代码块。都不相关就返回 []。
+
+${JSON.stringify(files)}`;
+    try {
+      const out = await complete(prompt, { system: '你是文件搜索助手，只输出 JSON 数组。' });
+      const valid = new Set(files.map((f) => f.id));
+      const m = out.match(/\[[\s\S]*\]/);
+      const ids: string[] = m
+        ? (JSON.parse(m[0]) as unknown[]).filter((x): x is string => typeof x === 'string' && valid.has(x))
+        : [];
+      aiHits = ids;
+      if (!ids.length) aiErr = '没找到相关文件';
+    } catch (e) {
+      aiHits = null;
+      aiErr = e instanceof Error ? e.message : String(e);
+    }
+    aiBusy = false;
+  }
 
   function open(n: VNode) {
     if (renamingId) return;
     if (n.type === 'dir') {
-      cwd = n.id;
+      goTo(n.id);
     } else {
       // 记事本固定尺寸（避免 Files 依赖 registry 造成循环 import）
       launch('textedit', n.name, { width: 480, height: 380, data: n.id });
@@ -106,7 +171,7 @@
           class="truncate rounded px-1 py-0.5 hover:bg-qz-elevated hover:text-qz-text"
           ondragover={(e) => e.preventDefault()}
           ondrop={(e) => onDrop(e, c.id)}
-          onclick={() => (cwd = c.id)}>{c.name}</button>
+          onclick={() => goTo(c.id)}>{c.name}</button>
       {/each}
     </div>
     <button
@@ -116,6 +181,38 @@
       class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110"
       onclick={newFile}>＋文件</button>
   </div>
+
+  <!-- 搜索：输入即过滤当前文件夹；🤖 跨全盘语义搜索 -->
+  <div class="flex items-center gap-2 border-b border-qz-border px-3 py-1.5">
+    <input
+      class="min-w-0 flex-1 rounded-md bg-qz-surface px-2 py-1 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+      placeholder="搜索文件名…"
+      bind:value={q}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' && hasKey) aiSearch();
+        else if (e.key === 'Escape') clearSearch();
+      }}
+    />
+    {#if hasKey}
+      <button
+        class="shrink-0 rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110 disabled:opacity-40"
+        title="AI 语义搜索（按内容找）"
+        disabled={aiBusy || !q.trim()}
+        onclick={aiSearch}>{aiBusy ? '搜索中…' : '🤖 AI 搜'}</button>
+    {/if}
+    {#if q || aiHits}
+      <button class="shrink-0 rounded-md px-2 py-1 text-xs text-qz-muted hover:bg-qz-elevated" onclick={clearSearch}
+        >✕</button>
+    {/if}
+  </div>
+
+  {#if aiHits}
+    <div class="flex items-center gap-2 border-b border-qz-border bg-qz-accent/10 px-3 py-1 text-[11px] text-qz-muted">
+      🤖 AI 搜索结果 · {items.length} 个 · 点 ✕ 返回
+    </div>
+  {:else if aiErr}
+    <div class="border-b border-qz-border px-3 py-1 text-[11px] text-red-400">⚠️ {aiErr}</div>
+  {/if}
 
   <!-- 内容网格 -->
   <div
@@ -174,7 +271,9 @@
     {/each}
 
     {#if items.length === 0}
-      <div class="col-span-full grid place-items-center py-12 text-sm text-qz-muted">空文件夹</div>
+      <div class="col-span-full grid place-items-center py-12 text-sm text-qz-muted">
+        {aiHits ? '没有命中' : q.trim() ? '没有匹配的文件' : '空文件夹'}
+      </div>
     {/if}
   </div>
 </div>
