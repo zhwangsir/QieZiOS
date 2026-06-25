@@ -2,6 +2,7 @@
   import { studioDraft, STARTER_CODE } from '../system/studioDraft.svelte';
   import { saveUserApp, getUserApp } from './userApps.svelte';
   import Sandbox from './Sandbox.svelte';
+  import CodeMirror from './CodeMirror.svelte';
 
   // data.editAppId = 从「我的 App」点编辑进来 → 载入那个 App 的代码、之后保存即更新它
   let { data }: { data?: unknown } = $props();
@@ -65,15 +66,6 @@
     showSave = false;
   }
 
-  // Tab 键插两个空格（别让焦点跳走）
-  function onTab(e: KeyboardEvent) {
-    if (e.key !== 'Tab') return;
-    e.preventDefault();
-    const ta = e.target as HTMLTextAreaElement;
-    const s = ta.selectionStart;
-    studioDraft.code = studioDraft.code.slice(0, s) + '  ' + studioDraft.code.slice(ta.selectionEnd);
-    setTimeout(() => (ta.selectionStart = ta.selectionEnd = s + 2), 0);
-  }
 </script>
 
 <div class="flex h-full flex-col text-qz-text">
@@ -129,13 +121,9 @@
 
   <!-- 编辑器 | 预览 -->
   <div class="flex min-h-0 flex-1">
-    <textarea
-      class="h-full w-1/2 resize-none border-r border-qz-border bg-qz-surface/40 p-3 font-mono text-xs leading-relaxed text-qz-text outline-none"
-      bind:value={studioDraft.code}
-      onkeydown={onTab}
-      spellcheck="false"
-      placeholder="在这里写你的 App（HTML + CSS + JS）…"
-    ></textarea>
+    <div class="h-full w-1/2 border-r border-qz-border">
+      <CodeMirror bind:value={studioDraft.code} />
+    </div>
     <div class="h-full w-1/2">
       <Sandbox code={previewCode} {runKey} />
     </div>
