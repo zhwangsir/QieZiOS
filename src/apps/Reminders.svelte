@@ -1,14 +1,17 @@
 <script lang="ts">
   import { schedules } from '../system/schedules.svelte';
   import { sys } from '../system/sys';
+  import { windowVisible } from '../lib/winctx';
 
   let title = $state('');
   let secs = $state(10);
   let recurring = $state(false);
 
-  // 秒级心跳，让倒计时实时刷新
+  // 秒级心跳，让倒计时实时刷新；最小化时暂停
   let now = $state(Date.now());
+  const visible = windowVisible();
   $effect(() => {
+    if (!visible()) return;
     const t = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(t);
   });

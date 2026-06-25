@@ -1,8 +1,12 @@
 <script lang="ts">
-  let now = $state(new Date());
+  import { windowVisible } from '../lib/winctx';
 
-  // $effect + 清理函数：每秒更新，组件销毁时清掉定时器
+  let now = $state(new Date());
+  const visible = windowVisible();
+
+  // $effect + 清理函数：每秒更新；最小化时暂停（不白跑），还原自动恢复；销毁清掉定时器
   $effect(() => {
+    if (!visible()) return;
     const t = setInterval(() => (now = new Date()), 1000);
     return () => clearInterval(t);
   });

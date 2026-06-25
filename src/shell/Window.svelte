@@ -12,11 +12,15 @@
   import { openMenu } from './menu.svelte';
   import { pop } from '../lib/motion';
   import { viewport } from '../system/viewport.svelte';
+  import { provideWindow } from '../lib/winctx';
   import WindowControls from './WindowControls.svelte';
 
   // active：是不是当前活动窗（由 Desktop 传入，用来高亮焦点边框）
   let { proc, active = false, children }: { proc: Process; active?: boolean; children: Snippet } =
     $props();
+
+  // 把「是否最小化」传给窗口内的 App，让它们最小化时暂停后台定时器
+  provideWindow(() => proc.minimized);
 
   let el: HTMLElement; // 窗口根元素引用：用来拿父级窗口层的尺寸做边缘判定
   let dragging = $state(false);

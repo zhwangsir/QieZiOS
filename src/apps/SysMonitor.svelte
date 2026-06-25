@@ -4,6 +4,7 @@
   import { eventLog } from '../kernel/bus.svelte';
   import { services, stopService, restartService } from '../kernel/services.svelte';
   import { vfs, TRASH } from '../kernel/vfs.svelte';
+  import { windowVisible } from '../lib/winctx';
   import { appMeta } from './appList';
   import { userApps, getUserApp } from './userApps.svelte';
 
@@ -11,9 +12,11 @@
   // 图标改用纯数据的 appMeta + userApps，二者都不 import registry。
   let tab = $state<'proc' | 'log' | 'evt' | 'info'>('proc');
 
-  // 秒级心跳：驱动「运行时长」与存储统计刷新
+  // 秒级心跳：驱动「运行时长」与存储统计刷新；最小化时暂停
   let now = $state(Date.now());
+  const visible = windowVisible();
   $effect(() => {
+    if (!visible()) return;
     const t = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(t);
   });
