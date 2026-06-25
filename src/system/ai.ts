@@ -16,10 +16,12 @@ export type AiEvent =
   | { type: 'tool'; name: string } // 调了某个工具
   | { type: 'error'; message: string };
 
-// 一条对话消息（纯文本；工具上下文由引擎内部维护）
+// 一条对话消息（文本 + 可选图片；工具上下文由引擎内部维护）
+// images：data URL 数组（data:image/...;base64,...）。仅 user 消息有意义，喂给视觉模型。
 export interface ChatTurn {
   role: 'user' | 'assistant';
   content: string;
+  images?: string[];
 }
 
 const DEFAULT_SYSTEM_PROMPT = `你是 QieZiOS（一个跑在浏览器里的桌面系统 🍆）的内置 AI 助手。
@@ -76,6 +78,26 @@ async function loadAnthropic() {
   });
 }
 
+// 把一条对话消息转成 Anthropic content：带图的 user 消息拼成「文本块 + 图片块」
+type AnthropicMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+function anthropicContent(m: ChatTurn): string | Anthropic.ContentBlockParam[] {
+  if (m.role === 'user' && m.images && m.images.length) {
+    const blocks: Anthropic.ContentBlockParam[] = [];
+    if (m.content) blocks.push({ type: 'text', text: m.content });
+    for (const url of m.images) {
+      const match = /^data:([^;]+);base64,(.+)$/.exec(url);
+      if (match) {
+        blocks.push({
+          type: 'image',
+          source: { type: 'base64', media_type: match[1] as AnthropicMediaType, data: match[2] },
+        });
+      }
+    }
+    return blocks;
+  }
+  return m.content;
+}
+
 async function runAnthropicAgent(
   history: ChatTurn[],
   system: string,
@@ -83,7 +105,10 @@ async function runAnthropicAgent(
   signal?: AbortSignal,
 ) {
   const client = await loadAnthropic();
-  const messages: Anthropic.MessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
+  const messages: Anthropic.MessageParam[] = history.map((m) => ({
+    role: m.role,
+    content: anthropicContent(m),
+  }));
   for (let turn = 0; turn < 8; turn++) {
     if (signal?.aborted) break;
     const stream = client.messages.stream(
@@ -142,10 +167,29 @@ interface OAToolCall {
   type: 'function';
   function: { name: string; arguments: string };
 }
+// OpenAI 多模态：user content 可以是字符串，或「文本+图片」分块数组
+type OAContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
 type OAMessage =
-  | { role: 'system' | 'user'; content: string }
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string | OAContentPart[] }
   | { role: 'assistant'; content: string | null; tool_calls?: OAToolCall[] }
   | { role: 'tool'; tool_call_id: string; content: string };
+
+// 把上层对话（ChatTurn）转成 OpenAI 消息：带图的 user 消息拼成多模态分块
+function historyToOA(history: ChatTurn[]): OAMessage[] {
+  return history.map((m): OAMessage => {
+    if (m.role === 'user' && m.images && m.images.length) {
+      const parts: OAContentPart[] = [];
+      if (m.content) parts.push({ type: 'text', text: m.content });
+      for (const url of m.images) parts.push({ type: 'image_url', image_url: { url } });
+      return { role: 'user', content: parts };
+    }
+    if (m.role === 'user') return { role: 'user', content: m.content };
+    return { role: 'assistant', content: m.content };
+  });
+}
 
 function chatUrl(): string {
   const base = (aiConfig.baseURL || '').trim().replace(/\/+$/, '');
@@ -178,7 +222,7 @@ async function runOpenAIAgent(
   onEvent: (e: AiEvent) => void,
   signal?: AbortSignal,
 ) {
-  const messages: OAMessage[] = [{ role: 'system', content: system }, ...history];
+  const messages: OAMessage[] = [{ role: 'system', content: system }, ...historyToOA(history)];
   const tools = openaiToolDefs();
   const callCounts = new Map<string, number>(); // 工具调用签名 → 已执行次数（防打转）
   let forceFinish = false; // 触发后下一轮去掉 tools，逼模型用已有结果给最终答复
@@ -248,6 +292,34 @@ async function completeOpenAI(
   return content;
 }
 
+// 某些模型（如 GLM）会用 <|begin_of_box|>…<|end_of_box|> 等控制标记包裹答案，
+// 这些不该显示给用户。下面在流式输出时安全地剥掉它们（含跨分片拆开的标记）。
+function stripBoxTokens(s: string): string {
+  return s.replace(/<\|[^|]*\|>/g, '');
+}
+// 把已累积文本切成「可安全输出」与「暂留」两段：结尾若有未闭合的 <|… 或孤立 <，先留着等后续分片
+function safeFlushBoundary(s: string): string {
+  const open = s.lastIndexOf('<|');
+  if (open !== -1 && s.indexOf('|>', open) === -1) return s.slice(0, open);
+  if (s.endsWith('<')) return s.slice(0, -1);
+  return s;
+}
+// 比对「已清洗文本」和「已输出长度」，把新增的干净文本推给 onEvent，返回新的已输出长度。
+// final=true 时连暂留尾巴一起输出（流结束，不再有后续分片）。
+function flushCleanText(
+  raw: string,
+  emittedLen: number,
+  onEvent: (e: AiEvent) => void,
+  final = false,
+): number {
+  const cleaned = stripBoxTokens(final ? raw : safeFlushBoundary(raw));
+  if (cleaned.length > emittedLen) {
+    onEvent({ type: 'text', text: cleaned.slice(emittedLen) });
+    return cleaned.length;
+  }
+  return emittedLen;
+}
+
 // 跑一次流式请求：累积正文 + 工具调用（增量按 index 拼），推理增量实时推给 onEvent。
 async function streamOpenAI(
   messages: OAMessage[],
@@ -275,7 +347,8 @@ async function streamOpenAI(
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
-  let content = '';
+  let content = ''; // 原始累积（含控制标记）
+  let emittedLen = 0; // 已通过 onEvent 输出的「清洗后」字符数
   const toolCalls: OAToolCall[] = [];
 
   for (;;) {
@@ -288,7 +361,10 @@ async function streamOpenAI(
       buf = buf.slice(nl + 1);
       if (!line.startsWith('data:')) continue;
       const data = line.slice(5).trim();
-      if (data === '[DONE]') return { content, toolCalls: finalizeToolCalls(toolCalls) };
+      if (data === '[DONE]') {
+        flushCleanText(content, emittedLen, onEvent, true); // 收尾：吐出暂留尾巴
+        return { content: stripBoxTokens(content), toolCalls: finalizeToolCalls(toolCalls) };
+      }
       let json: {
         choices?: Array<{
           delta?: {
@@ -311,7 +387,7 @@ async function streamOpenAI(
       if (!delta) continue;
       if (delta.content) {
         content += delta.content;
-        onEvent({ type: 'text', text: delta.content });
+        emittedLen = flushCleanText(content, emittedLen, onEvent); // 安全剥离控制标记后再输出
       }
       if (delta.reasoning_content) onEvent({ type: 'reasoning', text: delta.reasoning_content });
       if (Array.isArray(delta.tool_calls)) {
@@ -326,7 +402,8 @@ async function streamOpenAI(
       }
     }
   }
-  return { content, toolCalls: finalizeToolCalls(toolCalls) };
+  flushCleanText(content, emittedLen, onEvent, true); // 流自然结束也收尾
+  return { content: stripBoxTokens(content), toolCalls: finalizeToolCalls(toolCalls) };
 }
 
 // 去掉数组空洞、补 id 兜底（个别网关流式不回 id → 用下标合成，保证回灌时 tool_call_id 对得上）

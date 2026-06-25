@@ -6,6 +6,7 @@ export interface ChatMsg {
   text: string;
   reasoning?: string; // 推理模型的思考过程（可折叠展示）
   tools: string[];
+  images?: string[]; // 用户附图（已缩放的 data URL；喂给视觉模型）
 }
 
 export const chat = persisted<{ msgs: ChatMsg[] }>('qz.chat', { msgs: [] }, 300);
