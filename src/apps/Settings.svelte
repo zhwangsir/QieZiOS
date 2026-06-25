@@ -390,4 +390,19 @@
       {#if syncMsg}<span class="text-[11px] text-qz-muted">{syncMsg}</span>{/if}
     </div>
   </section>
+
+  <!-- 全局自定义 CSS：深度换肤，注入 <style> 即时生效 -->
+  <section class="flex flex-col gap-2">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">🎨 自定义 CSS</h2>
+    <p class="text-[11px] leading-relaxed text-qz-muted">
+      粘 CSS 即时全局生效（持久化、随主题导出/同步）。覆盖 token 加 <code>!important</code>，如
+      <code>html&#123;--color-qz-accent:#f06 !important&#125;</code>。
+    </p>
+    <textarea
+      class="h-28 w-full resize-none rounded-qz bg-qz-surface p-2 font-mono text-[11px] leading-relaxed outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+      spellcheck="false"
+      placeholder={'/* 例如 */\n.qz-glass { border-radius: 20px; }\nbody { letter-spacing: .3px; }'}
+      bind:value={settings.customCss}
+    ></textarea>
+  </section>
 </div>

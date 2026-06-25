@@ -19,6 +19,17 @@
     document.documentElement.style.fontSize = `${(16 * settings.fontScale).toFixed(2)}px`;
   });
 
+  // 全局自定义 CSS：把用户写的 CSS 注入一个 <style>（深度换肤；用户改即时生效、持久化）
+  $effect(() => {
+    let el = document.getElementById('qz-custom-css');
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'qz-custom-css';
+      document.head.appendChild(el);
+    }
+    el.textContent = settings.customCss ?? '';
+  });
+
   // 开机 init 序列：走总线发事件 → 日志/事件检查器都会收到（事件驱动）
   onMount(() => {
     sys.bus.emit('sys.boot');

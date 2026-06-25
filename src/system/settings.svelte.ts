@@ -13,6 +13,7 @@ export interface Settings {
   surfaceOpacity: number;   // 面板半透明度（0~1）
   fontScale: number;        // 界面缩放（根字号倍率，0.85~1.2）
   wallpaperId: string;      // 当前壁纸 id
+  customCss: string;        // 全局自定义 CSS（深度换肤，注入 <style>）
 }
 
 const defaults: Settings = {
@@ -23,6 +24,7 @@ const defaults: Settings = {
   surfaceOpacity: 0.66,
   fontScale: 1,
   wallpaperId: 'aurora',
+  customCss: '',
 };
 
 // 可被「应用主题预设 / 导入」覆盖的字段（白名单，避免塞进奇怪的键）
