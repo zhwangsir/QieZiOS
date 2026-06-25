@@ -39,6 +39,13 @@ export interface AiPreset {
 }
 export const AI_PRESETS: AiPreset[] = [
   {
+    label: '本地 · GLM-4.6V（LM Studio 局域网）',
+    provider: 'openai',
+    baseURL: '/aiproxy/v1', // 经 /aiproxy 转发到 .env.local 的 VITE_AI_PROXY_TARGET（本地 LM Studio 地址）
+    model: 'zai-org/glm-4.6v-flash',
+    useEnvKey: false, // 本地服务无需鉴权
+  },
+  {
     label: '工作站 · minimax（OpenAI 兼容）',
     provider: 'openai',
     baseURL: '/aiproxy/lm/v1',
@@ -56,6 +63,7 @@ export const AI_PRESETS: AiPreset[] = [
 
 // 模型 id 快填（点了只改 model，不动 provider）
 export const AI_MODELS = [
+  { id: 'zai-org/glm-4.6v-flash', label: 'GLM-4.6V（本地）' },
   { id: 'minimax/minimax-m2.7', label: 'minimax-m2.7（工作站）' },
   { id: 'claude-opus-4-8', label: 'Opus 4.8' },
   { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },

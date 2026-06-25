@@ -38,7 +38,8 @@ export async function runAgent(
   onEvent: (e: AiEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!aiConfig.apiKey) {
+  // 只有 Anthropic 官方 API 强制要 key；OpenAI 兼容端点可能无鉴权（本地 LM Studio / Ollama 等）
+  if (aiConfig.provider === 'anthropic' && !aiConfig.apiKey) {
     onEvent({ type: 'error', message: '请先在「设置 → AI」里填入 API Key' });
     return;
   }
@@ -58,7 +59,7 @@ export async function complete(
   prompt: string,
   opts: { system?: string; onText?: (t: string) => void; signal?: AbortSignal } = {},
 ): Promise<string> {
-  if (!aiConfig.apiKey) throw new Error('请先在「设置 → AI」里填入 API Key');
+  if (aiConfig.provider === 'anthropic' && !aiConfig.apiKey) throw new Error('请先在「设置 → AI」里填入 API Key');
   const system = opts.system?.trim() || '你是一个有用的中文写作助手。';
   if (aiConfig.provider === 'openai') return completeOpenAI(prompt, system, opts.onText, opts.signal);
   return completeAnthropic(prompt, system, opts.onText, opts.signal);
