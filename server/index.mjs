@@ -23,7 +23,8 @@ const TARGET = process.env.AI_PROXY_TARGET || 'https://dgmt.top';
 const AI_KEY = process.env.AI_KEY || '';
 
 // 跨设备同步：按 token 存一份状态快照（文件持久化，重启不丢）。雏形：无鉴权，靠 token 当密钥。
-const SYNC_FILE = join(ROOT, 'sync-store.json');
+// 路径可由 SYNC_FILE 覆盖（Docker 里指到挂载卷，避免卷遮挡代码目录）。
+const SYNC_FILE = process.env.SYNC_FILE || join(ROOT, 'sync-store.json');
 let syncStore = {};
 try {
   syncStore = JSON.parse(readFileSync(SYNC_FILE, 'utf8'));

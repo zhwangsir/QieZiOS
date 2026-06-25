@@ -148,6 +148,10 @@ npm install     # 已装过；换机器才需要
 npm run dev     # → http://localhost:5173
 npm run build   # 生产构建
 npm run check   # svelte-check 类型检查
+npm run serve   # 生产：node server/index.mjs 托管 dist + 反代 /aiproxy（需先 build）
+
+# Docker 自托管（一行起）
+docker compose up -d   # 构建镜像 + 跑在 :8787；AI 网关/key 在 docker-compose.yml 的 env 配
 ```
 
 ---
@@ -167,7 +171,8 @@ npm run check   # svelte-check 类型检查
 - 🚧 **Phase F 平台化 & 生态**（当前自动推进阶段）：让系统托管真外部应用、可分发、可深度自定义。
   - ✅ **网页 App 嵌入**(`webApps`/`WebAppGallery`/`WebView`)：任意网址 → iframe 窗口 App（兑现「异构 App 平台」愿景，胡桃博客即可这么进系统）。实测：example.com 自动补 https→开 webview 窗口 iframe src 正确、持久化。
   - ✅ **App 导出/导入**(`appShare.ts`)：用户 App 序列化成 `.qzapp.json` 下载分享、导入安装（caps 一并带上）。实测：序列化→导入往返保真、无效文本拒绝。
-  - **待办**：Docker 自托管(Dockerfile/compose) · 全局自定义 CSS(深度换肤)。
+  - ✅ **Docker 自托管**：多阶段 `Dockerfile`(node 构建 dist → 零依赖 server 托管+/aiproxy) + `.dockerignore` + `docker-compose.yml`(env: PORT/AI_PROXY_TARGET/AI_KEY，卷持久化 /sync)。`docker compose up` 即起。server `SYNC_FILE` 可配（Docker 指到 /data 卷避免遮挡代码）。实测：server 语法+SYNC_FILE 落盘通；⚠️ Docker build 本沙箱无 docker 没跑，文件按规范、内层 npm build/serve 已验。
+  - **待办**：全局自定义 CSS(深度换肤)。
 - 🚧 **Phase E 内核硬化**（作者要"真正的系统"该有的底层，**当前重心**）。五块按依赖：①syscall 边界 ②IPC/事件总线 ③真进程模型 ④服务层 ⑤可观测性。**作者选了从⑤可观测性切入**。
   - ✅ **可观测性**：`kernel/log.svelte.ts`(dmesg) + 进程模型补 `pid`/`startedAt` + **任务管理器 App**(`SysMonitor.svelte`：进程/日志/事件/概况四页,真控真进程)。
   - ✅ **IPC 事件总线 + syscall 门面**：`kernel/bus.svelte.ts`(pub/sub + 环形缓冲) → 内核在真实点 emit(`proc.*`/`fs.*`/`app.*`/`sys.*`)，**日志变成总线订阅者**(事件→fmt→dmesg)，任务管理器「事件」页看原始流。`system/sys.ts` 收成 syscall 表(`sys.proc/fs/ui/bus/log`)。实测：`sys.bus.on/emit` pub/sub 正确(取消订阅后不再收)、`sys.proc.launch` 真启动、开机/建文件/启动都进事件流+日志。

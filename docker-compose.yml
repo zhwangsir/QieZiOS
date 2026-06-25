@@ -1,0 +1,17 @@
+services:
+  qiezios:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      # AI 网关：浏览器经 /aiproxy 同源转发到这里（绕过 CORS）
+      AI_PROXY_TARGET: "https://dgmt.top"
+      # 设了就由服务端注入 Bearer（客户端不必再持有 key）；不设则转发客户端自填的
+      # AI_KEY: ""
+    volumes:
+      - qz-sync:/data # 持久化 /sync 快照（跨设备同步数据）
+    restart: unless-stopped
+
+volumes:
+  qz-sync:
