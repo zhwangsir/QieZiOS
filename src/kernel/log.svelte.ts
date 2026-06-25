@@ -45,7 +45,9 @@ function fmt(event: string, p: any): { source: string; msg: string; level: LogLe
     case 'app.call': return { source: 'appsdk', msg: `App 调用 ${p?.tool}`, level: 'info' };
     case 'app.denied': return { source: 'appsdk', msg: `拒绝能力 ${p?.tool}（未声明）`, level: 'warn' };
     case 'svc.start': return { source: 'service', msg: `服务启动 ${p?.name}`, level: 'info' };
-    case 'svc.stop': return { source: 'service', msg: `服务停止 ${p?.name}`, level: 'warn' };
+    case 'svc.stop': return { source: 'service', msg: `服务停止 ${p?.id}`, level: 'warn' };
+    case 'svc.restart': return { source: 'service', msg: `服务重启 ${p?.name}（第 ${p?.restarts} 次）`, level: 'warn' };
+    case 'svc.crash': return { source: 'service', msg: `服务崩溃 ${p?.name}：${p?.error}`, level: 'error' };
     case 'notify': return { source: 'notify', msg: `通知：${p?.title}`, level: 'info' };
     case 'clip.copy': return { source: 'clip', msg: `复制：${String(p?.text ?? '').slice(0, 40)}`, level: 'info' };
     case 'sched.add': return { source: 'sched', msg: `定时「${p?.title}」${p?.every ? `每 ${Math.round(p.every / 1000)}s` : ''}`, level: 'info' };

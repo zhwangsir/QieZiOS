@@ -2,7 +2,7 @@
   import { processes, restore, minimize, close, activeId } from '../kernel/processes.svelte';
   import { klog, type LogLevel } from '../kernel/log.svelte';
   import { eventLog } from '../kernel/bus.svelte';
-  import { services, stopService } from '../kernel/services.svelte';
+  import { services, stopService, restartService } from '../kernel/services.svelte';
   import { vfs, TRASH } from '../kernel/vfs.svelte';
   import { appMeta } from './appList';
   import { userApps, getUserApp } from './userApps.svelte';
@@ -145,10 +145,14 @@
       {#each services.running as s (s.id)}
         <div class="flex items-center gap-2 border-b border-qz-border/50 px-3 py-1.5 text-xs hover:bg-qz-elevated/50">
           <span class="w-10 text-qz-muted">⚙</span>
-          <span class="flex-1 truncate">{s.name}</span>
-          <span class="w-12 text-emerald-400">运行</span>
+          <span class="flex min-w-0 flex-1 items-center gap-1 truncate">
+            {s.name}
+            {#if s.restarts > 0}<span class="rounded bg-qz-surface px-1 text-[9px] text-amber-400">↻{s.restarts}</span>{/if}
+          </span>
+          <span class="w-12 {s.status === 'running' ? 'text-emerald-400' : 'text-red-400'}">{s.status === 'running' ? '运行' : '崩溃'}</span>
           <span class="w-14 text-right tabular-nums text-qz-muted">{fmtUptime(now - s.startedAt)}</span>
-          <span class="flex w-24 justify-end">
+          <span class="flex w-24 justify-end gap-1">
+            <button class="rounded px-1.5 py-0.5 text-[10px] hover:bg-qz-surface" onclick={() => restartService(s.id)}>重启</button>
             <button class="rounded px-1.5 py-0.5 text-[10px] text-red-400 hover:bg-qz-surface" onclick={() => stopService(s.id)}>停止</button>
           </span>
         </div>
