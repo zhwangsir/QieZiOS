@@ -1,7 +1,7 @@
 <script lang="ts">
   import { userApps, removeUserApp, type UserApp } from './userApps.svelte';
   import { launch } from '../kernel/processes.svelte';
-  import { appMeta } from './appList';
+  import { sys } from '../system/sys';
   import { CAPABILITIES } from '../system/appSdk';
 
   // App 声明的能力 → 图标列表（未声明字段的旧 App 视作全部）
@@ -17,12 +17,10 @@
     launch(a.id, a.name, { width: a.width, height: a.height, data: { appId: a.id } });
   }
   function editApp(a: UserApp) {
-    const s = appMeta.studio;
-    launch('studio', s.title, { width: s.width, height: s.height, data: { editAppId: a.id } });
+    sys.openApp('studio', { data: { editAppId: a.id } });
   }
   function newApp() {
-    const s = appMeta.studio;
-    launch('studio', s.title, { width: s.width, height: s.height });
+    sys.openApp('studio');
   }
 </script>
 

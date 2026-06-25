@@ -6,6 +6,7 @@ import { settings } from './settings.svelte';
 import { wallpapers } from './wallpaper';
 import { clipboard, currentClip } from './clipboard.svelte';
 import { schedules, addSchedule, removeSchedule } from './schedules.svelte';
+import { appMeta } from '../apps/appList';
 
 // ───────────────────────────────────────────────────────────
 // 系统调用门面 · 把内核/系统的能力收成「一张系统调用表」。
@@ -23,6 +24,13 @@ export interface ThemePatch {
 
 export const sys = {
   proc: { list: () => processes, launch, close, focus, minimize, restore },
+  // 按 appId 开 App（自动取 appMeta 的标题/尺寸；title 可覆盖，如用文件名当窗口标题）。
+  // 收口各处重复的 launch(id, meta.title, {width,height,...}) 样板。
+  openApp(appId: string, opts: { title?: string; data?: unknown } = {}) {
+    const a = appMeta[appId];
+    if (!a) return;
+    launch(appId, opts.title ?? a.title, { width: a.width, height: a.height, data: opts.data });
+  },
   fs: { list: children, read: getNode, mkdir: createDir, create: createFile, write: writeFile },
   ui: {
     setTheme(p: ThemePatch) {

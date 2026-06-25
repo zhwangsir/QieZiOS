@@ -4,7 +4,7 @@
   import { userApps, type UserApp } from '../apps/userApps.svelte';
   import { launchUserApp } from '../apps/desktopApps.svelte';
   import { vfs, type VNode } from '../kernel/vfs.svelte';
-  import { launch } from '../kernel/processes.svelte';
+  import { sys } from '../system/sys';
 
   type Result =
     | { kind: 'app'; id: string; title: string; icon: string }
@@ -45,17 +45,15 @@
 
   function activate(r: Result) {
     if (r.kind === 'ai') {
-      const a = appRegistry['assistant'];
-      launch('assistant', a.title, { width: a.width, height: a.height, data: { ask: r.query } });
+      sys.openApp('assistant', { data: { ask: r.query } });
     } else if (r.kind === 'userapp') {
       launchUserApp(r.app);
     } else if (r.kind === 'app') {
-      const a = appRegistry[r.id];
-      launch(r.id, a.title, { width: a.width, height: a.height });
+      sys.openApp(r.id);
     } else if (r.node.type === 'dir') {
-      launch('files', r.node.name, { width: 600, height: 420, data: r.node.id });
+      sys.openApp('files', { title: r.node.name, data: r.node.id });
     } else {
-      launch('textedit', r.node.name, { width: 480, height: 380, data: r.node.id });
+      sys.openApp('textedit', { title: r.node.name, data: r.node.id });
     }
     closeSpotlight();
   }

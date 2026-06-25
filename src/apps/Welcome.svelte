@@ -1,12 +1,10 @@
 <script lang="ts">
-  import { launch } from '../kernel/processes.svelte';
-  import { appRegistry } from './registry';
+  import { sys } from '../system/sys';
 
   let count = $state(0);
 
   function openSettings() {
-    const s = appRegistry.settings;
-    launch('settings', s.title, { width: s.width, height: s.height });
+    sys.openApp('settings');
   }
 </script>
 

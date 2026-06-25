@@ -7,10 +7,9 @@
     cycleWindows,
     closeAll,
     cascade,
-    launch,
   } from '../kernel/processes.svelte';
   import { createDir, createFile } from '../kernel/vfs.svelte';
-  import { appRegistry } from '../apps/registry';
+  import { sys } from '../system/sys';
   import { resolveAppDef } from '../apps/desktopApps.svelte';
   import { openMenu, closeMenu, menu } from './menu.svelte';
   import { openSpotlight } from './spotlightState.svelte';
@@ -34,16 +33,7 @@
     openMenu(e, [
       { label: '新建文件夹', icon: '📁', onClick: () => createDir('root') },
       { label: '新建文本文件', icon: '📄', onClick: () => createFile('root') },
-      {
-        label: '打开设置',
-        icon: '⚙️',
-        separator: true,
-        onClick: () =>
-          launch('settings', appRegistry.settings.title, {
-            width: appRegistry.settings.width,
-            height: appRegistry.settings.height,
-          }),
-      },
+      { label: '打开设置', icon: '⚙️', separator: true, onClick: () => sys.openApp('settings') },
       {
         label: pet.enabled ? '隐藏桌宠' : '显示桌宠',
         icon: '🧚',

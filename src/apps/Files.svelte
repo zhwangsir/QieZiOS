@@ -13,7 +13,6 @@
     pathSegments,
     type VNode,
   } from '../kernel/vfs.svelte';
-  import { launch } from '../kernel/processes.svelte';
   import { openMenu } from '../shell/menu.svelte';
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
@@ -106,10 +105,9 @@ ${JSON.stringify(files)}`;
     if (n.type === 'dir') {
       goTo(n.id);
     } else if (isImage(n)) {
-      launch('imageviewer', n.name, { width: 540, height: 440, data: n.id });
+      sys.openApp('imageviewer', { title: n.name, data: n.id });
     } else {
-      // 记事本固定尺寸（避免 Files 依赖 registry 造成循环 import）
-      launch('textedit', n.name, { width: 480, height: 380, data: n.id });
+      sys.openApp('textedit', { title: n.name, data: n.id });
     }
   }
 

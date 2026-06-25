@@ -3,8 +3,7 @@
   import { aiConfig } from '../system/aiConfig.svelte';
   import { chat } from '../system/assistantChat.svelte';
   import { renderMarkdown } from '../lib/markdown';
-  import { launch } from '../kernel/processes.svelte';
-  import { appMeta } from './appList';
+  import { sys } from '../system/sys';
 
   // data = 可选启动参数：{ ask: string } → 挂载后自动发这条（Spotlight「问 AI」用）
   let { data }: { data?: unknown } = $props();
@@ -36,8 +35,7 @@
   });
 
   function openSettings() {
-    const s = appMeta.settings;
-    launch('settings', s.title, { width: s.width, height: s.height });
+    sys.openApp('settings');
   }
 
   function clearChat() {

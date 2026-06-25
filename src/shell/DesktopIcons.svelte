@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { children, rename, trash, move, type VNode } from '../kernel/vfs.svelte';
-  import { launch } from '../kernel/processes.svelte';
+  import { children, rename, trash, move, isImage, type VNode } from '../kernel/vfs.svelte';
+  import { sys } from '../system/sys';
   import { openMenu } from './menu.svelte';
   import { iconPos } from './iconLayout.svelte';
 
@@ -25,8 +25,9 @@
   }
 
   function open(n: VNode) {
-    if (n.type === 'dir') launch('files', n.name, { width: 600, height: 420, data: n.id });
-    else launch('textedit', n.name, { width: 480, height: 380, data: n.id });
+    if (n.type === 'dir') sys.openApp('files', { title: n.name, data: n.id });
+    else if (isImage(n)) sys.openApp('imageviewer', { title: n.name, data: n.id });
+    else sys.openApp('textedit', { title: n.name, data: n.id });
   }
 
   function startDrag(e: PointerEvent, n: VNode, i: number) {
