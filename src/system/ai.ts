@@ -158,6 +158,20 @@ function openaiToolDefs() {
   }));
 }
 
+// 工具调用签名（名字 + 顶层参数键排序后的 JSON）→ 同名同参视为同一次调用，用来识别打转
+function toolSignature(name: string, args: Record<string, unknown>): string {
+  let argStr = '{}';
+  try {
+    argStr = JSON.stringify(args, Object.keys(args).sort());
+  } catch {
+    /* 参数无法序列化：忽略，只按名字算 */
+  }
+  return `${name}:${argStr}`;
+}
+
+const MAX_AGENT_TURNS = 8;
+const TOOL_REPEAT_LIMIT = 2; // 同名同参允许执行的次数；第 3 次起判定打转、不再执行
+
 async function runOpenAIAgent(
   history: ChatTurn[],
   system: string,
@@ -166,13 +180,25 @@ async function runOpenAIAgent(
 ) {
   const messages: OAMessage[] = [{ role: 'system', content: system }, ...history];
   const tools = openaiToolDefs();
-  for (let turn = 0; turn < 8; turn++) {
+  const callCounts = new Map<string, number>(); // 工具调用签名 → 已执行次数（防打转）
+  let forceFinish = false; // 触发后下一轮去掉 tools，逼模型用已有结果给最终答复
+
+  for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
     if (signal?.aborted) break;
-    const { content, toolCalls } = await streamOpenAI(messages, tools, onEvent, signal);
+    // 最后一轮 或 已判定打转：不再提供工具 → 模型只能输出文字收尾（不会再发起工具调用）
+    const offerTools = !forceFinish && turn < MAX_AGENT_TURNS - 1;
+    const { content, toolCalls } = await streamOpenAI(
+      messages,
+      offerTools ? tools : undefined,
+      onEvent,
+      signal,
+    );
     const asst: OAMessage = { role: 'assistant', content: content || null };
     if (toolCalls.length) asst.tool_calls = toolCalls;
     messages.push(asst);
-    if (!toolCalls.length) break;
+    if (!toolCalls.length) break; // 出文本、无工具调用 → 收工
+
+    let allRedundant = true; // 这一轮是否「全是重复调用」（是 → 下轮强制收尾）
     for (const tc of toolCalls) {
       onEvent({ type: 'tool', name: tc.function.name });
       let args: Record<string, unknown> = {};
@@ -181,9 +207,23 @@ async function runOpenAIAgent(
       } catch {
         /* 参数损坏：当空对象 */
       }
-      const r = await executeTool(tc.function.name, args);
-      messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(r) });
+      const sig = toolSignature(tc.function.name, args);
+      const seen = callCounts.get(sig) ?? 0;
+      if (seen >= TOOL_REPEAT_LIMIT) {
+        // 同工具同参已调过多次：不再执行，回灌一句提示打断打转
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: '（你已多次以相同参数调用该工具，结果见上文。请勿重复调用，直接据此给出最终回答。）',
+        });
+      } else {
+        callCounts.set(sig, seen + 1);
+        allRedundant = false;
+        const r = await executeTool(tc.function.name, args);
+        messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(r) });
+      }
     }
+    if (allRedundant) forceFinish = true; // 整轮都是重复调用 → 下一轮摘掉工具逼它作答
   }
 }
 
