@@ -110,7 +110,8 @@ function fmtTime(ms: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-type CmdFn = (args: string[], ctx: ShellCtx) => CmdResult;
+// 命令收到上游/重定向来的 stdin（无则空串），返回 stdout/stderr/退出码
+type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult;
 
 const COMMANDS: Record<string, CmdFn> = {
   help: () => ({
@@ -120,8 +121,8 @@ const COMMANDS: Record<string, CmdFn> = {
       '  mkdir touch rm mv cp —— 文件操作\n' +
       '  open apps ps kill    —— 应用/进程\n' +
       '  whoami date env export theme clear help\n' +
-      '支持：$VAR 变量、" " 引号、> 与 >> 重定向。\n' +
-      '试试：ls -l  /  echo hi > a.txt  /  open calculator',
+      '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>。\n' +
+      '试试：ls -l  /  echo hi > a.txt  /  cat < a.txt  /  ls | cat  /  open calculator',
     code: 0,
   }),
 
@@ -170,8 +171,8 @@ const COMMANDS: Record<string, CmdFn> = {
     return { out: '', code: 0, cd: id };
   },
 
-  cat: (args, ctx) => {
-    if (!args.length) return { out: '', err: 'cat: 缺少文件', code: 1 };
+  cat: (args, ctx, stdin) => {
+    if (!args.length) return { out: stdin, code: 0 }; // 无参数 → 透传 stdin（支持管道）
     const parts: string[] = [];
     for (const a of args) {
       const id = resolvePath(ctx.cwd, a);
@@ -321,34 +322,155 @@ const COMMANDS: Record<string, CmdFn> = {
 
 export const COMMAND_NAMES = Object.keys(COMMANDS);
 
-// 执行一行命令。改 ctx.cwd/env/code 的副作用由调用方根据返回值落地。
+// 按分隔符切分，但尊重引号（管道 | 不在引号里才算分隔）。保留引号交给 tokenize 去剥。
+function splitTopLevel(line: string, sep: string): string[] {
+  const parts: string[] = [];
+  let cur = '';
+  let q: '"' | "'" | null = null;
+  for (const c of line) {
+    if (q) {
+      cur += c;
+      if (c === q) q = null;
+    } else if (c === '"' || c === "'") {
+      cur += c;
+      q = c;
+    } else if (c === sep) {
+      parts.push(cur);
+      cur = '';
+    } else cur += c;
+  }
+  parts.push(cur);
+  return parts;
+}
+
+// 把粘连的重定向算符从 token 里拆出来：>foo → > foo、2>err → 2> err、<in → < in。
+// ⚠️ 本身就是算符的 token（如裸 `>>`）原样保留——否则正则会回溯把 `>>` 拆成 `>` `>`。
+const REDIR_OPS = ['2>', '>>', '>', '<'];
+function splitRedirToks(toks: string[]): string[] {
+  const out: string[] = [];
+  for (const t of toks) {
+    if (REDIR_OPS.includes(t)) {
+      out.push(t);
+      continue;
+    }
+    const m = /^(2>|>>|>|<)(.+)$/.exec(t);
+    if (m) out.push(m[1], m[2]);
+    else out.push(t);
+  }
+  return out;
+}
+
+interface Redir {
+  in: string | null;
+  out: string | null;
+  append: boolean;
+  err: string | null;
+}
+
+// 从一段命令的 token 里抽出重定向，返回 [纯命令 token, 重定向, 语法错误?]
+function extractRedirs(toks: string[]): { rest: string[]; redir: Redir; error?: string } {
+  const redir: Redir = { in: null, out: null, append: false, err: null };
+  const rest: string[] = [];
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (t === '<' || t === '>' || t === '>>' || t === '2>') {
+      const file = toks[++i];
+      if (file == null) return { rest, redir, error: 'qzsh: 语法错误：重定向缺少目标文件' };
+      if (t === '<') redir.in = file;
+      else if (t === '2>') redir.err = file;
+      else {
+        redir.out = file;
+        redir.append = t === '>>';
+      }
+    } else rest.push(t);
+  }
+  return { rest, redir };
+}
+
+// 执行一行（可含管道 | 与重定向 < > >> 2>）。改 ctx.cwd/env/code 由调用方按返回值落地。
 export function run(line: string, ctx: ShellCtx): CmdResult {
   const trimmed = line.trim();
   if (!trimmed) return { out: '', code: 0 };
 
-  let toks = tokenize(trimmed).map((t) => subst(t, ctx));
+  const segments = splitTopLevel(trimmed, '|').map((s) => s.trim());
+  if (segments.some((s) => s === '')) return { out: '', err: 'qzsh: 语法错误：管道 | 两侧都需要命令', code: 2 };
 
-  // 重定向：找 > 或 >>
-  let redirect: { file: string; append: boolean } | null = null;
-  const ri = toks.findIndex((t) => t === '>' || t === '>>');
-  if (ri !== -1) {
-    const file = toks[ri + 1];
-    if (!file) return { out: '', err: 'qzsh: 语法错误：重定向缺少目标文件', code: 2 };
-    redirect = { file, append: toks[ri] === '>>' };
-    toks = toks.slice(0, ri);
+  let stdin = ''; // 流向当前段的输入（上游 stdout 或 < 文件）
+  let pipedOut = ''; // 最近一段未被重定向的 stdout（最终显示用）
+  let lastRedirectedOut = false;
+  const errAccum: string[] = [];
+  let code = 0;
+  let cd: string | undefined;
+  let clear = false;
+
+  for (const seg of segments) {
+    const toks = splitRedirToks(tokenize(seg)).map((t) => subst(t, ctx));
+    const { rest, redir, error } = extractRedirs(toks);
+    if (error) return { out: '', err: error, code: 2 };
+
+    const [cmd, ...args] = rest;
+    if (!cmd) return { out: '', err: 'qzsh: 语法错误：空命令', code: 2 };
+    const fn = COMMANDS[cmd];
+    if (!fn) {
+      errAccum.push(`qzsh: ${cmd}: 未找到命令`);
+      code = 127;
+      pipedOut = '';
+      lastRedirectedOut = false;
+      break;
+    }
+
+    // 输入：< 文件优先于管道 stdin
+    let stageStdin = stdin;
+    if (redir.in != null) {
+      const id = resolvePath(ctx.cwd, redir.in);
+      const n = id ? getNode(id) : undefined;
+      if (!n || n.type !== 'file') {
+        errAccum.push(`qzsh: ${redir.in}: 没有那个文件`);
+        code = 1;
+        pipedOut = '';
+        lastRedirectedOut = false;
+        break;
+      }
+      stageStdin = n.kind === 'binary' ? '' : n.content;
+    }
+
+    const res = fn(args, ctx, stageStdin);
+    code = res.code;
+    if (res.cd) cd = res.cd;
+    if (res.clear) clear = true;
+
+    // stderr：2> 写文件，否则累积显示
+    if (res.err) {
+      if (redir.err != null) {
+        const e = writeToPath(ctx, redir.err, res.err, false);
+        if (e) errAccum.push(e);
+      } else errAccum.push(res.err);
+    }
+
+    // stdout：> / >> 写文件（不再下游），否则作为下游 stdin + 候选最终输出
+    if (redir.out != null) {
+      if (res.code === 0) {
+        const e = writeToPath(ctx, redir.out, res.out, redir.append);
+        if (e) {
+          errAccum.push(e);
+          code = 1;
+        }
+      }
+      stdin = '';
+      pipedOut = '';
+      lastRedirectedOut = true;
+    } else {
+      stdin = res.out;
+      pipedOut = res.out;
+      lastRedirectedOut = false;
+    }
   }
 
-  const [cmd, ...args] = toks;
-  if (!cmd) return { out: '', code: 0 };
-  const fn = COMMANDS[cmd];
-  if (!fn) return { out: '', err: `qzsh: ${cmd}: 未找到命令`, code: 127 };
-
-  const res = fn(args, ctx);
-
-  if (redirect && res.code === 0) {
-    const e = writeToPath(ctx, redirect.file, res.out, redirect.append);
-    if (e) return { out: '', err: e, code: 1 };
-    return { out: '', code: 0, cd: res.cd, clear: res.clear };
-  }
-  return res;
+  return {
+    out: lastRedirectedOut ? '' : pipedOut,
+    err: errAccum.length ? errAccum.join('\n') : undefined,
+    code,
+    cd,
+    clear,
+  };
 }
