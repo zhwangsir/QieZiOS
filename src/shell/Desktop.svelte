@@ -11,6 +11,7 @@
   } from '../kernel/processes.svelte';
   import { createDir, createFile } from '../kernel/vfs.svelte';
   import { appRegistry } from '../apps/registry';
+  import { resolveAppDef } from '../apps/desktopApps.svelte';
   import { openMenu, closeMenu, menu } from './menu.svelte';
   import { openSpotlight } from './spotlightState.svelte';
   import Window from './Window.svelte';
@@ -106,9 +107,14 @@
        不会盖过顶栏/Dock。遍历进程 → 按 appId 查注册表拿组件 → 塞进窗口渲染。 -->
   <div class="absolute inset-x-0 bottom-0 top-9 isolate">
     {#each processes as proc (proc.id)}
-      {@const App = appRegistry[proc.appId].component}
+      {@const def = resolveAppDef(proc.appId)}
       <Window {proc} active={active === proc.id}>
-        <App data={proc.data} />
+        {#if def?.component}
+          {@const App = def.component}
+          <App data={proc.data} />
+        {:else}
+          <div class="grid h-full place-items-center text-sm text-qz-muted">App 不存在或已卸载</div>
+        {/if}
       </Window>
     {/each}
 

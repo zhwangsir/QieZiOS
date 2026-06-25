@@ -2,6 +2,7 @@
   import { spotlight, closeSpotlight } from './spotlightState.svelte';
   import { appRegistry } from '../apps/registry';
   import { userApps, type UserApp } from '../apps/userApps.svelte';
+  import { launchUserApp } from '../apps/desktopApps.svelte';
   import { vfs, type VNode } from '../kernel/vfs.svelte';
   import { launch } from '../kernel/processes.svelte';
 
@@ -47,7 +48,7 @@
       const a = appRegistry['assistant'];
       launch('assistant', a.title, { width: a.width, height: a.height, data: { ask: r.query } });
     } else if (r.kind === 'userapp') {
-      launch('userapp', r.app.name, { width: r.app.width, height: r.app.height, data: { appId: r.app.id } });
+      launchUserApp(r.app);
     } else if (r.kind === 'app') {
       const a = appRegistry[r.id];
       launch(r.id, a.title, { width: a.width, height: a.height });

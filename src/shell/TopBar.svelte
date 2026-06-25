@@ -1,6 +1,6 @@
 <script lang="ts">
   import { processes, minimize, restore, activeId, type Process } from '../kernel/processes.svelte';
-  import { appRegistry } from '../apps/registry';
+  import { resolveAppDef } from '../apps/desktopApps.svelte';
 
   // 当前活动窗 id（内核统一计算，键盘/焦点高亮/任务栏共用同一份逻辑）
   const activeWin = $derived(activeId());
@@ -32,7 +32,7 @@
   <!-- 窗口切换 chips：一个窗口一个 -->
   <div class="flex flex-1 items-center gap-1.5 overflow-hidden">
     {#each processes as p (p.id)}
-      {@const icon = appRegistry[p.appId]?.icon ?? '▫'}
+      {@const icon = resolveAppDef(p.appId)?.icon ?? '▫'}
       {@const isActive = activeWin === p.id}
       <button
         class="flex min-w-0 max-w-40 items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"

@@ -17,6 +17,7 @@ import UserApp from './UserApp.svelte';
 // 加新 App：appList 加一条元数据 + 这里 components 挂一个组件。
 export interface AppDef extends AppMeta {
   component: Component;
+  data?: unknown; // 启动时带的参数（用户 App 用它把自己的 id 传进通用宿主）
 }
 
 const components: Record<string, Component> = {

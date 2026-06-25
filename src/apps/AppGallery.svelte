@@ -12,8 +12,9 @@
       .join(' ');
   }
 
+  // 用 App 自己的 id 当 appId 启动（first-class）；data.appId 让通用宿主知道渲染哪个
   function openApp(a: UserApp) {
-    launch('userapp', a.name, { width: a.width, height: a.height, data: { appId: a.id } });
+    launch(a.id, a.name, { width: a.width, height: a.height, data: { appId: a.id } });
   }
   function editApp(a: UserApp) {
     const s = appMeta.studio;

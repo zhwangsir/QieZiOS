@@ -1,19 +1,14 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import {
-    processes,
-    launch,
-    restore,
-    minimizeApp,
-    closeApp,
-  } from '../kernel/processes.svelte';
-  import { appRegistry, type AppDef } from '../apps/registry';
+  import { processes, restore, minimizeApp, closeApp } from '../kernel/processes.svelte';
+  import { type AppDef } from '../apps/registry';
+  import { visibleAppDefs, launchAppDef } from '../apps/desktopApps.svelte';
   import { openMenu, type MenuItem } from './menu.svelte';
 
   // $derived：当前有进程在跑的 appId 集合（显示小圆点）
   const running = $derived(new Set(processes.map((p) => p.appId)));
-  // 可见 App（过滤掉 hidden，如记事本）
-  const apps = $derived(Object.entries(appRegistry).filter(([, a]) => !a.hidden));
+  // 可见 App（内置非 hidden + 已装用户 App）
+  const apps = $derived(visibleAppDefs());
 
   // 鼠标悬停在第几个图标上（用于放大「波浪」效果）
   let hovered = $state<number | null>(null);
@@ -25,26 +20,22 @@
     return d === 0 ? 1.4 : d === 1 ? 1.2 : d === 2 ? 1.06 : 1;
   }
 
-  function onClick(appId: string, app: AppDef) {
-    const mine = processes.filter((p) => p.appId === appId);
+  function onClick(app: AppDef) {
+    const mine = processes.filter((p) => p.appId === app.id);
     if (mine.length === 0) {
-      launch(appId, app.title, { width: app.width, height: app.height });
+      launchAppDef(app);
     } else {
       restore(mine.reduce((a, b) => (a.z >= b.z ? a : b)).id);
     }
   }
 
-  function onMenu(e: MouseEvent, appId: string, app: AppDef) {
+  function onMenu(e: MouseEvent, app: AppDef) {
     const items: MenuItem[] = [
-      {
-        label: '打开新窗口',
-        icon: '➕',
-        onClick: () => launch(appId, app.title, { width: app.width, height: app.height }),
-      },
+      { label: '打开新窗口', icon: '➕', onClick: () => launchAppDef(app) },
     ];
-    if (processes.some((p) => p.appId === appId)) {
-      items.push({ label: '最小化全部', icon: '—', separator: true, onClick: () => minimizeApp(appId) });
-      items.push({ label: '关闭全部', icon: '✕', danger: true, onClick: () => closeApp(appId) });
+    if (processes.some((p) => p.appId === app.id)) {
+      items.push({ label: '最小化全部', icon: '—', separator: true, onClick: () => minimizeApp(app.id) });
+      items.push({ label: '关闭全部', icon: '✕', danger: true, onClick: () => closeApp(app.id) });
     }
     openMenu(e, items);
   }
@@ -57,14 +48,14 @@
   aria-label="程序坞"
   onpointerleave={() => (hovered = null)}
 >
-  {#each apps as [appId, app], i (appId)}
+  {#each apps as app, i (app.id)}
     <button
       class="group relative grid h-12 w-12 place-items-center rounded-xl text-2xl"
       style="transform: scale({scaleFor(i)}); transform-origin: bottom; transition: transform 150ms var(--qz-ease);"
       title={app.title}
       onpointerenter={() => (hovered = i)}
-      onclick={() => onClick(appId, app)}
-      oncontextmenu={(e) => onMenu(e, appId, app)}
+      onclick={() => onClick(app)}
+      oncontextmenu={(e) => onMenu(e, app)}
     >
       {#if hovered === i}
         <span
@@ -73,7 +64,7 @@
         >{app.title}</span>
       {/if}
       <span>{app.icon}</span>
-      {#if running.has(appId)}
+      {#if running.has(app.id)}
         <span class="absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-qz-text/70"></span>
       {/if}
     </button>
