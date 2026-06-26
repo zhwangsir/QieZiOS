@@ -83,7 +83,9 @@
 - [x] **B11 快捷键速查面板**：快捷键硬编码、无处可查。先做 `?` 唤起的速查面板（后续再做可重绑定）。文件：`shell/Desktop.svelte`、`apps/Settings.svelte`。
   - ✅ 实现：新 `shortcutsState.svelte.ts`（开关）+ `Shortcuts.svelte`（居中浮层，分组列出 窗口/系统/编辑·终端 共 12+ 条，kbd 标签，点遮罩/Esc/关闭按钮关）；Desktop onKey 加 `?` 唤起（input 聚焦不触发）+ shortcuts 开时 Esc/? 关并吞键；桌面右键菜单加「键盘快捷键 (?)」。z-[10003] 在 spotlight 之上。
   - ✅ 浏览器实测：`?`→开（列出含 Ctrl+Alt 平铺等 12 条）、Esc→关、`?`→重开、点外部→关、右键菜单项→开。supervisor 子 Agent PASS（onKey 顺序/吞键合理、? 在 input guard 后、点外部、z-index、无环、无回归全过）。npm check+build 0 错 0 警。
-- [ ] **B12 Launchpad 全 App 网格 + 关于本机**：App 入口分散，无统一「所有 App」网格、无版本/用量「关于」页。文件：新 App + appList/registry。
+- [x] **B12 Launchpad 全 App 网格**（关于本机部分已被 SysMonitor 概况页覆盖）：App 入口分散，无统一「所有 App」网格。
+  - ✅ 实现：新 `launchpadState.svelte.ts` + `Launchpad.svelte`（全屏 backdrop-blur 浮层，搜索框即时过滤 `visibleAppDefs()` + App 网格，点击 `launchAppDef`+关闭，Esc/点遮罩关、Enter 启首个）；顶栏装饰性 🍆 改成按钮唤起；Desktop render + onKey Esc 关；速查表加入口。「关于本机」（版本/进程/服务/存储计数）已由 SysMonitor 概况页提供，不另做。
+  - ✅ 浏览器实测：点 🍆→开（20 个 App 带图标标题）、搜「终端」→过滤剩终端、点 App→启动+关闭、重开、Esc 关。supervisor 子 Agent PASS（onKey 顺序/四浮层状态独立/launchAppDef 与 Dock 同源/点遮罩 vs 内容 pointer 处理正确/z-index/无环/无回归；ship it）。npm check+build 0 错 0 警。
 - [ ] **B13 多窗平铺布局 / 任务视图**：现只有 cascade 层叠。加「网格平铺/并排两窗」一键布局，可选 exposé 总览。文件：`kernel/processes.svelte.ts`、`shell/Desktop.svelte`。
 
 ---

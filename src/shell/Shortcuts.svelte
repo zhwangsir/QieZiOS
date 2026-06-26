@@ -19,6 +19,7 @@
       title: '系统',
       items: [
         ['Ctrl/⌘ + K', '命令面板 (Spotlight)'],
+        ['点顶栏 🍆', '所有 App (Launchpad)'],
         ['?', '本快捷键速查'],
       ],
     },

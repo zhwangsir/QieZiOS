@@ -9,6 +9,7 @@
     clearHistory,
     type NoteLevel,
   } from '../system/notifications.svelte';
+  import { openLaunchpad } from './launchpadState.svelte';
 
   // 当前活动窗 id（内核统一计算，键盘/焦点高亮/任务栏共用同一份逻辑）
   const activeWin = $derived(activeId());
@@ -68,7 +69,10 @@
 <div
   class="absolute inset-x-0 top-0 z-[9998] flex h-9 items-center gap-2 border-b border-qz-border qz-glass px-3"
 >
-  <span class="select-none text-sm">🍆</span>
+  <button
+    class="grid h-6 w-6 select-none place-items-center rounded text-sm hover:bg-qz-elevated"
+    title="所有 App (Launchpad)"
+    onclick={openLaunchpad}>🍆</button>
 
   <!-- 窗口切换 chips：一个窗口一个 -->
   <div class="flex flex-1 items-center gap-1.5 overflow-hidden">
