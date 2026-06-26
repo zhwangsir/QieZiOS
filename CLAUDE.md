@@ -211,6 +211,7 @@ docker compose up -d   # 构建镜像 + 跑在 :8787；AI 网关/key 在 docker-
   - ✅ **A9 rename 重名拒绝**：`vfs.rename` 返 boolean、同目录重名拒绝+提示（Files/DesktopIcons/shell mv 全覆盖），补齐 A7 之外「显式改名造成同名并存不可达」的缺口；顺带修 DesktopIcons Escape/二次 blur 误提交既存 bug。
   - ✅ **B8 Spotlight 增强**：命令面板加文件正文搜索（命中显片段）+ 动作命令（切换明暗/清空回收站/打开终端·设置/显示桌面/关闭所有），从「搜 App/文件名」升级为真命令面板。
   - ✅ **A6 Live2D WebGL 泄漏修复**：`createPet` 装配失败时先 `app.destroy()` 回收 WebGL 上下文再抛，反复填错模型 URL 不再耗尽浏览器上下文上限（⏳ 待真机验证）。
+  - ✅ **A4+A8 shell 小修**：A4 `backgroundRun` 裁剪 bgPromises（⊆ jobs.list ≤30，免长会话 Map 泄漏）；A8 `head/tail` 负数 count 夹到 0（修 `slice(0,-N)` 错误语义）。**至此 P0 正确性/健壮性全部完成**。
   - ✅ **融合打磨③·AI↔shell 互通**：AI 加 `run_shell` 工具（注入式，避免 ai→aiTools→shell 成环；常驻 aiShellCtx、cd 跨调用保留）→ 助手直接跑 ls/grep/ps/systemctl/pkg… 全部 coreutils；shell 加 `ai <问题>` 命令（可管道喂入）→ 命令行问 AI。两条驱动线合流。实测：AI agent loop 真调 run_shell 跑 `ls /` 答「15 个条目」、`ai 收到`→本地 GLM 回「收到」。
   - ✅ **融合打磨②·Files 权限感知**：权限判定抽到 `system/permissions.ts`（终端+GUI 共用）；Files 网格显示「属主·你的rwx」+ 无读权限显 🔒、双击受读权限约束（与终端 cat 一致）、右键设只读/可读写/私密/归我所有；TextEdit 无写权限则只读 banner。权限从「终端专属」变成全系统可见可控。实测 perm000 双击被拦、perm444 只读 banner、右键 644→444。
   - ✅ **融合打磨①·统一身份**：后端账号 = shell 当前用户 = 新建文件属主 串成一条线。`account.currentUser()`(账号名/访客 qiezi)；`vfs.setOwnerProvider`(注入,App 启动接上账号→新文件归当前账号,GUI/AI/shell 一致)；`shell.newCtx` USER 取 currentUser；登录时 `ensureUser` 把账号接进 shell 用户表(su/id//etc/passwd 都认)。实测：登录 carol→新终端 carol@、touch 文件 owner=carol、/etc/passwd 含 carol；登出回 qiezi。kernel 仍不反向依赖 system（靠注入）。

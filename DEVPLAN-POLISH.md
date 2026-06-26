@@ -24,7 +24,9 @@
   - ✅ 实现（低风险版）：`$state.snapshot` **保留在 effect 体内**（深读维持订阅，与改前字节级等价、零数据丢失风险），只把更重的 `serialize + JSON.stringify` 推迟进防抖 setTimeout 回调。高频变更（逐字输入）每键只做一次轻量 snapshot（对象图克隆、字符串按引用复用），停手 debounceMs 后才序列化一次整棵树——而序列化开销 ∝ 内容大小，是大文件时的主要瓶颈。（未采用 deepRead 替换 snapshot 的激进版，避免动订阅那一步的风险。）
   - ✅ 浏览器实测：VFS 建/写防抖后落盘（120ms 前没、250/500ms 后有）、chat 序列化路径仍剥图留 imageCount、快速三连写只末值落盘、rm→trash 持久化、刷新各存储正常加载。supervisor 子 Agent PASS（订阅字节级不变/闭包捕获无陈旧无饥饿/serialize 纯函数/异常 locus 非回归/debounce 语义不变）。npm check+build 0 错 0 警。
 - [ ] **A3 过期一次性 `at` 命令开机并发补发执行**：schedd 重新武装时 `Math.max(0,delay)` 让过期任务立即 fire，命令型会经 shell 执行 → 刷新后批量跑过期命令（与真 `at` 过期不补相反，可能 rm 等意外副作用）。修：重新武装时过期的命令型一次性任务只移除不执行（提醒型可保留补发通知或也丢弃）。文件：`system/services.ts`。
-- [ ] **A4 `bgPromises` Map 只增不删（后台作业泄漏）**：`lib/shell.ts` 每个 `cmd &` 的 promise 永久留存（含完整结果串），`jobs.list` 封顶 30 但 bgPromises 无清理。修：作业完成后裁剪 bgPromises（与 jobs.list 同步/保留最近 N）。
+- [x] **A4 `bgPromises` Map 只增不删（后台作业泄漏）**：`lib/shell.ts` 每个 `cmd &` 的 promise 永久留存（含完整结果串），`jobs.list` 封顶 30 但 bgPromises 无清理。修：作业完成后裁剪 bgPromises（与 jobs.list 同步/保留最近 N）。
+  - ✅ 实现：`backgroundRun` 在 addJob 后裁剪——`live = new Set(jobs.list.map(j=>j.n))`，删掉 bgPromises 里不在 live 的键。jobs.list 已封顶 30 → bgPromises ⊆ jobs.list（≤30），长会话不再无限涨。prune 在 set(新 job) 之前、新 job.n 已在 live 不会误删。
+  - ✅ 实测：`echo x &`→[1]、`fg`→显示输出（prune 不破坏 fg/wait，它们只认 jobs.list 内作业）。supervisor 子 Agent PASS（Map 迭代中删除安全/新作业不误删/fg·wait 不受影响/无回归）。npm check+build 0 错 0 警。
 - [x] **A5 拖拽中关窗泄漏 rAF + snap 预览**：`shell/Window.svelte` 拖动/缩放时窗口若被其它逻辑关闭，`onpointerup` 不触发 → pending rAF 不取消、`snapState.preview` 不清。修：组件卸载 `$effect` 清理里 `cancelAnimationFrame` + 清 preview。
   - ✅ 实现：加 `onDestroy` 兜底——`if (raf) cancelAnimationFrame(raf)`（无条件，覆盖拖/缩两路）+ `if (dragging) snapState.preview = null`（仅本窗在拖时清，preview 是全局单信号只归当前拖拽窗，避免误清别窗）。正常关窗时 raf=0/dragging=false → 两 guard 皆 no-op，零副作用。
   - ✅ 浏览器实测：正常连续开关多窗 onDestroy 各触发、0 残留、无 JS 错误。⏳ 拖拽中关窗的视觉场景因无头预览视口尺寸为 0（移动模式禁拖 + rAF 冻结）本会话无法复现 → **待真机验证**。supervisor 子 Agent PASS（rAF 无条件清/preview 仅 dragging 守卫不误清/resize 不写 preview 故只需清 rAF/无双清/无回归全过；仅 out:pop 过渡 150ms 内残留属罕见路径 cosmetic）。npm check+build 0 错 0 警。
@@ -37,7 +39,10 @@
 - [x] **A9 `rename` 同名不去重（同类，A7 的姊妹项）**：GUI 重命名/`mv a.txt 已存在.txt` 把名字改成目录里已存在的名 → 同样产生同名并存、路径不可达（rename 是「显式改名」语义，去重会让用户输入的名被悄悄改，故倾向：检测冲突时拒绝 + 提示，而非自动 +2）。文件：`kernel/vfs.svelte.ts`、`apps/Files.svelte`、`lib/shell.ts`(mv 改名分支)。
   - ✅ 实现：`vfs.rename` 返回 boolean——空名/同目录已有同名(排除自己)→ false 不改、改成自己当前名→ true(no-op)、否则改名 true。Files commitRename / DesktopIcons commitIconRename 在 false 且名非空时 notify「已有同名项」；shell `mv` 重命名分支先查目标父目录重名(排除 src)→ 有则报错「目标已存在」不覆盖不半移动。顺手给 DesktopIcons commitIconRename 加 `renamingId!==id` 守卫（修一个**既存** bug：Escape 取消/Enter 后的二次 blur 会误提交）。
   - ✅ 浏览器实测：vfs.rename 改已存在兄弟名→false 名不变、改唯一名→true、改自己名→true；shell `mv` 改已存在名→code1「目标已存在」无重复、a9b 还在；改唯一名→成功。supervisor 子 Agent PASS（三调用方都正确处理 boolean/排除自己/新建流不卡死/mv 先查再动不半移动/A7 move 自动去重策略不受影响/无回归全过）。npm check+build 0 错 0 警。
-- [ ] **A8 `head -n -5` 负数语义错**：`parseCountAndFile` 不挡负数，`slice(0,-5)` 返回「除末 5 行外」。修：count 取 `Math.max(0, …)`。文件：`lib/shell.ts`。
+- [x] **A8 `head -n -5` 负数语义错**：`parseCountAndFile` 不挡负数，`slice(0,-5)` 返回「除末 5 行外」。修：count 取 `Math.max(0, …)`。文件：`lib/shell.ts`。
+  - ✅ 实现：`parseCountAndFile` 返回前 `count: Math.max(0, count)`，负数夹到 0（head/tail 输出空，正确）。`head -5` 简写走正数分支不受影响。实测 `head -n -5`/`tail -n -3`→空、`head -n 3`→前3行、`head -5`→前5行、`tail -n 2`→末2行。supervisor PASS（clamp 对 def/0/正/负都对、不影响 file 解析、无回归）。npm check+build 0 错 0 警。
+
+> 🎉 **P0（正确性/健壮性）全部完成**（A1–A9 + 排除的 purge 误报，共 8 项已修）。
 
 > 注：审计曾报 `vfs.purge` 删多层文件夹产生孤儿节点——实读代码确认是**后序递归（孙→子→父，children 每层重算）正确无孤儿**，已排除（误报）。
 

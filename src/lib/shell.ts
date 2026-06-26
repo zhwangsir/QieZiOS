@@ -187,7 +187,8 @@ function parseCountAndFile(args: string[], def = 10): { count: number; file: str
     else if (/^-\d+$/.test(a)) count = parseInt(a.slice(1), 10);
     else if (!a.startsWith('-')) file = a;
   }
-  return { count, file };
+  // 夹到非负：`head -n -5` 这种负数会让 slice(0,-5) 退化成「除末 5 行外全部」的错误语义
+  return { count: Math.max(0, count), file };
 }
 
 // test / [ ] 的条件求值（给 if/while 用）。bit：-f/-d/-e 查文件；字符串/数值比较；前导 ! 取反。
@@ -1400,6 +1401,9 @@ const bgPromises = new Map<number, Promise<CmdResult>>();
 // 用 ctx 的副本，免得后台作业的 cd/export 串改前台 shell。完成时发通知。
 function backgroundRun(cmd: string, ctx: ShellCtx): CmdResult {
   const job = addJob(cmd);
+  // 裁剪 bgPromises：jobs.list 已封顶 30，掉出列表的作业号对应的 promise 一并清掉，免 Map 只增不减（长会话泄漏）。
+  const live = new Set(jobs.list.map((j) => j.n));
+  for (const k of bgPromises.keys()) if (!live.has(k)) bgPromises.delete(k);
   const bgCtx: ShellCtx = { cwd: ctx.cwd, env: { ...ctx.env }, code: 0, pid: ctx.pid };
   const p = run(cmd, bgCtx)
     .catch((e): CmdResult => ({ out: '', err: e instanceof Error ? e.message : String(e), code: 1 }))
