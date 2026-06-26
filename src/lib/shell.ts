@@ -1028,9 +1028,85 @@ function extractRedirs(toks: string[]): { rest: string[]; redir: Redir; error?: 
   return { rest, redir };
 }
 
-// 执行一行（可含管道 | 与重定向 < > >> 2>）。改 ctx.cwd/env/code 由调用方按返回值落地。
-// 异步：命令可能是异步的（curl 等），故按段 await。
+// 把一行按顶层连接符 ; && || 切成「管道段 + 它前面的连接符」。尊重引号；单个 | 是管道（留给段内）。
+function splitConnectors(line: string): { before: ';' | '&&' | '||' | null; cmd: string }[] {
+  const segs: { before: ';' | '&&' | '||' | null; cmd: string }[] = [];
+  let cur = '';
+  let before: ';' | '&&' | '||' | null = null;
+  let q: '"' | "'" | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    const n = line[i + 1];
+    if (q) {
+      cur += c;
+      if (c === q) q = null;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      cur += c;
+      q = c;
+      continue;
+    }
+    if (c === ';') {
+      segs.push({ before, cmd: cur });
+      before = ';';
+      cur = '';
+      continue;
+    }
+    if (c === '&' && n === '&') {
+      segs.push({ before, cmd: cur });
+      before = '&&';
+      cur = '';
+      i++;
+      continue;
+    }
+    if (c === '|' && n === '|') {
+      segs.push({ before, cmd: cur });
+      before = '||';
+      cur = '';
+      i++;
+      continue;
+    }
+    cur += c; // 单个 | 是管道、单个 & 暂当普通字符（后台作业见 H4）
+  }
+  segs.push({ before, cmd: cur });
+  return segs;
+}
+
+// 执行一行：先按 ; && || 切分顺序执行（短路），每段再交给 runPipeline 跑管道+重定向。
 export async function run(line: string, ctx: ShellCtx): Promise<CmdResult> {
+  const trimmed = line.trim();
+  if (!trimmed) return { out: '', code: 0 };
+  const segs = splitConnectors(trimmed);
+  const outs: string[] = [];
+  const errs: string[] = [];
+  let lastCode = 0;
+  let cd: string | undefined;
+  let clear = false;
+  let ran = false;
+  for (const { before, cmd } of segs) {
+    const c = cmd.trim();
+    if (!c) continue; // 跳过空段（首/尾连接符）
+    if (before === '&&' && lastCode !== 0) continue; // 前者失败 → 跳过
+    if (before === '||' && lastCode === 0) continue; // 前者成功 → 跳过
+    const res = await runPipeline(c, ctx);
+    ran = true;
+    lastCode = res.code;
+    if (res.out) outs.push(res.out);
+    if (res.err) errs.push(res.err);
+    if (res.cd) {
+      cd = res.cd;
+      ctx.cwd = res.cd; // 立即落地 → 同一行后续段（如 cd d && pwd）能看到新 cwd
+    }
+    if (res.clear) clear = true;
+  }
+  if (!ran) return { out: '', code: 0 };
+  return { out: outs.join('\n'), err: errs.length ? errs.join('\n') : undefined, code: lastCode, cd, clear };
+}
+
+// 执行单个管道（含 | 与重定向 < > >> 2>）。改 ctx.cwd/env/code 由调用方按返回值落地。
+// 异步：命令可能是异步的（curl 等），故按段 await。
+async function runPipeline(line: string, ctx: ShellCtx): Promise<CmdResult> {
   const trimmed = line.trim();
   if (!trimmed) return { out: '', code: 0 };
 
