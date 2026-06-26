@@ -28,17 +28,19 @@
   // 防御式：rc 出错绝不影响终端可用。
   onMount(() => {
     ctx.pid = pid ?? 0; // 记下本终端 pid，供 open 设子进程 ppid
-    try {
-      ensureEtcPasswd(); // 生成/同步 /etc/passwd
-      if (ensureEtcProfile()) {
-        const res = run('source /etc/profile', ctx);
-        if (res.out) lines.push({ kind: 'out', text: res.out });
-        if (res.err) lines.push({ kind: 'err', text: res.err });
-        if (res.cd) ctx.cwd = res.cd;
+    void (async () => {
+      try {
+        ensureEtcPasswd(); // 生成/同步 /etc/passwd
+        if (ensureEtcProfile()) {
+          const res = await run('source /etc/profile', ctx); // run 现为异步
+          if (res.out) lines.push({ kind: 'out', text: res.out });
+          if (res.err) lines.push({ kind: 'err', text: res.err });
+          if (res.cd) ctx.cwd = res.cd;
+        }
+      } catch {
+        /* rc 失败：忽略，终端照常可用 */
       }
-    } catch {
-      /* rc 失败：忽略，终端照常可用 */
-    }
+    })();
   });
 
   async function scrollToEnd() {
@@ -46,7 +48,10 @@
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
   }
 
-  function submit() {
+  let busy = $state(false); // 异步命令（curl 等）执行中 → 暂时锁输入
+
+  async function submit() {
+    if (busy) return;
     const line = input;
     lines.push({ kind: 'in', text: `${prompt} ${line}` });
     input = '';
@@ -54,12 +59,22 @@
     const cmd = line.trim();
     if (cmd) {
       history.push(cmd);
-      const res = run(cmd, ctx);
-      if (res.clear) lines = [];
-      if (res.out) lines.push({ kind: 'out', text: res.out });
-      if (res.err) lines.push({ kind: 'err', text: res.err });
-      if (res.cd) ctx.cwd = res.cd;
-      ctx.code = res.code;
+      busy = true;
+      scrollToEnd();
+      try {
+        const res = await run(cmd, ctx); // 命令可能是异步的（curl）
+        if (res.clear) lines = [];
+        if (res.out) lines.push({ kind: 'out', text: res.out });
+        if (res.err) lines.push({ kind: 'err', text: res.err });
+        if (res.cd) ctx.cwd = res.cd;
+        ctx.code = res.code;
+      } catch (e) {
+        // run 理论上自己兜底，但万一 reject 也要解锁 + 报错，绝不让终端卡死
+        lines.push({ kind: 'err', text: 'qzsh: ' + (e instanceof Error ? e.message : String(e)) });
+        ctx.code = 1;
+      } finally {
+        busy = false;
+      }
     }
     scrollToEnd();
   }
@@ -141,11 +156,13 @@
         bind:this={inputEl}
         bind:value={input}
         onkeydown={onKey}
-        class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[#d6deeb] caret-[#7ee787] outline-none"
+        disabled={busy}
+        class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[#d6deeb] caret-[#7ee787] outline-none disabled:opacity-50"
         autocomplete="off"
         autocapitalize="off"
         spellcheck="false"
       />
+      {#if busy}<span class="shrink-0 text-[#d6deeb]/50">⏳</span>{/if}
     </div>
   </div>
 </div>

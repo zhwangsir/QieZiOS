@@ -208,8 +208,8 @@ function permits(n: VNode, user: string, bit: number): boolean {
   return (triad & bit) !== 0;
 }
 
-// 命令收到上游/重定向来的 stdin（无则空串），返回 stdout/stderr/退出码
-type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult;
+// 命令收到上游/重定向来的 stdin（无则空串），返回 stdout/stderr/退出码（可同步或异步——curl 等用 Promise）
+type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult | Promise<CmdResult>;
 
 let sourceDepth = 0; // source 嵌套深度（防循环 source 把栈打爆）
 
@@ -226,6 +226,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  whoami id su sudo useradd users —— 用户/账户\n' +
       '  open apps ps pstree jobs kill[-9/-STOP/-CONT] —— 应用/进程\n' +
       '  systemctl [list|status|start|stop|enable|disable] —— 后台服务\n' +
+      '  curl[-i/-I] fetch hostname —— 网络（受浏览器 CORS 限制）\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset which source(.) —— 环境/配置\n' +
       '  whoami date theme clear help\n' +
@@ -272,7 +273,7 @@ const COMMANDS: Record<string, CmdFn> = {
     return { out: outs.join('\n'), code: allFound ? 0 : 1 };
   },
   // source / . ：读一个文件并逐行执行（rc/profile 用）。共享同一个 ctx，故 export/cd 会生效。
-  source: (args, ctx) => {
+  source: async (args, ctx) => {
     const f = args[0];
     if (!f) return { out: '', err: 'source: 用法 source <文件>', code: 2 };
     if (sourceDepth >= 25) return { out: '', err: 'source: 嵌套过深（疑似循环 source）', code: 1 };
@@ -285,7 +286,7 @@ const COMMANDS: Record<string, CmdFn> = {
       for (const raw of (r.text ?? '').split('\n')) {
         const t = raw.trim();
         if (!t || t.startsWith('#')) continue; // 跳过空行/注释
-        const res = run(t, ctx);
+        const res = await run(t, ctx);
         if (res.out) outs.push(res.out);
         if (res.err) outs.push(res.err);
         if (res.cd) ctx.cwd = res.cd; // 把 cd 落到共享 ctx
@@ -598,6 +599,34 @@ const COMMANDS: Record<string, CmdFn> = {
     return { out: `当前：${settings.mode} / 主色 ${settings.accent}\n用法：theme dark|light 或 theme #8b5cf6`, code: 0 };
   },
 
+  // ── 网络 ─────────────────────────────────────────────
+  hostname: (_a, ctx) => ({ out: ctx.env.HOSTNAME || 'qiezios', code: 0 }),
+  // curl：浏览器 fetch 一个 URL（受同源/CORS 限制，对 CORS 友好的端点可用）。-i 含状态行、-I 只看响应头
+  curl: async (args) => {
+    const { flags, rest } = splitFlags(args);
+    const raw = rest[0];
+    if (!raw) return { out: '', err: 'curl: 用法 curl [-i|-I] <url>', code: 2 };
+    const url = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
+    try {
+      const res = await fetch(url, { method: flags.has('I') ? 'HEAD' : 'GET' });
+      const head = `HTTP ${res.status} ${res.statusText}`;
+      if (flags.has('I')) {
+        const hs = [...res.headers.entries()].map(([k, v]) => `${k}: ${v}`).join('\n');
+        return { out: head + (hs ? '\n' + hs : ''), code: res.ok ? 0 : 22 };
+      }
+      let body = await res.text();
+      if (body.length > 20000) body = body.slice(0, 20000) + '\n…(已截断)';
+      return { out: (flags.has('i') ? head + '\n\n' : '') + body, code: res.ok ? 0 : 22 };
+    } catch (e) {
+      return {
+        out: '',
+        err: `curl: (${url}) 请求失败：${e instanceof Error ? e.message : String(e)}（可能是 CORS 限制或网络不可达）`,
+        code: 7,
+      };
+    }
+  },
+  fetch: (a, c, s) => COMMANDS.curl(a, c, s), // 别名
+
   // ── 权限与所有权 ─────────────────────────────────────
   chmod: (args, ctx) => {
     if (args.length < 2) return { out: '', err: 'chmod: 用法 chmod <八进制如644> <路径...>', code: 2 };
@@ -663,7 +692,7 @@ const COMMANDS: Record<string, CmdFn> = {
   // sudo：以 root 身份跑「一条简单命令」（跑完恢复原身份）。
   // 直接把已解析的 argv 派发给命令函数（不重新拼字符串 → 不二次分词/二次 $VAR 展开、保留引号、透传 stdin）。
   // 注：管道/重定向在外层 run 已先拆分，故 sudo 只提升其后的单条命令，符合预期。
-  sudo: (args, ctx, stdin) => {
+  sudo: async (args, ctx, stdin) => {
     if (!args.length) return { out: '', err: 'sudo: 用法 sudo <命令>', code: 2 };
     const [cmd, ...rest] = args;
     const fn = COMMANDS[cmd];
@@ -671,7 +700,7 @@ const COMMANDS: Record<string, CmdFn> = {
     const prev = ctx.env.USER;
     ctx.env.USER = 'root';
     try {
-      return fn(rest, ctx, stdin);
+      return await fn(rest, ctx, stdin); // await：异步命令完成后再在 finally 恢复身份
     } finally {
       ctx.env.USER = prev;
     }
@@ -948,7 +977,8 @@ function extractRedirs(toks: string[]): { rest: string[]; redir: Redir; error?: 
 }
 
 // 执行一行（可含管道 | 与重定向 < > >> 2>）。改 ctx.cwd/env/code 由调用方按返回值落地。
-export function run(line: string, ctx: ShellCtx): CmdResult {
+// 异步：命令可能是异步的（curl 等），故按段 await。
+export async function run(line: string, ctx: ShellCtx): Promise<CmdResult> {
   const trimmed = line.trim();
   if (!trimmed) return { out: '', code: 0 };
 
@@ -994,7 +1024,7 @@ export function run(line: string, ctx: ShellCtx): CmdResult {
       stageStdin = n.kind === 'binary' ? '' : n.content;
     }
 
-    const res = fn(args, ctx, stageStdin);
+    const res = await fn(args, ctx, stageStdin);
     code = res.code;
     if (res.cd) cd = res.cd;
     if (res.clear) clear = true;
