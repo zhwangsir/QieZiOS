@@ -78,7 +78,9 @@
   - ✅ 浏览器实测：搜 'brown'(只在内容)→ b8notes.txt 带片段「…brown fox…」；搜 '暗'→「切换明暗主题」、'终端'→「打开终端」动作；点动作→主题真翻转 + Spotlight 关闭。supervisor 子 Agent PASS（动作副作用 closeall 拷贝数组遍历安全/selected 越界有守卫不崩/正文扫描性能在节点量级可接受/snippetFor 边界/分层无环/无回归；建议的 keyed 前缀分隔已采纳）。npm check+build 0 错 0 警。
 - [ ] **B9 Dock 排序 + pin/unpin**：顺序写死、不能固定/拖排。存 `settings.dockOrder`/`dockPinned`。文件：`shell/Dock.svelte`、`system/settings.svelte.ts`。
 - [ ] **B10 桌宠/伙伴 无-key 引导**：未配 AI 时聊天直接走错误回落，无引导。加「去设置配 AI」提示+跳转（对齐其它 App 的 hasKey 守卫）。文件：`shell/DesktopPet.svelte`、`apps/Companion.svelte`。
-- [ ] **B11 快捷键速查面板**：快捷键硬编码、无处可查。先做 `?` 唤起的速查面板（后续再做可重绑定）。文件：`shell/Desktop.svelte`、`apps/Settings.svelte`。
+- [x] **B11 快捷键速查面板**：快捷键硬编码、无处可查。先做 `?` 唤起的速查面板（后续再做可重绑定）。文件：`shell/Desktop.svelte`、`apps/Settings.svelte`。
+  - ✅ 实现：新 `shortcutsState.svelte.ts`（开关）+ `Shortcuts.svelte`（居中浮层，分组列出 窗口/系统/编辑·终端 共 12+ 条，kbd 标签，点遮罩/Esc/关闭按钮关）；Desktop onKey 加 `?` 唤起（input 聚焦不触发）+ shortcuts 开时 Esc/? 关并吞键；桌面右键菜单加「键盘快捷键 (?)」。z-[10003] 在 spotlight 之上。
+  - ✅ 浏览器实测：`?`→开（列出含 Ctrl+Alt 平铺等 12 条）、Esc→关、`?`→重开、点外部→关、右键菜单项→开。supervisor 子 Agent PASS（onKey 顺序/吞键合理、? 在 input guard 后、点外部、z-index、无环、无回归全过）。npm check+build 0 错 0 警。
 - [ ] **B12 Launchpad 全 App 网格 + 关于本机**：App 入口分散，无统一「所有 App」网格、无版本/用量「关于」页。文件：新 App + appList/registry。
 - [ ] **B13 多窗平铺布局 / 任务视图**：现只有 cascade 层叠。加「网格平铺/并排两窗」一键布局，可选 exposé 总览。文件：`kernel/processes.svelte.ts`、`shell/Desktop.svelte`。
 

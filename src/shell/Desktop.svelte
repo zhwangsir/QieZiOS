@@ -14,8 +14,10 @@
   import { resolveAppDef } from '../apps/desktopApps.svelte';
   import { openMenu, closeMenu, menu } from './menu.svelte';
   import { openSpotlight } from './spotlightState.svelte';
+  import { shortcuts, openShortcuts, closeShortcuts } from './shortcutsState.svelte';
   import Window from './Window.svelte';
   import Spotlight from './Spotlight.svelte';
+  import Shortcuts from './Shortcuts.svelte';
   import Dock from './Dock.svelte';
   import TopBar from './TopBar.svelte';
   import Notifications from './Notifications.svelte';
@@ -59,6 +61,7 @@
       },
       { label: '层叠窗口', icon: '🗂️', onClick: cascade },
       { label: '关闭所有窗口', icon: '✕', danger: true, onClick: closeAll },
+      { label: '键盘快捷键 (?)', icon: '⌨️', separator: true, onClick: openShortcuts },
     ]);
   }
 
@@ -67,6 +70,11 @@
     // 菜单开着时，Esc 先关菜单
     if (menu.open) {
       if (e.key === 'Escape') closeMenu();
+      return;
+    }
+    // 快捷键速查开着时，Esc 或 ? 关掉它，吞掉其它快捷键
+    if (shortcuts.open) {
+      if (e.key === 'Escape' || e.key === '?') closeShortcuts();
       return;
     }
     // Ctrl/Cmd+K 打开命令面板（即使焦点在输入框也响应）
@@ -78,7 +86,10 @@
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
 
-    if (e.key === 'Escape') {
+    if (e.key === '?') {
+      openShortcuts();
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
       const id = activeId();
       if (id) close(id);
     } else if ((e.key === 'm' || e.key === 'M') && (e.ctrlKey || e.metaKey)) {
@@ -159,6 +170,9 @@
 
   <!-- 命令面板（Ctrl/Cmd+K） -->
   <Spotlight />
+
+  <!-- 键盘快捷键速查（? 唤起） -->
+  <Shortcuts />
 
   <!-- 系统通知 toast 层（通知中心服务驱动） -->
   <Notifications />
