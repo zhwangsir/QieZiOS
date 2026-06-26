@@ -23,6 +23,22 @@
 
   const active = $derived(activeId());
 
+  // 进程树：以 init(0) 为根按父子排序，带 depth 缩进。子进程紧跟父进程。
+  const procTree = $derived.by(() => {
+    const out: { p: (typeof processes)[number]; depth: number }[] = [];
+    const visit = (ppid: number, depth: number) => {
+      for (const p of processes)
+        if ((p.ppid ?? 0) === ppid) {
+          out.push({ p, depth });
+          visit(p.pid, depth + 1);
+        }
+    };
+    visit(0, 0);
+    // 兜底：父已不存在的孤儿（理论上不会，重启已重挂到 0）也收进来
+    for (const p of processes) if (!out.some((o) => o.p.id === p.id)) out.push({ p, depth: 0 });
+    return out;
+  });
+
   function iconFor(appId: string): string {
     return appMeta[appId]?.icon ?? getUserApp(appId)?.icon ?? '▫';
   }
@@ -117,16 +133,19 @@
       <!-- 表头 -->
       <div class="sticky top-0 flex items-center gap-2 border-b border-qz-border bg-qz-surface/80 px-3 py-1.5 text-[11px] text-qz-muted backdrop-blur">
         <span class="w-10">PID</span>
-        <span class="flex-1">进程</span>
+        <span class="w-10">PPID</span>
+        <span class="flex-1">进程（树）</span>
         <span class="w-12">状态</span>
         <span class="w-14 text-right">运行</span>
         <span class="w-24"></span>
       </div>
-      {#each processes as p (p.id)}
+      {#each procTree as { p, depth } (p.id)}
         {@const st = stateOf(p)}
         <div class="flex items-center gap-2 border-b border-qz-border/50 px-3 py-1.5 text-xs hover:bg-qz-elevated/50">
           <span class="w-10 tabular-nums text-qz-muted">{p.pid}</span>
-          <span class="flex min-w-0 flex-1 items-center gap-1.5">
+          <span class="w-10 tabular-nums text-qz-muted">{p.ppid ?? 0}</span>
+          <span class="flex min-w-0 flex-1 items-center gap-1.5" style="padding-left: {depth * 14}px">
+            {#if depth > 0}<span class="text-qz-muted/60">└</span>{/if}
             <span>{iconFor(p.appId)}</span>
             <span class="truncate" title={p.title}>{p.title}</span>
           </span>

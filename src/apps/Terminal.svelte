@@ -7,6 +7,9 @@
 
   type Line = { kind: 'in' | 'out' | 'err'; text: string };
 
+  // pid：本终端窗口的进程 pid（Desktop 透传）→ 让 open 启动的子进程挂在本终端名下
+  let { pid }: { pid?: number } = $props();
+
   let ctx = $state(newCtx());
   let lines = $state<Line[]>([
     { kind: 'out', text: 'QieZiOS qzsh —— 输入 help 看命令。Tab 补全，↑/↓ 翻历史。' },
@@ -24,6 +27,7 @@
   // 启动时执行 /etc/profile（出厂自带；用户改它即可持久化 export/启动命令）。
   // 防御式：rc 出错绝不影响终端可用。
   onMount(() => {
+    ctx.pid = pid ?? 0; // 记下本终端 pid，供 open 设子进程 ppid
     try {
       ensureEtcPasswd(); // 生成/同步 /etc/passwd
       if (ensureEtcProfile()) {

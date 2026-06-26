@@ -110,7 +110,7 @@
       <Window {proc} active={active === proc.id}>
         {#if def?.component}
           {@const App = def.component}
-          <App data={proc.data} />
+          <App data={proc.data} pid={proc.pid} />
         {:else}
           <div class="grid h-full place-items-center text-sm text-qz-muted">App 不存在或已卸载</div>
         {/if}

@@ -6,6 +6,7 @@
 export interface Process {
   id: string;        // 进程唯一 id（uuid 串）
   pid: number;       // 数字 PID（每次开机重排，便于人看 / 任务管理器展示）
+  ppid: number;      // 父进程 PID（0 = init/内核；由终端 open 启动的进程 = 终端的 pid）
   appId: string;     // 对应注册表里的哪个 App
   title: string;
   x: number;         // 窗口左上角（用 transform 移动 → 走 GPU 合成器）
@@ -31,6 +32,7 @@ let pidCounter = 0;
 const nextPid = () => ++pidCounter;
 for (const p of processes) {
   p.pid = nextPid();
+  p.ppid = 0; // 重启后父子关系不保留（PID 重排，同真系统：还原的进程全部重挂到 init/0）
   if (p.startedAt == null) p.startedAt = Date.now();
 }
 
@@ -41,14 +43,16 @@ let nextZ = processes.reduce((m, p) => Math.max(m, p.z), 0) + 1;
 export function launch(
   appId: string,
   title: string,
-  opts: { width?: number; height?: number; data?: unknown } = {},
+  opts: { width?: number; height?: number; data?: unknown; ppid?: number } = {},
 ) {
   const id = `${appId}-${crypto.randomUUID().slice(0, 8)}`;
   const pid = nextPid();
+  const ppid = opts.ppid ?? 0; // 缺省 0 = init/内核启动；终端 open 会传自己的 pid
   const offset = (processes.length % 6) * 28; // 层叠错位，避免新窗口完全重合
   processes.push({
     id,
     pid,
+    ppid,
     appId,
     title,
     x: 140 + offset,
@@ -61,7 +65,7 @@ export function launch(
     startedAt: Date.now(),
     data: opts.data,
   });
-  emit('proc.launch', { pid, appId });
+  emit('proc.launch', { pid, ppid, appId });
 }
 
 export function close(id: string) {

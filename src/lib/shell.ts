@@ -32,6 +32,7 @@ export interface ShellCtx {
   cwd: string; // 当前目录节点 id
   env: Record<string, string>; // 环境变量
   code: number; // 上次命令退出码（$?）
+  pid: number; // 终端自身的进程 pid（给 open 启动的子进程设 ppid；0=未知）
 }
 
 export interface CmdResult {
@@ -47,6 +48,7 @@ export function newCtx(): ShellCtx {
     cwd: 'root',
     env: { USER: 'qiezi', HOME: '/', SHELL: 'qzsh', HOSTNAME: 'qiezios', PATH: '/bin' },
     code: 0,
+    pid: 0,
   };
 }
 
@@ -203,6 +205,9 @@ type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult;
 
 let sourceDepth = 0; // source 嵌套深度（防循环 source 把栈打爆）
 
+// 信号号 → 名（kill -9 等）。本系统映射：TERM/KILL/HUP/INT→关闭，STOP→挂起，CONT→恢复
+const SIGNALS: Record<number, string> = { 1: 'HUP', 2: 'INT', 9: 'KILL', 15: 'TERM', 18: 'CONT', 19: 'STOP' };
+
 const COMMANDS: Record<string, CmdFn> = {
   help: () => ({
     out:
@@ -211,7 +216,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  mkdir touch rm mv cp —— 文件操作\n' +
       '  chmod chown stat     —— 权限/属主（ls -l 看权限）\n' +
       '  whoami id su sudo useradd users —— 用户/账户\n' +
-      '  open apps ps kill    —— 应用/进程\n' +
+      '  open apps ps pstree jobs kill[-9/-STOP/-CONT] —— 应用/进程\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset which source(.) —— 环境/配置\n' +
       '  whoami date theme clear help\n' +
@@ -446,35 +451,75 @@ const COMMANDS: Record<string, CmdFn> = {
   open: (args, ctx) => {
     const target = args[0];
     if (!target) return { out: '', err: 'open: 缺少 App id 或文件路径', code: 1 };
+    const ppid = ctx.pid; // 由终端 open 启动 → 父进程是本终端
     if (appMeta[target]) {
-      sys.openApp(target);
+      sys.openApp(target, { ppid });
       return { out: `已启动 ${appMeta[target].title}`, code: 0 };
     }
     const id = resolvePath(ctx.cwd, target);
     const n = id ? getNode(id) : undefined;
     if (!n) return { out: '', err: `open: ${target}: 不是 App 也不是文件`, code: 1 };
     if (n.type === 'dir') {
-      sys.openApp('files', { data: n.id });
+      sys.openApp('files', { data: n.id, ppid });
       return { out: `已在文件管理器打开 ${n.name}`, code: 0 };
     }
-    sys.openApp(isImage(n) ? 'imageviewer' : 'textedit', { title: n.name, data: n.id });
+    sys.openApp(isImage(n) ? 'imageviewer' : 'textedit', { title: n.name, data: n.id, ppid });
     return { out: `已打开 ${n.name}`, code: 0 };
   },
 
   ps: () => {
     const lines = sys.proc.list().map((p) => {
-      const state = p.minimized ? '已最小化' : '运行中';
-      return `${String(p.pid).padStart(4)}  ${p.appId.padEnd(12)} ${state}  ${p.title}`;
+      const state = p.minimized ? 'T(停)' : 'R(运行)';
+      return `${String(p.pid).padStart(4)} ${String(p.ppid ?? 0).padStart(4)}  ${p.appId.padEnd(12)} ${state.padEnd(8)} ${p.title}`;
     });
-    return { out: '  PID  APP          STATE     TITLE\n' + lines.join('\n'), code: 0 };
+    return { out: ' PID PPID  APP          STAT     TITLE\n' + lines.join('\n'), code: 0 };
   },
 
+  // pstree：以 init(0) 为根画进程树
+  pstree: () => {
+    const procs = sys.proc.list();
+    const out: string[] = ['init(0)'];
+    const drawn = new Set<number>();
+    const childrenOf = (ppid: number) => procs.filter((p) => (p.ppid ?? 0) === ppid);
+    const draw = (ppid: number, prefix: string) => {
+      const kids = childrenOf(ppid);
+      kids.forEach((p, i) => {
+        const last = i === kids.length - 1;
+        drawn.add(p.pid);
+        out.push(`${prefix}${last ? '└─ ' : '├─ '}${p.appId}(${p.pid})${p.minimized ? ' [停]' : ''}`);
+        draw(p.pid, prefix + (last ? '   ' : '│  '));
+      });
+    };
+    draw(0, '');
+    // 孤儿（父进程已退出）：挂回 init 显示，避免遗漏（与任务管理器进程树一致）
+    for (const p of procs)
+      if (!drawn.has(p.pid)) out.push(`└─ ${p.appId}(${p.pid})${p.minimized ? ' [停]' : ''} [孤儿]`);
+    return { out: out.join('\n'), code: 0 };
+  },
+
+  // jobs：把窗口进程当作作业列出（运行/停止）。本 shell 无 & 后台作业，这是简化视图。
+  jobs: () => {
+    const lines = sys.proc.list().map((p, i) => `[${i + 1}]  ${p.minimized ? 'Stopped' : 'Running'}\t${p.appId}(${p.pid})`);
+    return { out: lines.length ? lines.join('\n') : '无作业', code: 0 };
+  },
+
+  // kill [-信号] <pid>：TERM/KILL/HUP/INT→关闭，STOP→挂起(最小化)，CONT→恢复
   kill: (args) => {
-    const pid = Number(args[0]);
-    if (!pid) return { out: '', err: 'kill: 用法 kill <pid>', code: 1 };
+    let sig = 'TERM';
+    const rest: string[] = [];
+    for (const a of args) {
+      if (a.startsWith('-') && a.length > 1) {
+        const s = a.slice(1).toUpperCase().replace(/^SIG/, '');
+        sig = /^\d+$/.test(s) ? SIGNALS[Number(s)] ?? 'TERM' : s;
+      } else rest.push(a);
+    }
+    const pid = Number(rest[0]);
+    if (!pid) return { out: '', err: 'kill: 用法 kill [-9|-STOP|-CONT|-TERM] <pid>', code: 1 };
     const p = sys.proc.list().find((q) => q.pid === pid);
-    if (!p) return { out: '', err: `kill: (${args[0]}): 没有那个进程`, code: 1 };
-    sys.proc.close(p.id);
+    if (!p) return { out: '', err: `kill: (${rest[0]}): 没有那个进程`, code: 1 };
+    if (sig === 'STOP') sys.proc.minimize(p.id);
+    else if (sig === 'CONT') sys.proc.restore(p.id);
+    else sys.proc.close(p.id); // TERM/KILL/HUP/INT/...
     return { out: '', code: 0 };
   },
 
