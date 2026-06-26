@@ -43,6 +43,8 @@ const GUEST_SDK = `<script>
     writeFile: function (fileId, content) { return call('write_file', { fileId: fileId, content: content }); },
     setTheme: function (t) { return call('set_theme', t || {}); },
     ask: function (prompt) { return call('__ask', { prompt: prompt }); },
+    // 网络：经宿主发 HTTP 请求（受 net 能力门控 + 浏览器 CORS）。返回 {ok,status,body}
+    fetch: function (url, opts) { return call('__fetch', { url: url, opts: opts || {} }); },
     // ── IPC：跨沙箱事件（app↔app / app↔系统），走宿主的事件总线 ──
     emit: function (event, data) { parent.postMessage({ __qz: 'emit', event: event, data: data }, '*'); },
     on: function (event, handler) {
@@ -86,6 +88,7 @@ export const CAPABILITIES: Capability[] = [
   },
   { key: 'theme', label: '换肤', desc: '修改系统主题/壁纸', icon: '🎨', tools: ['set_theme'] },
   { key: 'ai', label: 'AI', desc: '调用 AI 问答', icon: '🤖', tools: ['__ask'] },
+  { key: 'net', label: '网络', desc: '发起 HTTP 请求（fetch，受 CORS 限制）', icon: '🌐', tools: ['__fetch'] },
 ];
 export const ALL_CAP_KEYS = CAPABILITIES.map((c) => c.key);
 
@@ -96,6 +99,17 @@ export function capsToTools(capKeys: string[] | undefined): Set<string> {
   const allow = new Set<string>();
   for (const c of CAPABILITIES) if (capKeys.includes(c.key)) c.tools.forEach((t) => allow.add(t));
   return allow;
+}
+
+// 宿主端代发 HTTP 请求（用户 App 经 net 能力调 qz.fetch）。
+// 只允许 http(s)、限制响应大小；CORS 与终端 curl 同理（宿主源发起）。
+async function guestFetch(input: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: string }> {
+  const url = String(input.url ?? '');
+  if (!/^https?:\/\//i.test(url)) throw new Error('fetch: 仅支持 http(s) URL');
+  const opts = (input.opts ?? {}) as { method?: string; headers?: Record<string, string>; body?: string };
+  const res = await fetch(url, { method: opts.method ?? 'GET', headers: opts.headers, body: opts.body });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, body: text.length > 100000 ? text.slice(0, 100000) + '\n…(已截断)' : text };
 }
 
 interface GuestCall {
@@ -122,6 +136,8 @@ export async function handleGuestCall(win: Window, data: unknown, allow: Set<str
     let result: unknown;
     if (data.name === '__ask') {
       result = await complete(String(data.input?.prompt ?? ''), {});
+    } else if (data.name === '__fetch') {
+      result = await guestFetch(data.input ?? {});
     } else {
       result = await executeTool(data.name, data.input ?? {});
     }
