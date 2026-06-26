@@ -58,6 +58,7 @@ export const MAN: Record<string, ManPage> = {
   curl: { title: '抓取 URL', syn: 'curl [-i|-I] <url>', desc: '用浏览器 fetch 抓取一个 URL 并输出正文。-i 含状态行、-I 只看响应头。受同源/CORS 限制。' },
   fetch: { title: 'curl 的别名', syn: 'fetch [-i|-I] <url>', desc: '同 curl。' },
   hostname: { title: '主机名', syn: 'hostname', desc: '打印主机名（环境变量 HOSTNAME）。' },
+  ai: { title: '问 AI', syn: 'ai <问题>（或 … | ai <指令>）', desc: '在命令行向 AI 提问，输出回答。可用管道把内容喂给它，如 cat 笔记.txt | ai 总结要点。和助手 App 共用同一个 AI 引擎。反过来，助手也能用 run_shell 跑这些命令。' },
   env: { title: '列环境变量', syn: 'env', desc: '打印所有环境变量（KEY=VALUE）。' },
   export: { title: '设环境变量', syn: 'export KEY=VALUE', desc: '设置环境变量（当前 shell 会话内）。要持久化可写进 /etc/profile。' },
   unset: { title: '删环境变量', syn: 'unset KEY...', desc: '删除一个或多个环境变量。' },

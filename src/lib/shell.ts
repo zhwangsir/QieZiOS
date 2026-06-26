@@ -38,6 +38,7 @@ import {
 import { MAN } from './man';
 import { repoConfig, fetchCatalog, installCatalogApp } from '../system/appRepo.svelte';
 import { currentUser } from '../system/account.svelte';
+import { complete } from '../system/ai';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -218,6 +219,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  systemctl [list|status|start|stop|enable|disable] —— 后台服务\n' +
       '  pkg [list|search|install|repo] —— 远程 App 仓库（apt 式）\n' +
       '  curl[-i/-I] fetch hostname —— 网络（受浏览器 CORS 限制）\n' +
+      '  ai <问题> —— 命令行问 AI（可管道喂入）\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset which source(.) —— 环境/配置\n' +
       '  date theme clear  man <命令>（详细用法）\n' +
@@ -665,6 +667,17 @@ const COMMANDS: Record<string, CmdFn> = {
     }
   },
   fetch: (a, c, s) => COMMANDS.curl(a, c, s), // 别名
+  // ai：在命令行问 AI（也可管道喂入，如 cat f | ai 总结）。和助手共用一个引擎。
+  ai: async (args, _ctx, stdin) => {
+    const prompt = [args.join(' ').trim(), stdin.trim()].filter(Boolean).join('\n\n');
+    if (!prompt) return { out: '', err: 'ai: 用法 ai <问题>（或 管道喂入：cat f | ai 总结）', code: 2 };
+    try {
+      const ans = await complete(prompt, {});
+      return { out: ans.trim(), code: 0 };
+    } catch (e) {
+      return { out: '', err: `ai: ${e instanceof Error ? e.message : String(e)}`, code: 1 };
+    }
+  },
 
   // ── 权限与所有权 ─────────────────────────────────────
   chmod: (args, ctx) => {

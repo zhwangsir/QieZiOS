@@ -1,6 +1,14 @@
 import { sys } from './sys';
 import { appMeta } from '../apps/appList';
 
+// shell 运行器（注入：aiTools 在 system 层，不能反向 import lib/shell——否则 shell→ai→aiTools→shell 成环）。
+// App 启动时把 (cmd)=>run(cmd, aiCtx) 接上；AI 用一个常驻 ctx，cd/env 在会话内保留。
+type ShellRun = (command: string) => Promise<{ out: string; err?: string; code: number }>;
+let shellRun: ShellRun | null = null;
+export function setShellRunner(fn: ShellRun): void {
+  shellRun = fn;
+}
+
 // ───────────────────────────────────────────────────────────
 // AI 能力工具 · 把内核/VFS/设置的函数暴露给 AI 调用
 // 这就是「AI 底层驱动」的核心：AI 返回 tool_use → executeTool 执行到系统 → 回灌结果。
@@ -76,6 +84,18 @@ export const TOOL_DEFS = [
       },
     },
   },
+  {
+    name: 'run_shell',
+    description:
+      '在系统 shell（qzsh）里执行一行命令并返回 stdout/stderr/退出码。支持管道 | 、重定向 > < 2> ，以及 ls/cat/grep/find/mkdir/rm/mv/cp/ps/pstree/kill/systemctl/pkg/chmod/chown/curl/man 等命令。比单独的文件工具更全能——浏览/操作文件、查进程与服务、装 App、改权限都用它。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        command: { type: 'string', description: '要执行的命令行，如 "ls -l /docs" 或 "ps | grep terminal"' },
+      },
+      required: ['command'],
+    },
+  },
 ];
 
 // 执行一个工具调用，返回结果（会被序列化回灌给 AI）
@@ -122,6 +142,12 @@ export async function executeTool(name: string, input: Record<string, unknown>):
     case 'set_theme':
       sys.ui.setTheme(input as Parameters<typeof sys.ui.setTheme>[0]);
       return { ok: true };
+
+    case 'run_shell': {
+      if (!shellRun) return { error: 'shell 未就绪' };
+      const res = await shellRun(String(input.command ?? ''));
+      return { stdout: res.out, stderr: res.err ?? '', exitCode: res.code };
+    }
 
     default:
       return { error: '未知工具：' + name };
