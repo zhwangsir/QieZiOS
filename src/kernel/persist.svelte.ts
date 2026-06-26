@@ -30,7 +30,14 @@ export let storage: KVStorage = localBackend;
 //  · 任何字段一变，就（防抖后）自动序列化写回 storage
 // debounceMs：拖窗时几何每帧都在变，若每次都同步写 localStorage 会卡；
 //             所以停下来 debounceMs 毫秒后才真正写一次。
-export function persisted<T extends object>(key: string, initial: T, debounceMs = 150): T {
+// serialize：可选「存盘前变换」——返回要写进 storage 的形态（如剥掉不该持久化的大字段）。
+// 不传则原样存。注意：读回来的就是变换后的形态，所以变换要保证仍能 JSON.parse 回 T 的子集。
+export function persisted<T extends object>(
+  key: string,
+  initial: T,
+  debounceMs = 150,
+  serialize?: (snapshot: T) => unknown,
+): T {
   // 启动时先把上次的存档读回来
   let start = initial;
   const raw = storage.get(key);
@@ -51,7 +58,8 @@ export function persisted<T extends object>(key: string, initial: T, debounceMs 
     $effect(() => {
       // $state.snapshot：把响应式代理「拍平」成普通对象，才能 JSON 序列化。
       // 这里深度读取每个字段 → 任何字段（含嵌套）变化都会触发这次 effect。
-      const json = JSON.stringify($state.snapshot(state));
+      const snap = $state.snapshot(state) as T;
+      const json = JSON.stringify(serialize ? serialize(snap) : snap);
       // 防抖写盘
       clearTimeout(timer);
       timer = setTimeout(() => storage.set(key, json), debounceMs);

@@ -17,7 +17,9 @@
 
 ## 二、P0 · 正确性 / 健壮性（数据丢失/泄漏优先）
 
-- [ ] **A1 助手对话+附图超 localStorage 配额 → 静默丢失**：`assistantChat` 连同 `images`（JPEG data URL）整体 persisted；配额满时 `persist` 静默 catch 忽略 → 用户以为存了、刷新全丢。修：持久化时剥离/截断 `images`（图已喂过模型，历史不必留字节），或给 `qz.chat` 设体积上限 + 超限提示。文件：`system/assistantChat.svelte.ts`、`apps/Assistant.svelte`。
+- [x] **A1 助手对话+附图超 localStorage 配额 → 静默丢失**：`assistantChat` 连同 `images`（JPEG data URL）整体 persisted；配额满时 `persist` 静默 catch 忽略 → 用户以为存了、刷新全丢。
+  - ✅ 实现：`persisted()` 加可选 `serialize(snapshot)` 存盘前变换参（不传=原样存，对其余 18 个调用零影响）；`chat` 传 serialize 把有图消息剥成 `{...m, images:undefined, imageCount:N}`（图字节只留内存供本会话显示/喂模型，不写盘）；ChatMsg 加 `imageCount`；Assistant 刷新后渲染「🖼 N 张附图（历史不保留原图）」占位。加 DEV 钩子 `__qzChat`。
+  - ✅ 浏览器实测：注入带 5000 字节假图的消息→内存仍有图(5022)、localStorage 那条 images 被剥+imageCount=1、qz.chat 总大小仅 116 字符（图没进盘）；reload 后对话文本完整保留、imageCount 在、占位渲染。supervisor 子 Agent PASS（serialize 默认分支与改前字节级等价、订阅不变、其余 persisted 零回归、类型/边界/DEV 钩子全过）。npm check+build 0 错 0 警。
 - [ ] **A2 `persisted` 每次字段变更都全量 `JSON.stringify`+snapshot**（`kernel/persist.svelte.ts:54`，在 effect 体内、只有写盘防抖）→ TextEdit 打字时每键序列化整棵 VFS，大文件卡顿。修：effect 体内只做轻量 deepRead 订阅，把 snapshot+stringify 移进防抖回调。⚠️ 核心 helper，务必验证「所有 persisted 仍正确订阅+持久化（含键增删）」。
 - [ ] **A3 过期一次性 `at` 命令开机并发补发执行**：schedd 重新武装时 `Math.max(0,delay)` 让过期任务立即 fire，命令型会经 shell 执行 → 刷新后批量跑过期命令（与真 `at` 过期不补相反，可能 rm 等意外副作用）。修：重新武装时过期的命令型一次性任务只移除不执行（提醒型可保留补发通知或也丢弃）。文件：`system/services.ts`。
 - [ ] **A4 `bgPromises` Map 只增不删（后台作业泄漏）**：`lib/shell.ts` 每个 `cmd &` 的 promise 永久留存（含完整结果串），`jobs.list` 封顶 30 但 bgPromises 无清理。修：作业完成后裁剪 bgPromises（与 jobs.list 同步/保留最近 N）。

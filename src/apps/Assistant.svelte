@@ -167,6 +167,9 @@
                 <img {src} alt="附图" class="h-20 w-20 rounded-qz object-cover ring-1 ring-black/10" />
               {/each}
             </div>
+          {:else if m.imageCount}
+            <!-- 刷新后图片字节已不持久化，仅占位提示 -->
+            <div class="mb-1 text-[11px] text-qz-muted">🖼 {m.imageCount} 张附图（历史不保留原图）</div>
           {/if}
           {#if m.role === 'assistant' && m.reasoning}
             <details class="mb-1 text-[11px] text-qz-muted">
