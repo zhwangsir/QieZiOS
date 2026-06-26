@@ -1,7 +1,7 @@
 <script lang="ts">
   // 终端 App —— 把 lib/shell 接到一个可交互的命令行界面。
   // 滚动输出区 + 输入行 + 命令历史(↑/↓) + Tab 补全(命令/路径)。
-  import { run, newCtx, COMMAND_NAMES, ensureEtcProfile } from '../lib/shell';
+  import { run, newCtx, COMMAND_NAMES, ensureEtcProfile, ensureEtcPasswd } from '../lib/shell';
   import { pathOf, resolvePath, children } from '../kernel/vfs.svelte';
   import { onMount, tick } from 'svelte';
 
@@ -17,12 +17,15 @@
   let scroller: HTMLElement;
   let inputEl: HTMLInputElement;
 
-  const prompt = $derived(`${ctx.env.USER}@${ctx.env.HOSTNAME}:${pathOf(ctx.cwd)}$`);
+  const prompt = $derived(
+    `${ctx.env.USER}@${ctx.env.HOSTNAME}:${pathOf(ctx.cwd)}${ctx.env.USER === 'root' ? '#' : '$'}`,
+  );
 
   // 启动时执行 /etc/profile（出厂自带；用户改它即可持久化 export/启动命令）。
   // 防御式：rc 出错绝不影响终端可用。
   onMount(() => {
     try {
+      ensureEtcPasswd(); // 生成/同步 /etc/passwd
       if (ensureEtcProfile()) {
         const res = run('source /etc/profile', ctx);
         if (res.out) lines.push({ kind: 'out', text: res.out });

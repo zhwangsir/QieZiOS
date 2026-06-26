@@ -26,6 +26,7 @@ import { sys } from '../system/sys';
 import { appList, appMeta } from '../apps/appList';
 import { settings } from '../system/settings.svelte';
 import { isVirtualPath, virtualList, virtualRead, virtualStat, normAbs, VIRTUAL_MOUNTS } from '../system/vfsVirtual';
+import { users, getUser, userExists, addUser, passwdContent } from '../system/users.svelte';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -209,6 +210,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  pwd ls cd cat echo  —— 浏览/查看\n' +
       '  mkdir touch rm mv cp —— 文件操作\n' +
       '  chmod chown stat     —— 权限/属主（ls -l 看权限）\n' +
+      '  whoami id su sudo useradd users —— 用户/账户\n' +
       '  open apps ps kill    —— 应用/进程\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset which source(.) —— 环境/配置\n' +
@@ -535,6 +537,49 @@ const COMMANDS: Record<string, CmdFn> = {
     };
   },
 
+  // ── 用户/账户 ────────────────────────────────────────
+  id: (args, ctx) => {
+    const name = args[0] || ctx.env.USER;
+    const u = getUser(name);
+    if (!u) return { out: '', err: `id: ${name}: 无此用户`, code: 1 };
+    return { out: `uid=${u.uid}(${u.name}) gid=${u.gid}(${u.name})`, code: 0 };
+  },
+  users: () => ({ out: users.list.map((u) => u.name).join('  '), code: 0 }),
+  // su：切换当前 shell 的身份（无密码，单机自托管隐喻）。无参 → root。
+  su: (args, ctx) => {
+    const target = args[0] || 'root';
+    if (!userExists(target)) return { out: '', err: `su: 用户 ${target} 不存在`, code: 1 };
+    ctx.env.USER = target;
+    ctx.env.HOME = target === 'root' ? '/root' : '/';
+    return { out: '', code: 0 };
+  },
+  // sudo：以 root 身份跑「一条简单命令」（跑完恢复原身份）。
+  // 直接把已解析的 argv 派发给命令函数（不重新拼字符串 → 不二次分词/二次 $VAR 展开、保留引号、透传 stdin）。
+  // 注：管道/重定向在外层 run 已先拆分，故 sudo 只提升其后的单条命令，符合预期。
+  sudo: (args, ctx, stdin) => {
+    if (!args.length) return { out: '', err: 'sudo: 用法 sudo <命令>', code: 2 };
+    const [cmd, ...rest] = args;
+    const fn = COMMANDS[cmd];
+    if (!fn) return { out: '', err: `sudo: ${cmd}: 未找到命令`, code: 127 };
+    const prev = ctx.env.USER;
+    ctx.env.USER = 'root';
+    try {
+      return fn(rest, ctx, stdin);
+    } finally {
+      ctx.env.USER = prev;
+    }
+  },
+  useradd: (args, ctx) => {
+    const name = args[0];
+    if (!name) return { out: '', err: 'useradd: 用法 useradd <用户名>', code: 2 };
+    if (ctx.env.USER !== 'root') return { out: '', err: 'useradd: 权限不够（试试 sudo useradd ...）', code: 1 };
+    if (!/^[a-z_][a-z0-9_-]*$/i.test(name)) return { out: '', err: `useradd: 非法用户名 ${name}`, code: 1 };
+    if (userExists(name)) return { out: '', err: `useradd: 用户 ${name} 已存在`, code: 1 };
+    const u = addUser(name);
+    ensureEtcPasswd();
+    return { out: `已创建用户 ${name} (uid=${u.uid})`, code: 0 };
+  },
+
   // ── 文本处理（配合管道）─────────────────────────────
   grep: (args, ctx, stdin) => {
     const { flags, rest } = splitFlags(args); // i=忽略大小写 n=行号 r=递归 v=反选
@@ -713,6 +758,21 @@ export function ensureEtcProfile(): string | null {
   let profId = resolvePath('root', '/etc/profile');
   if (!profId || getNode(profId)?.type !== 'file') profId = createFile(etcId, 'profile', DEFAULT_PROFILE);
   return profId ?? null;
+}
+
+// 确保 /etc/passwd 存在且与用户表同步（每次开终端/新增用户时刷新）。是真实文件、随用户表更新。
+export function ensureEtcPasswd(): void {
+  ensureEtcProfile(); // 顺带保证 /etc 存在
+  const etcId = resolvePath('root', '/etc');
+  if (!etcId) return;
+  const content = passwdContent();
+  const pid = resolvePath('root', '/etc/passwd');
+  const node = pid ? getNode(pid) : undefined;
+  if (node?.type === 'file') {
+    if (node.content !== content) writeFile(node.id, content);
+  } else {
+    createFile(etcId, 'passwd', content);
+  }
 }
 
 // 按分隔符切分，但尊重引号（管道 | 不在引号里才算分隔）。保留引号交给 tokenize 去剥。
