@@ -91,7 +91,9 @@
 - [x] **B12 Launchpad 全 App 网格**（关于本机部分已被 SysMonitor 概况页覆盖）：App 入口分散，无统一「所有 App」网格。
   - ✅ 实现：新 `launchpadState.svelte.ts` + `Launchpad.svelte`（全屏 backdrop-blur 浮层，搜索框即时过滤 `visibleAppDefs()` + App 网格，点击 `launchAppDef`+关闭，Esc/点遮罩关、Enter 启首个）；顶栏装饰性 🍆 改成按钮唤起；Desktop render + onKey Esc 关；速查表加入口。「关于本机」（版本/进程/服务/存储计数）已由 SysMonitor 概况页提供，不另做。
   - ✅ 浏览器实测：点 🍆→开（20 个 App 带图标标题）、搜「终端」→过滤剩终端、点 App→启动+关闭、重开、Esc 关。supervisor 子 Agent PASS（onKey 顺序/四浮层状态独立/launchAppDef 与 Dock 同源/点遮罩 vs 内容 pointer 处理正确/z-index/无环/无回归；ship it）。npm check+build 0 错 0 警。
-- [ ] **B13 多窗平铺布局 / 任务视图**：现只有 cascade 层叠。加「网格平铺/并排两窗」一键布局，可选 exposé 总览。文件：`kernel/processes.svelte.ts`、`shell/Desktop.svelte`。
+- [x] **B13 多窗平铺布局**：现只有 cascade 层叠。加「网格平铺/并排两窗」一键布局，可选 exposé 总览。文件：`kernel/processes.svelte.ts`、`shell/Desktop.svelte`。
+  - ✅ 实现：`Desktop.tileGrid()`——未最小化窗口铺成近正方形网格（cols=ceil√n、rows=ceil(n/cols)、cw/ch=floor(W/cols)·floor(H/rows)，行列 c=i%cols/r=i/cols），2 窗=并排、4 窗=田字；排除最小化窗。桌面右键菜单加「平铺窗口」（层叠之前）+ Ctrl+Alt+G 快捷键 + 速查表一条。复用 B7 的 winLayer+setBounds。
+  - ✅ 浏览器实测：Ctrl+Alt+G→未最小化 3 窗 un-maximize（headless 几何 0）、最小化窗 bounds 不动（被排除）、菜单项存在。⏳ 网格实际布局因无头视口 0 验不了 → **待真机验证**。supervisor 子 Agent PASS（网格 math n=1..9 正确不重叠/winLayer·n=0 守卫/排除最小化/setBounds 形状/onKey 顺序不撞 B7 方向键/无回归）。npm check+build 0 错 0 警。exposé 任务视图（缩略图总览）价值边际、延后。
 
 ---
 

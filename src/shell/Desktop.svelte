@@ -48,6 +48,24 @@
     setBounds(id, { maximized: false, ...rect });
   }
 
+  // 网格平铺：把所有未最小化的窗口铺成接近正方形的网格（2 个=并排，4 个=田字，依此类推）。
+  function tileGrid() {
+    const wins = processes.filter((p) => !p.minimized);
+    const n = wins.length;
+    if (!n || !winLayer) return;
+    const W = winLayer.clientWidth;
+    const H = winLayer.clientHeight;
+    const cols = Math.ceil(Math.sqrt(n));
+    const rows = Math.ceil(n / cols);
+    const cw = Math.floor(W / cols);
+    const ch = Math.floor(H / rows);
+    wins.forEach((p, i) => {
+      const c = i % cols;
+      const r = Math.floor(i / cols);
+      setBounds(p.id, { maximized: false, x: c * cw, y: r * ch, width: cw, height: ch });
+    });
+  }
+
   // 桌面空白处右键菜单（窗口内的右键由窗口/App 自己处理）
   function onDesktopMenu(e: MouseEvent) {
     if ((e.target as HTMLElement).closest('[data-window]')) return;
@@ -61,6 +79,7 @@
         separator: true,
         onClick: () => (pet.enabled = !pet.enabled),
       },
+      { label: '平铺窗口', icon: '🔲', onClick: tileGrid },
       { label: '层叠窗口', icon: '🗂️', onClick: cascade },
       { label: '关闭所有窗口', icon: '✕', danger: true, onClick: closeAll },
       { label: '键盘快捷键 (?)', icon: '⌨️', separator: true, onClick: openShortcuts },
@@ -111,6 +130,10 @@
         e.key as 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown'
       ];
       if (zone) { tile(zone); e.preventDefault(); }
+    } else if (e.ctrlKey && e.altKey && (e.key === 'g' || e.key === 'G')) {
+      // Ctrl+Alt+G 网格平铺所有窗口
+      tileGrid();
+      e.preventDefault();
     }
   }
 </script>
