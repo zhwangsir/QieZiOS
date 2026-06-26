@@ -1,0 +1,32 @@
+# QieZiOS 完善与查漏计划 · 第 2 轮（自治完善循环的真相源）
+
+> 第 1 轮（`DEVPLAN-POLISH.md`，P0 A1-A9 + P1 B1-B16 + P2 C1）已全部完成。本文件是**第 2 轮**待办，来源：2026-06-27 两路子 Agent 对扩大后的代码库重新审计（正确性/健壮性 + 功能/体验），均实读源码确认、排除第 1 轮已修项。
+> 执行协议同第 1 轮（见 `DEVPLAN-POLISH.md` 第一节）：每次循环挑价值最高的未完成 `[ ]`，builder 实现 → supervisor 子 Agent 跑 check+build 审 diff（≤3 轮否则撤销）→ 浏览器/DOM 验证（验不了标 ⏳ 待真机验证）→ 中文 commit（带 Co-Authored-By）→ push → 勾 `[x]` + 写验证结论 → 同步 CLAUDE.md。一次一项。安全暂缓、功能优先。
+
+---
+
+## 一、P0 / P1 · 正确性 / 健壮性
+
+- [x] **D1 清空对话 mid-stream 崩溃（stale index → undefined deref）**：`apps/Assistant.svelte` 流式回调写 `chat.msgs[i]`（i 在 ask 时捕获），而「清空」按钮无 `disabled={busy}`。AI 流式中点清空 → splice 清空数组 → `chat.msgs[i]` undefined → `TypeError` 崩溃 + busy 卡死要刷新。修：回调取 `const m=chat.msgs[i]; if(!m) return;` 防御 + 清空按钮 busy 时禁用。**P1，一键可复现，浏览器可验。**
+  - ✅ 实现：双层防护——(1) 流式回调改 `const m = chat.msgs[i]; if (!m) return;`，四种事件（text/reasoning/tool/error）全改用 `m`（仍是响应式数组元素代理，mutate 照常触发响应式），对话被截断时迟到事件安全丢弃；(2) 「清空」按钮加 `disabled={busy}` + disabled 样式 + 动态 title，从 UI 关闭竞态窗口。
+  - ✅ 浏览器实测（真 dev 服务 + 本地 GLM 流式）：流式中 `busy` 时「清空」disabled=true、流完恢复（停止→发送）；**直接 splice 清空 mid-stream（绕过禁用模拟迟到事件竞态）→ 无 console error/无 unhandledrejection（d1err=none）、msgCount 停在 0（迟到事件被守卫丢弃）、busy 恢复不卡死**；正常流式完成无回归。supervisor 子 Agent PASS（undefined 解引用彻底消除/四事件全改 m 无裸下标遗漏/响应式不变/Anthropic stream.on 与 OpenAI fetch 两条抛错路径都被 runAgent try/catch 兜住故 busy 必达 false/按钮禁用与 if gate 正交/stop 后迟到事件追加属良性/清空后再发 i 基于新数组正确/正常路径字节级等价）。npm check+build 0 错 0 警。
+- [ ] **D2 云同步上传被防抖的陈旧状态（静默漏数据）**：`system/sync.ts` 的 `gatherState()` 同步读 localStorage，但 `persisted()` 写盘有 150–500ms 防抖。改完笔记/移窗口后立刻点「☁️上传」→ 改动还在 pending 计时器里、没进 localStorage → 上传悄悄漏掉。修：加 `flushPersisted()`（立即触发所有挂起防抖）在 gatherState 前调。P1，逻辑+DOM 可验。
+- [ ] **D3 `restoreFromTrash` 撤销还原不查重名（同 A7/A9 类）**：`kernel/vfs.svelte.ts` restore 把节点放回 prevParent 时不查同名。删 a.txt → 新建同名 a.txt → 点撤销 → 同目录两个 a.txt 并存、路径只命中第一个。修：restore 落地前 `n.name = uniqueName(target, n.name)`（镜像 move）。P1，浏览器可验。
+- [ ] **D4 VFS 父链遍历遇环死循环（无 visited/深度上限）**：`isInside`/`pathSegments`/`resolvePath` 的 `..` 走 `while(cur)` 跟 parentId，若持久化树/外部 sync blob 含父环（A↦B↦A）→ 无限循环挂死标签页、无恢复。修：三处遍历加深度上限或 visited 集。P2，需损坏态触发但 sync 使其可达，逻辑可验。
+- [ ] **D5 `iconPos`/`dockPrefs` 持久化映射只增不删（陈旧+泄漏）**：`purge` 删 VFS 节点不删 `qz.desktopIcons` 里它的 {x,y}；`removeUserApp` 不删 `dockPrefs.order/hidden` 里该 App id。长期堆积孤儿项（且随账号同步上云）。修：purge 内裁 iconPos、removeUserApp 内裁 dockPrefs。P2，浏览器可验。
+- [ ] **A3（承接第 1 轮唯一未做项）过期一次性 `at` 命令开机补发执行**：schedd 重新武装时过期任务 `delay=0` 立即 fire，命令型经 shell 跑（可能 rm/mkdir 等副作用），与真 `at`（过期不补）相反。修：重新武装时过期的**命令型**一次性任务只移除不执行；提醒型可保留补发通知或也丢弃。文件：`system/services.ts`。P1，浏览器可验。
+
+## 二、P1 · 功能 / 体验完善（价值/成本比排序）
+
+- [ ] **E1 Markdown 预览（`.md` 文件可切「编辑/预览」）**：`lib/markdown.ts` 已有 `renderMarkdown()`（AI 回复在用），TextEdit 打开 .md 只显原文。加「编辑/预览」切换 + `{@html renderMarkdown(content)}`。单文件、复用现成、DOM 可验。**成本低、价值高、推荐优先。**
+- [ ] **E2 图片查看器缩放/旋转/适应窗口**：`ImageViewer.svelte` 只有 object-contain，无缩放旋转。加 scale/rotate $state + 工具栏 + 滚轮缩放 + 拖拽平移（纯 CSS transform 走 GPU）。单文件、DOM 可验、契合丝滑。
+- [ ] **E3 计算器键盘输入 + 历史**：`Calculator.svelte` 只有 onclick，无键盘。加 `<svelte:window>` keydown（数字/运算符/Enter=`=`/Esc=C/Backspace）+ 计算历史侧栏。单文件、DOM 可验。
+- [ ] **E4 文件管理器排序 + 列表/网格视图**：`Files.svelte` items 用原序、只有网格。加 sortBy(name/type/size/mtime)+sortDir + grid/list 切换（list 显大小/属主权限）。可能需给 VNode 加 mtime。中成本、DOM 可验。
+- [ ] **E5 终端外观自定义（字号/配色主题）**：`Terminal.svelte` 颜色字号全硬编码。加终端偏好（持久）：字号 + 几套配色（Nord/Dracula/跟随系统）。中成本，与作者「高自由度」对齐。
+- [ ] **E6 系统音效反馈**：全仓库零 Audio。新 `system/sound.ts` 用 WebAudio 合成开关窗/通知/错误短音 + Settings 开关音量（默认可关）。中成本，提升质感，音频本身 DOM 验不了（验 state+触发）。
+- [ ] **E7 任务视图 Exposé（窗口缩略图总览）**：第 1 轮 B13 注明延后。快捷键触发全屏 Exposé：未最小化窗 CSS scale 缩略平铺、点击聚焦。中/高成本，部分可验。
+- [ ] **E8 Dock 自动隐藏 + 桌面便签小组件**：Dock 常驻、桌面无小组件。加 Dock 自动隐藏开关（移到底部滑出）+ 可选桌面便签 widget。低/中成本，DOM 可验。
+
+---
+
+> 当前循环：第 2 轮审计建立本 backlog；**D1 已完成**（清空对话 mid-stream 崩溃修复）。下一项按协议挑价值最高的未完成项（候选：D3 还原撤销重名 / D2 同步陈旧状态 / E1 Markdown 预览）。

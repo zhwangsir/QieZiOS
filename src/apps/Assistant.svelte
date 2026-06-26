@@ -104,12 +104,14 @@
     await runAgent(
       history,
       (e: AiEvent) => {
-        if (e.type === 'text') chat.msgs[i].text += e.text;
-        else if (e.type === 'reasoning')
-          chat.msgs[i].reasoning = (chat.msgs[i].reasoning ?? '') + e.text;
-        else if (e.type === 'tool') chat.msgs[i].tools.push(e.name);
-        else if (e.type === 'error')
-          chat.msgs[i].text += (chat.msgs[i].text ? '\n\n' : '') + '⚠️ ' + e.message;
+        // 防御：若对话在流式途中被清空/截断（如点「清空」），占位消息已不在数组里
+        // → chat.msgs[i] 为 undefined。直接丢弃本次事件，避免 undefined.text 崩溃 + busy 卡死。
+        const m = chat.msgs[i];
+        if (!m) return;
+        if (e.type === 'text') m.text += e.text;
+        else if (e.type === 'reasoning') m.reasoning = (m.reasoning ?? '') + e.text;
+        else if (e.type === 'tool') m.tools.push(e.name);
+        else if (e.type === 'error') m.text += (m.text ? '\n\n' : '') + '⚠️ ' + e.message;
       },
       ctrl.signal,
     );
@@ -122,8 +124,11 @@
   <div class="flex h-8 shrink-0 items-center justify-between border-b border-qz-border px-3">
     <span class="text-xs text-qz-muted">🤖 助手</span>
     {#if chat.msgs.length}
-      <button class="rounded px-1.5 py-0.5 text-[11px] text-qz-muted hover:bg-qz-elevated" onclick={clearChat}
-        >清空</button>
+      <button
+        class="rounded px-1.5 py-0.5 text-[11px] text-qz-muted hover:bg-qz-elevated disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+        onclick={clearChat}
+        disabled={busy}
+        title={busy ? '流式回复中，先点「停止」再清空' : '清空对话'}>清空</button>
     {/if}
   </div>
 

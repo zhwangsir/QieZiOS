@@ -200,7 +200,8 @@ docker compose up -d   # 构建镜像 + 跑在 :8787；AI 网关/key 在 docker-
   - ✅ **H4 后台作业（job control）**：`system/jobs.svelte.ts`(运行时作业表 `jobs=$state`)；shell `backgroundRun`(末尾单 `&` → 用 ctx 副本不 await 地跑 `run`、登记 bgPromises、完成发通知) + `jobs`/`fg [n]`/`bg`/`wait` 命令（原列窗口进程的 jobs 被真后台作业替代）。实测 `curl 慢接口 &` 时 jobs 显示 Running 且前台命令仍立刻执行（真并发不阻塞）、fg 显示输出、wait 返回。
   - ✅ **H5 终端定时（at/crontab）**：`Schedule` 加 `command?`；`schedules.svelte.ts` 注入式 `setScheduleRunner`/`runScheduled`（避免 system→lib/shell 成环），schedd `fire` 有 command 就经 `runScheduled` 跑 shell、用通知回报；App 接独立 `cronShellCtx`。shell `at +<N>[s/m/h] <命令>`(一次性/-l/-r) + `atq` + `crontab <间隔> <命令>`(循环/-l/-r)。实测 `at +2s mkdir atdir`→2s 后真建出、一次性自删；`crontab 1s touch cronfile`→真循环建文件、`-r` 后停。
   - 🎉 **Phase H 全部完成（H1–H5 全 ✅）**——至此 G1–G7 + 融合三件套 + Phase H 整个「对标 Linux / Shell 自动化」backlog 清空，自治心跳已撤销。
-- 🚧 **完善与查漏阶段**（作者 `/loop` 自驱：完善功能 + 查漏 + 继续 · 详见 [[DEVPLAN-POLISH]]）：两路子 Agent 审计出的正确性 bug(P0) + 功能/体验缺口(P1) + 一致性打磨(P2) backlog，每轮挑价值最高项推进。
+- 🚧 **完善与查漏阶段**（作者 `/loop` 自驱：完善功能 + 查漏 + 继续 · 详见 [[DEVPLAN-POLISH]]，第 2 轮见 [[DEVPLAN-POLISH-2]]）：两路子 Agent 审计出的正确性 bug(P0) + 功能/体验缺口(P1) + 一致性打磨(P2) backlog，每轮挑价值最高项推进。**第 1 轮（DEVPLAN-POLISH）全 ✅；第 2 轮（DEVPLAN-POLISH-2）进行中**：重新审计扩大后代码库得 D1-D5+A3 正确性 + E1-E8 功能缺口。
+  - ✅ **D1 清空对话 mid-stream 崩溃修复**：Assistant 流式回调写 `chat.msgs[i]`（i 在 ask 时捕获），「清空」按钮原无 `disabled={busy}` → 流式中点清空 splice 数组 → undefined 解引用 `TypeError` + busy 卡死。修：回调改 `const m=chat.msgs[i]; if(!m) return;`（四事件全改 m，响应式不变）+ 清空按钮 busy 时禁用。实测：splice mid-stream 无 error、迟到事件被丢弃、busy 恢复不卡死。
   - ✅ **B1 自定义壁纸**：上传图片(blobStore)/纯色，优先于内置预设；`wallpaperBlob.svelte.ts` 管 objectURL 生命周期。兑现「美观第一优先级」、破除「只有内置渐变」。
   - ✅ **A1 对话附图持久化修复**：`persisted()` 加 `serialize` 变换参，chat 存盘前剥图片字节(留 imageCount)→ 防多图撑爆配额致整段对话静默丢失。
   - ✅ **B4 记事本查找/替换**：TextEdit 加 Ctrl+F 查找条（计数/导航/区分大小写/替换·全部）+ 行字符状态栏，补齐裸 textarea 的基础编辑能力。
