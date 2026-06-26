@@ -21,6 +21,7 @@ import {
 import { sys } from '../system/sys';
 import { appList, appMeta } from '../apps/appList';
 import { settings } from '../system/settings.svelte';
+import { isVirtualPath, virtualList, virtualRead, virtualStat, normAbs, VIRTUAL_MOUNTS } from '../system/vfsVirtual';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -166,6 +167,13 @@ function parseCountAndFile(args: string[], def = 10): { count: number; file: str
   return { count, file };
 }
 
+// 把（可能相对的）路径参数解析成规范绝对路径串。cwd 永远是真实节点 → 用 pathOf 取其绝对路径。
+function toAbsPath(ctx: ShellCtx, path: string): string {
+  if (path.startsWith('/')) return normAbs(path);
+  const base = pathOf(ctx.cwd);
+  return normAbs((base === '/' ? '' : base) + '/' + path);
+}
+
 // 命令收到上游/重定向来的 stdin（无则空串），返回 stdout/stderr/退出码
 type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult;
 
@@ -183,7 +191,8 @@ const COMMANDS: Record<string, CmdFn> = {
       '  whoami date theme clear help\n' +
       '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>。\n' +
       '/etc/profile 在每次开终端时执行（改它=持久化你的 export/别名）。\n' +
-      '试试：ls | grep txt  /  cat a.txt | wc -l  /  which ls  /  source /etc/profile',
+      '虚拟文件系统（只读）：ls /proc（进程）、cat /proc/<pid>/status、ls /dev、cat /dev/clipboard。\n' +
+      '试试：ls /proc  /  cat /dev/clipboard  /  ls | grep txt  /  which ls',
     code: 0,
   }),
 
@@ -251,20 +260,46 @@ const COMMANDS: Record<string, CmdFn> = {
 
   ls: (args, ctx) => {
     const { flags, rest } = splitFlags(args);
-    const targetId = resolvePath(ctx.cwd, rest[0] ?? '.');
-    if (!targetId) return { out: '', err: `ls: ${rest[0]}: 没有那个文件或目录`, code: 2 };
+    const arg = rest[0] ?? '.';
+    const abs = toAbsPath(ctx, arg);
+
+    // 虚拟挂载（/proc、/dev）
+    if (isVirtualPath(abs)) {
+      const stat = virtualStat(abs);
+      if (stat === null) return { out: '', err: `ls: ${arg}: 没有那个文件或目录`, code: 2 };
+      if (stat === 'file') return { out: abs.split('/').pop() ?? abs, code: 0 };
+      const entries = virtualList(abs) ?? [];
+      if (flags.has('l'))
+        return {
+          out: entries.map((e) => `${e.type === 'dir' ? 'd' : '-'}  (虚拟)  ${e.name}${e.type === 'dir' ? '/' : ''}`).join('\n'),
+          code: 0,
+        };
+      return { out: entries.map((e) => (e.type === 'dir' ? e.name + '/' : e.name)).join('  '), code: 0 };
+    }
+
+    const targetId = resolvePath(ctx.cwd, arg);
+    if (!targetId) return { out: '', err: `ls: ${arg}: 没有那个文件或目录`, code: 2 };
     const node = getNode(targetId);
     if (!node) return { out: '', err: 'ls: 无效路径', code: 2 };
     const items = node.type === 'dir' ? children(targetId) : [node];
+    // 列根目录时把虚拟挂载点也显示出来（proc/ dev/），方便发现；跳过与真实同名项避免重复
+    const existing = new Set(items.map((n) => n.name));
+    const mounts =
+      targetId === 'root' && node.type === 'dir'
+        ? VIRTUAL_MOUNTS.map((m) => m.slice(1)).filter((m) => !existing.has(m))
+        : [];
     if (flags.has('l')) {
       const lines = items.map((n) => {
         const t = n.type === 'dir' ? 'd' : '-';
         const size = n.type === 'dir' ? '-' : String(n.kind === 'binary' ? (n.size ?? 0) : n.content.length);
         return `${t}  ${size.padStart(7)}  ${fmtTime(n.updatedAt)}  ${n.name}${n.type === 'dir' ? '/' : ''}`;
       });
+      for (const m of mounts) lines.push(`d  (虚拟)  ${m}/`);
       return { out: lines.join('\n'), code: 0 };
     }
-    return { out: items.map((n) => (n.type === 'dir' ? n.name + '/' : n.name)).join('  '), code: 0 };
+    const names = items.map((n) => (n.type === 'dir' ? n.name + '/' : n.name));
+    for (const m of mounts) names.push(m + '/');
+    return { out: names.join('  '), code: 0 };
   },
 
   cd: (args, ctx) => {
@@ -278,6 +313,14 @@ const COMMANDS: Record<string, CmdFn> = {
     if (!args.length) return { out: stdin, code: 0 }; // 无参数 → 透传 stdin（支持管道）
     const parts: string[] = [];
     for (const a of args) {
+      const abs = toAbsPath(ctx, a);
+      if (isVirtualPath(abs)) {
+        const txt = virtualRead(abs);
+        if (txt === null)
+          return { out: parts.join('\n'), err: virtualStat(abs) === 'dir' ? `cat: ${a}: 是一个目录` : `cat: ${a}: 没有那个文件`, code: 1 };
+        parts.push(txt);
+        continue;
+      }
       const id = resolvePath(ctx.cwd, a);
       const n = id ? getNode(id) : undefined;
       if (!n) return { out: parts.join('\n'), err: `cat: ${a}: 没有那个文件`, code: 1 };
@@ -424,9 +467,9 @@ const COMMANDS: Record<string, CmdFn> = {
 
   // ── 文本处理（配合管道）─────────────────────────────
   grep: (args, ctx, stdin) => {
-    const { flags, rest } = splitFlags(args); // i=忽略大小写 n=行号 r=递归
+    const { flags, rest } = splitFlags(args); // i=忽略大小写 n=行号 r=递归 v=反选
     const pattern = rest[0];
-    if (pattern == null) return { out: '', err: 'grep: 用法 grep [-inr] 模式 [文件...]', code: 2 };
+    if (pattern == null) return { out: '', err: 'grep: 用法 grep [-vinr] 模式 [文件...]', code: 2 };
     const files = rest.slice(1);
     let re: RegExp | null = null;
     try {
@@ -434,12 +477,15 @@ const COMMANDS: Record<string, CmdFn> = {
     } catch {
       re = null; // 非法正则 → 退化为字面量匹配
     }
-    const test = (line: string) =>
-      re
+    const invert = flags.has('v');
+    const test = (line: string) => {
+      const hit = re
         ? re.test(line)
         : flags.has('i')
           ? line.toLowerCase().includes(pattern.toLowerCase())
           : line.includes(pattern);
+      return invert ? !hit : hit;
+    };
     const results: string[] = [];
     let matched = false;
     const scan = (text: string, prefix: string) => {
