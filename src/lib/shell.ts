@@ -16,6 +16,10 @@ import {
   move,
   trash,
   isImage,
+  setMode,
+  setOwner,
+  defaultMode,
+  DEFAULT_OWNER,
   type VNode,
 } from '../kernel/vfs.svelte';
 import { sys } from '../system/sys';
@@ -92,6 +96,7 @@ function writeToPath(ctx: ShellCtx, pathStr: string, content: string, append: bo
   const existing = children(dirId).find((n) => n.name === base);
   if (existing) {
     if (existing.type !== 'file') return `${base}: 不是文件`;
+    if (!permits(existing, ctx.env.USER, 2)) return `${base}: 权限不够`;
     writeFile(existing.id, append ? existing.content + content : content);
   } else {
     createFile(dirId, base, content);
@@ -174,6 +179,24 @@ function toAbsPath(ctx: ShellCtx, path: string): string {
   return normAbs((base === '/' ? '' : base) + '/' + path);
 }
 
+// ── 权限（mode/owner）相关 ────────────────────────────────
+function nodeMode(n: VNode): number {
+  return n.mode ?? defaultMode(n.type);
+}
+// rwxr-xr-x 风格权限串（首字符 d/-）
+function modeStr(n: VNode): string {
+  const m = nodeMode(n);
+  const triad = (t: number) => `${t & 4 ? 'r' : '-'}${t & 2 ? 'w' : '-'}${t & 1 ? 'x' : '-'}`;
+  return (n.type === 'dir' ? 'd' : '-') + triad((m >> 6) & 7) + triad((m >> 3) & 7) + triad(m & 7);
+}
+// best-effort 权限校验：bit 4=读 2=写 1=执行。root 全通过；属主看 owner 段，否则看 other 段（无 group）。
+function permits(n: VNode, user: string, bit: number): boolean {
+  if (user === 'root') return true;
+  const m = nodeMode(n);
+  const triad = user === (n.owner ?? DEFAULT_OWNER) ? (m >> 6) & 7 : m & 7;
+  return (triad & bit) !== 0;
+}
+
 // 命令收到上游/重定向来的 stdin（无则空串），返回 stdout/stderr/退出码
 type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult;
 
@@ -185,6 +208,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '可用命令：\n' +
       '  pwd ls cd cat echo  —— 浏览/查看\n' +
       '  mkdir touch rm mv cp —— 文件操作\n' +
+      '  chmod chown stat     —— 权限/属主（ls -l 看权限）\n' +
       '  open apps ps kill    —— 应用/进程\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset which source(.) —— 环境/配置\n' +
@@ -290,11 +314,10 @@ const COMMANDS: Record<string, CmdFn> = {
         : [];
     if (flags.has('l')) {
       const lines = items.map((n) => {
-        const t = n.type === 'dir' ? 'd' : '-';
         const size = n.type === 'dir' ? '-' : String(n.kind === 'binary' ? (n.size ?? 0) : n.content.length);
-        return `${t}  ${size.padStart(7)}  ${fmtTime(n.updatedAt)}  ${n.name}${n.type === 'dir' ? '/' : ''}`;
+        return `${modeStr(n)}  ${(n.owner ?? DEFAULT_OWNER).padEnd(6)}  ${size.padStart(7)}  ${fmtTime(n.updatedAt)}  ${n.name}${n.type === 'dir' ? '/' : ''}`;
       });
-      for (const m of mounts) lines.push(`d  (虚拟)  ${m}/`);
+      for (const m of mounts) lines.push(`dr-xr-xr-x  root    ${'-'.padStart(7)}  ${m}/`);
       return { out: lines.join('\n'), code: 0 };
     }
     const names = items.map((n) => (n.type === 'dir' ? n.name + '/' : n.name));
@@ -325,6 +348,7 @@ const COMMANDS: Record<string, CmdFn> = {
       const n = id ? getNode(id) : undefined;
       if (!n) return { out: parts.join('\n'), err: `cat: ${a}: 没有那个文件`, code: 1 };
       if (n.type === 'dir') return { out: parts.join('\n'), err: `cat: ${a}: 是一个目录`, code: 1 };
+      if (!permits(n, ctx.env.USER, 4)) return { out: parts.join('\n'), err: `cat: ${a}: 权限不够`, code: 1 };
       parts.push(n.kind === 'binary' ? `[二进制文件 ${n.mime ?? ''} ${n.size ?? 0}B]` : n.content);
     }
     return { out: parts.join('\n'), code: 0 };
@@ -463,6 +487,52 @@ const COMMANDS: Record<string, CmdFn> = {
       return { out: `主色已设为 ${a}`, code: 0 };
     }
     return { out: `当前：${settings.mode} / 主色 ${settings.accent}\n用法：theme dark|light 或 theme #8b5cf6`, code: 0 };
+  },
+
+  // ── 权限与所有权 ─────────────────────────────────────
+  chmod: (args, ctx) => {
+    if (args.length < 2) return { out: '', err: 'chmod: 用法 chmod <八进制如644> <路径...>', code: 2 };
+    const modeArg = args[0];
+    if (!/^[0-7]{3,4}$/.test(modeArg)) return { out: '', err: `chmod: ${modeArg}: 无效模式（用八进制，如 644 / 755 / 600）`, code: 1 };
+    const mode = parseInt(modeArg, 8);
+    for (const p of args.slice(1)) {
+      const id = resolvePath(ctx.cwd, p);
+      const n = id ? getNode(id) : undefined;
+      if (!id || !n) return { out: '', err: `chmod: ${p}: 没有那个文件或目录`, code: 1 };
+      setMode(id, mode);
+    }
+    return { out: '', code: 0 };
+  },
+  chown: (args, ctx) => {
+    if (args.length < 2) return { out: '', err: 'chown: 用法 chown <用户> <路径...>', code: 2 };
+    const owner = args[0];
+    for (const p of args.slice(1)) {
+      const id = resolvePath(ctx.cwd, p);
+      const n = id ? getNode(id) : undefined;
+      if (!id || !n) return { out: '', err: `chown: ${p}: 没有那个文件或目录`, code: 1 };
+      setOwner(id, owner);
+    }
+    return { out: '', code: 0 };
+  },
+  stat: (args, ctx) => {
+    const p = args[0];
+    if (!p) return { out: '', err: 'stat: 用法 stat <路径>', code: 2 };
+    const id = resolvePath(ctx.cwd, p);
+    const n = id ? getNode(id) : undefined;
+    if (!n) return { out: '', err: `stat: ${p}: 没有那个文件或目录`, code: 1 };
+    const size = n.type === 'dir' ? 0 : n.kind === 'binary' ? (n.size ?? 0) : n.content.length;
+    return {
+      out: [
+        `  文件: ${n.name}`,
+        `  类型: ${n.type === 'dir' ? '目录' : n.kind === 'binary' ? '二进制文件' : '文本文件'}`,
+        `  大小: ${size}`,
+        `  权限: ${modeStr(n)}  (${nodeMode(n).toString(8).padStart(3, '0')})`,
+        `  属主: ${n.owner ?? DEFAULT_OWNER}`,
+        `  修改: ${fmtTime(n.updatedAt)}`,
+        `  创建: ${fmtTime(n.createdAt)}`,
+      ].join('\n'),
+      code: 0,
+    };
   },
 
   // ── 文本处理（配合管道）─────────────────────────────

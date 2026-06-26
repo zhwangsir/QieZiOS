@@ -20,8 +20,16 @@ export interface VNode {
   mime?: string; // 二进制文件的 MIME 类型
   size?: number; // 二进制文件字节数
   prevParent?: string | null; // 进回收站前的父级（用于还原）
+  mode?: number; // Unix 风格权限位（八进制，如 0o644）。缺省按类型取默认（见 DEFAULT_MODE）
+  owner?: string; // 属主用户名。缺省视为 'qiezi'
   createdAt: number;
   updatedAt: number;
+}
+
+// 缺省权限：目录 755、文件 644（旧持久化节点没有 mode 时按此显示）
+export const DEFAULT_OWNER = 'qiezi';
+export function defaultMode(type: 'dir' | 'file'): number {
+  return type === 'dir' ? 0o755 : 0o644;
 }
 
 // 回收站用一个「哨兵 parentId」标记，不需要真节点：
@@ -78,7 +86,7 @@ export function createDir(parentId: string, name = '新建文件夹'): string {
   const id = crypto.randomUUID();
   const t = Date.now();
   const finalName = uniqueName(parentId, name);
-  vfs.nodes[id] = { id, name: finalName, type: 'dir', parentId, content: '', createdAt: t, updatedAt: t };
+  vfs.nodes[id] = { id, name: finalName, type: 'dir', parentId, content: '', mode: 0o755, owner: DEFAULT_OWNER, createdAt: t, updatedAt: t };
   emit('fs.create', { kind: '文件夹', name: finalName });
   return id;
 }
@@ -87,7 +95,7 @@ export function createFile(parentId: string, name = '新建文本.txt', content 
   const id = crypto.randomUUID();
   const t = Date.now();
   const finalName = uniqueName(parentId, name);
-  vfs.nodes[id] = { id, name: finalName, type: 'file', parentId, content, createdAt: t, updatedAt: t };
+  vfs.nodes[id] = { id, name: finalName, type: 'file', parentId, content, mode: 0o644, owner: DEFAULT_OWNER, createdAt: t, updatedAt: t };
   emit('fs.create', { kind: '文件', name: finalName });
   return id;
 }
@@ -109,6 +117,8 @@ export async function createBinaryFile(parentId: string, name: string, blob: Blo
     blobId,
     mime: blob.type,
     size: blob.size,
+    mode: 0o644,
+    owner: DEFAULT_OWNER,
     createdAt: t,
     updatedAt: t,
   };
@@ -165,6 +175,17 @@ export function writeFile(id: string, content: string): void {
     n.content = content;
     n.updatedAt = Date.now();
   }
+}
+
+// 改权限位（chmod）。不动 mtime（改的是元数据，非内容）。
+export function setMode(id: string, mode: number): void {
+  const n = vfs.nodes[id];
+  if (n) n.mode = mode;
+}
+// 改属主（chown）。
+export function setOwner(id: string, owner: string): void {
+  const n = vfs.nodes[id];
+  if (n) n.owner = owner;
 }
 
 // 软删除：移入回收站（记住原父级以便还原）。根节点不可删。
