@@ -1,0 +1,50 @@
+{
+  "name": "QieZiOS 示例仓库",
+  "apps": [
+    {
+      "id": "hello",
+      "name": "Hello 世界",
+      "icon": "👋",
+      "description": "最小示例：点按钮加茄子",
+      "app": {
+        "qzapp": 1,
+        "name": "Hello 世界",
+        "icon": "👋",
+        "caps": [],
+        "width": 320,
+        "height": 200,
+        "code": "<h2>👋 来自示例仓库</h2><p>点一下加个茄子：</p><button onclick=\"document.body.insertAdjacentText('beforeend','🍆')\" style=\"font-size:18px\">加茄子</button>"
+      }
+    },
+    {
+      "id": "dice",
+      "name": "掷骰子",
+      "icon": "🎲",
+      "description": "点一下随机出 1–6",
+      "app": {
+        "qzapp": 1,
+        "name": "掷骰子",
+        "icon": "🎲",
+        "caps": [],
+        "width": 280,
+        "height": 200,
+        "code": "<div style=\"text-align:center\"><div id=d style=\"font-size:64px\">🎲</div><button onclick=\"document.getElementById('d').textContent=['⚀','⚁','⚂','⚃','⚄','⚅'][Math.floor(Math.random()*6)]\">掷</button></div>"
+      }
+    },
+    {
+      "id": "askbot",
+      "name": "问 AI",
+      "icon": "🤖",
+      "description": "示例：用 ai 能力问一句",
+      "app": {
+        "qzapp": 1,
+        "name": "问 AI",
+        "icon": "🤖",
+        "caps": ["ai"],
+        "width": 380,
+        "height": 280,
+        "code": "<input id=q placeholder=问点什么 style=\"width:70%\"><button onclick=\"qz.ask(document.getElementById('q').value).then(a=>document.getElementById('o').textContent=a)\">问</button><pre id=o style=\"white-space:pre-wrap\"></pre>"
+      }
+    }
+  ]
+}

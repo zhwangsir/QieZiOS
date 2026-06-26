@@ -52,6 +52,7 @@ export const MAN: Record<string, ManPage> = {
   jobs: { title: '作业列表', syn: 'jobs', desc: '把窗口进程当作业列出（运行/停止）。本 shell 无 & 后台作业，为简化视图。' },
   kill: { title: '发信号给进程', syn: 'kill [-9|-STOP|-CONT|-TERM] <pid>', desc: '默认 TERM 终止；-9/KILL 强制关闭；-STOP 挂起(最小化)；-CONT 恢复。' },
   systemctl: { title: '管理后台服务', syn: 'systemctl [list|status|start|stop|restart|enable|disable] [服务]', desc: '查看/控制后台服务（init）。enable/disable 持久化开机启动；start/stop 为运行时操作。' },
+  pkg: { title: '远程 App 仓库', syn: 'pkg [list|search 词|install id|repo URL]', desc: '从远程仓库（catalog URL）浏览并安装 App（对标 apt）。list 列出、search 搜索、install 安装到「我的 App」、repo 查看/设置仓库源。也有图形界面「应用商店」。' },
 
   // 网络 / 环境 / 主题
   curl: { title: '抓取 URL', syn: 'curl [-i|-I] <url>', desc: '用浏览器 fetch 抓取一个 URL 并输出正文。-i 含状态行、-I 只看响应头。受同源/CORS 限制。' },

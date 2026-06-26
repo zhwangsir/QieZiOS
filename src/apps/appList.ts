@@ -19,6 +19,7 @@ export const appList: AppMeta[] = [
   { id: 'trash', title: '回收站', icon: '🗑️', width: 420, height: 380 },
   { id: 'studio', title: '开发者', icon: '🛠️', width: 760, height: 500 },
   { id: 'myapps', title: '我的 App', icon: '🧩', width: 480, height: 420 },
+  { id: 'appstore', title: '应用商店', icon: '📦', width: 480, height: 500 },
   { id: 'companion', title: '伙伴', icon: '🧚', width: 360, height: 480 },
   { id: 'sysmon', title: '任务管理器', icon: '📊', width: 560, height: 460 },
   { id: 'clipboard', title: '剪贴板', icon: '📋', width: 360, height: 420 },

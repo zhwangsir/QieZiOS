@@ -36,6 +36,7 @@ import {
   disableService,
 } from '../kernel/services.svelte';
 import { MAN } from './man';
+import { repoConfig, fetchCatalog, installCatalogApp } from '../system/appRepo.svelte';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -229,6 +230,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  whoami id su sudo useradd users —— 用户/账户\n' +
       '  open apps ps pstree jobs kill[-9/-STOP/-CONT] —— 应用/进程\n' +
       '  systemctl [list|status|start|stop|enable|disable] —— 后台服务\n' +
+      '  pkg [list|search|install|repo] —— 远程 App 仓库（apt 式）\n' +
       '  curl[-i/-I] fetch hostname —— 网络（受浏览器 CORS 限制）\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset which source(.) —— 环境/配置\n' +
@@ -612,6 +614,42 @@ const COMMANDS: Record<string, CmdFn> = {
       return { out: `主色已设为 ${a}`, code: 0 };
     }
     return { out: `当前：${settings.mode} / 主色 ${settings.accent}\n用法：theme dark|light 或 theme #8b5cf6`, code: 0 };
+  },
+
+  // ── 包管理（远程 App 仓库，对标 apt）────────────────────
+  pkg: async (args) => {
+    const [sub, arg] = args;
+    if (!sub || sub === 'help')
+      return { out: 'pkg list / pkg search <词> / pkg install <id> / pkg repo [URL]', code: 0 };
+    if (sub === 'repo') {
+      if (arg) {
+        repoConfig.url = arg;
+        return { out: `仓库源已设为 ${arg}`, code: 0 };
+      }
+      return { out: repoConfig.url, code: 0 };
+    }
+    try {
+      const cat = await fetchCatalog();
+      if (sub === 'list' || sub === 'search') {
+        let apps = cat.apps;
+        if (sub === 'search' && arg) {
+          const q = arg.toLowerCase();
+          apps = apps.filter((a) => (a.id + a.name + (a.description ?? '')).toLowerCase().includes(q));
+        }
+        const lines = apps.map((a) => `${a.icon} ${a.id.padEnd(12)} ${a.name}${a.description ? ' — ' + a.description : ''}`);
+        return { out: (cat.name ? cat.name + '\n' : '') + (lines.join('\n') || '（空）'), code: 0 };
+      }
+      if (sub === 'install') {
+        if (!arg) return { out: '', err: 'pkg install <id>', code: 2 };
+        const entry = cat.apps.find((a) => a.id === arg);
+        if (!entry) return { out: '', err: `pkg: 仓库里没有 ${arg}`, code: 1 };
+        installCatalogApp(entry);
+        return { out: `已安装 ${entry.name}（在「我的 App」里启动）`, code: 0 };
+      }
+      return { out: '', err: `pkg: 未知子命令 ${sub}（list/search/install/repo）`, code: 2 };
+    } catch (e) {
+      return { out: '', err: `pkg: ${e instanceof Error ? e.message : String(e)}`, code: 1 };
+    }
   },
 
   // ── 网络 ─────────────────────────────────────────────

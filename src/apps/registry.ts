@@ -11,6 +11,7 @@ import Clock from './Clock.svelte';
 import Trash from './Trash.svelte';
 import Studio from './Studio.svelte';
 import AppGallery from './AppGallery.svelte';
+import AppStore from './AppStore.svelte';
 import UserApp from './UserApp.svelte';
 import ImageViewer from './ImageViewer.svelte';
 import Companion from './Companion.svelte';
@@ -38,6 +39,7 @@ const components: Record<string, Component> = {
   trash: Trash,
   studio: Studio,
   myapps: AppGallery,
+  appstore: AppStore,
   companion: Companion,
   sysmon: SysMonitor,
   clipboard: Clipboard,
