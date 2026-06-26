@@ -172,6 +172,9 @@ export function move(id: string, destId: string): void {
   if (!dest || dest.type !== 'dir') return;
   if (n.parentId === destId) return;
   if (id === destId || isInside(destId, id)) return;
+  // 目标目录已有同名条目 → 自动改唯一名，避免「同名并存」导致按路径只能命中第一个、另一个永久不可达。
+  // 此刻 n 仍在原目录，children(destId) 不含 n，故 uniqueName 只对目标已有名去重；无冲突则原样返回。
+  n.name = uniqueName(destId, n.name);
   n.parentId = destId;
   n.updatedAt = Date.now();
 }

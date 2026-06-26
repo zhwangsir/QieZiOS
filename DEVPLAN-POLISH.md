@@ -25,7 +25,10 @@
 - [ ] **A4 `bgPromises` Map 只增不删（后台作业泄漏）**：`lib/shell.ts` 每个 `cmd &` 的 promise 永久留存（含完整结果串），`jobs.list` 封顶 30 但 bgPromises 无清理。修：作业完成后裁剪 bgPromises（与 jobs.list 同步/保留最近 N）。
 - [ ] **A5 拖拽中关窗泄漏 rAF + snap 预览**：`shell/Window.svelte` 拖动/缩放时窗口若被其它逻辑关闭，`onpointerup` 不触发 → pending rAF 不取消、`snapState.preview` 不清。修：组件卸载 `$effect` 清理里 `cancelAnimationFrame` + 清 preview。
 - [ ] **A6 Live2D 加载失败泄漏 WebGL 上下文**：`lib/live2d.ts` `createPet` 若 `Live2DModel.from` 抛错，已建的 PIXI `Application`（WebGL 上下文）不回收 → 反复填错 URL 耗尽浏览器 ~16 上下文上限。修：model 加载失败前 `app.destroy()`。
-- [ ] **A7 `vfs.move` 不查目标目录重名 → 同名并存、路径不可达**：`resolvePath` 只命中第一个同名，另一个永久无法按路径访问。修：move 落地前查重名，改名或拒绝。文件：`kernel/vfs.svelte.ts`。
+- [x] **A7 `vfs.move` 不查目标目录重名 → 同名并存、路径不可达**：`resolvePath` 只命中第一个同名，另一个永久无法按路径访问。修：move 落地前查重名，改名或拒绝。文件：`kernel/vfs.svelte.ts`。
+  - ✅ 实现：`move` 在落地前 `n.name = uniqueName(destId, n.name)`——目标已有同名则改唯一名（「x 2.txt」），无冲突原样返回；调用时 n 仍在原父目录故 uniqueName 不把自己算进去。覆盖 GUI 拖拽（Files/DesktopIcons）+ shell `mv 进目录`。
+  - ✅ 浏览器实测：根 a.txt(ROOT-A) `mv` 进已有 a.txt(INDIR-A) 的目录 → 得「a 2.txt(ROOT-A)」+原「a.txt(INDIR-A)」两者皆可达、根下不再有 a.txt。supervisor 子 Agent PASS（uniqueName 时机/无冲突不误改/同目录·跨目录 rename 路径不受影响/目录与二进制同样适用全过）。npm check+build 0 错 0 警。
+- [ ] **A9 `rename` 同名不去重（同类，A7 的姊妹项）**：GUI 重命名/`mv a.txt 已存在.txt` 把名字改成目录里已存在的名 → 同样产生同名并存、路径不可达（rename 是「显式改名」语义，去重会让用户输入的名被悄悄改，故倾向：检测冲突时拒绝 + 提示，而非自动 +2）。文件：`kernel/vfs.svelte.ts`、`apps/Files.svelte`、`lib/shell.ts`(mv 改名分支)。
 - [ ] **A8 `head -n -5` 负数语义错**：`parseCountAndFile` 不挡负数，`slice(0,-5)` 返回「除末 5 行外」。修：count 取 `Math.max(0, …)`。文件：`lib/shell.ts`。
 
 > 注：审计曾报 `vfs.purge` 删多层文件夹产生孤儿节点——实读代码确认是**后序递归（孙→子→父，children 每层重算）正确无孤儿**，已排除（误报）。
