@@ -189,6 +189,40 @@ function parseCountAndFile(args: string[], def = 10): { count: number; file: str
   return { count, file };
 }
 
+// test / [ ] 的条件求值（给 if/while 用）。bit：-f/-d/-e 查文件；字符串/数值比较；前导 ! 取反。
+function evalTest(args: string[], ctx: ShellCtx): boolean {
+  if (args[0] === '!') return !evalTest(args.slice(1), ctx);
+  if (args.length === 0) return false;
+  if (args.length === 1) return args[0] !== ''; // 单参：非空字符串为真
+  if (args.length === 2) {
+    const [op, val] = args;
+    if (op === '-z') return val === '';
+    if (op === '-n') return val !== '';
+    if (op === '-e' || op === '-f' || op === '-d') {
+      const id = resolvePath(ctx.cwd, val);
+      const n = id ? getNode(id) : undefined;
+      if (!n) return false;
+      if (op === '-d') return n.type === 'dir';
+      if (op === '-f') return n.type === 'file';
+      return true; // -e：存在即可
+    }
+    return false;
+  }
+  if (args.length === 3) {
+    const [a, op, b] = args;
+    if (op === '=' || op === '==') return a === b;
+    if (op === '!=') return a !== b;
+    if (op === '-eq') return Number(a) === Number(b);
+    if (op === '-ne') return Number(a) !== Number(b);
+    if (op === '-lt') return Number(a) < Number(b);
+    if (op === '-le') return Number(a) <= Number(b);
+    if (op === '-gt') return Number(a) > Number(b);
+    if (op === '-ge') return Number(a) >= Number(b);
+    return false;
+  }
+  return false;
+}
+
 // 把（可能相对的）路径参数解析成规范绝对路径串。cwd 永远是真实节点 → 用 pathOf 取其绝对路径。
 function toAbsPath(ctx: ShellCtx, path: string): string {
   if (path.startsWith('/')) return normAbs(path);
@@ -223,6 +257,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  ai <问题> —— 命令行问 AI（可管道喂入）\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset alias unalias which source(.) —— 环境/配置\n' +
+      '  if/then/fi · for…in…do…done · while · test/[ ] · sh 脚本.sh —— 脚本/控制流\n' +
       '  date theme clear  man <命令>（详细用法）\n' +
       '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>。\n' +
       '/etc/profile 在每次开终端时执行（改它=持久化你的 export/别名）。\n' +
@@ -289,6 +324,12 @@ const COMMANDS: Record<string, CmdFn> = {
     for (const a of args) removeAlias(a);
     return { out: '', code: 0 };
   },
+  // test / [ … ]：条件判断，返回退出码（0=真 1=假）。给 if/while 用。
+  test: (args, ctx) => ({ out: '', code: evalTest(args, ctx) ? 0 : 1 }),
+  '[': (args, ctx) => {
+    if (args[args.length - 1] !== ']') return { out: '', err: '[: 缺少结尾 ]', code: 2 };
+    return { out: '', code: evalTest(args.slice(0, -1), ctx) ? 0 : 1 };
+  },
   // which：命令在不在「PATH」里（内置命令一律算在 PATH 第一段下）
   which: (args, ctx) => {
     if (!args.length) return { out: '', err: 'which: 用法 which <命令>', code: 2 };
@@ -301,32 +342,22 @@ const COMMANDS: Record<string, CmdFn> = {
     }
     return { out: outs.join('\n'), code: allFound ? 0 : 1 };
   },
-  // source / . ：读一个文件并逐行执行（rc/profile 用）。共享同一个 ctx，故 export/cd 会生效。
+  // source / . ：读一个文件并执行（rc/profile/脚本用）。整文件交给 run（支持多行控制流）+ 共享 ctx。
   source: async (args, ctx) => {
     const f = args[0];
     if (!f) return { out: '', err: 'source: 用法 source <文件>', code: 2 };
-    if (sourceDepth >= 25) return { out: '', err: 'source: 嵌套过深（疑似循环 source）', code: 1 };
+    if (sourceDepth >= 25) return { out: '', err: 'source: 嵌套过深（疑似循环）', code: 1 };
     const r = readFileText(ctx, f);
     if (r.err) return { out: '', err: `source: ${r.err}`, code: 1 };
-    const outs: string[] = [];
-    let code = 0;
     sourceDepth++;
     try {
-      for (const raw of (r.text ?? '').split('\n')) {
-        const t = raw.trim();
-        if (!t || t.startsWith('#')) continue; // 跳过空行/注释
-        const res = await run(t, ctx);
-        if (res.out) outs.push(res.out);
-        if (res.err) outs.push(res.err);
-        if (res.cd) ctx.cwd = res.cd; // 把 cd 落到共享 ctx
-        code = res.code;
-      }
+      return await run(r.text ?? '', ctx); // 整文件解释执行（多行 if/for/while 都能跨行）
     } finally {
       sourceDepth--;
     }
-    return { out: outs.join('\n'), code };
   },
   '.': (args, ctx, stdin) => COMMANDS.source(args, ctx, stdin), // `.` 是 source 的别名
+  sh: (args, ctx, stdin) => COMMANDS.source(args, ctx, stdin), // sh <脚本> 跑脚本文件（同 source）
 
   ls: (args, ctx) => {
     const { flags, rest } = splitFlags(args);
@@ -1097,8 +1128,9 @@ function splitConnectors(line: string): { before: ';' | '&&' | '||' | null; cmd:
   return segs;
 }
 
-// 执行一行：先按 ; && || 切分顺序执行（短路），每段再交给 runPipeline 跑管道+重定向。
-export async function run(line: string, ctx: ShellCtx): Promise<CmdResult> {
+// 执行一条「语句」：先按 ; && || 切分顺序执行（短路），每段再交给 runPipeline 跑管道+重定向。
+// 由脚本解释器（run/runScript）对每条叶子语句调用；语句内无 ;（已被 splitStatements 切走）。
+async function runLine(line: string, ctx: ShellCtx): Promise<CmdResult> {
   const trimmed = line.trim();
   if (!trimmed) return { out: '', code: 0 };
   const segs = splitConnectors(trimmed);
@@ -1125,6 +1157,226 @@ export async function run(line: string, ctx: ShellCtx): Promise<CmdResult> {
     if (res.clear) clear = true;
   }
   if (!ran) return { out: '', code: 0 };
+  return { out: outs.join('\n'), err: errs.length ? errs.join('\n') : undefined, code: lastCode, cd, clear };
+}
+
+// ── 脚本/控制流解释器（if/for/while + ; 与换行分句；叶子语句交给 runLine）──────────
+type SNode =
+  | { t: 'cmd'; text: string }
+  | { t: 'if'; branches: { cond: string; body: SNode[] }[]; elseBody: SNode[] | null }
+  | { t: 'for'; varName: string; words: string; body: SNode[] }
+  | { t: 'while'; cond: string; body: SNode[] };
+
+const CTRL_KW = new Set(['if', 'then', 'elif', 'else', 'fi', 'for', 'in', 'do', 'done', 'while']);
+
+// 按 ; 与换行切成语句（尊重引号），trim、去空。
+function splitStatements(text: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let q: '"' | "'" | null = null;
+  for (const c of text) {
+    if (q) {
+      cur += c;
+      if (c === q) q = null;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      cur += c;
+      q = c;
+      continue;
+    }
+    if (c === ';' || c === '\n') {
+      const t = cur.trim();
+      if (t && !t.startsWith('#')) out.push(t); // 跳过整行注释
+      cur = '';
+      continue;
+    }
+    cur += c;
+  }
+  const last = cur.trim();
+  if (last && !last.startsWith('#')) out.push(last);
+  return out;
+}
+const firstWord = (s: string): string => (s ?? '').trim().split(/\s+/)[0] ?? '';
+const afterWord = (s: string): string => (s ?? '').trim().replace(/^\S+\s*/, ''); // 去掉首词
+
+// 语句列表 → AST（递归下降）。语法错误抛 Error。
+function parseStatements(stmts: string[]): SNode[] {
+  let p = 0;
+  const IF_STOPS = new Set(['elif', 'else', 'fi']);
+  const expect = (kw: string) => {
+    if (firstWord(stmts[p] ?? '') !== kw) throw new Error(`缺少 ${kw}`);
+  };
+  // then/do/else 后面同一语句的内联内容：作为下一条语句重新注入解析（这样 `do if …`、`then for …`
+  // 这种「内联起一个控制结构」也能正确递归解析，而不是被当成一条普通命令。
+  const reinjectInline = (kw: string) => {
+    expect(kw);
+    const inline = afterWord(stmts[p]);
+    p++;
+    if (inline) stmts.splice(p, 0, inline);
+  };
+  const inlineThen = (kw: string, branches: { cond: string; body: SNode[] }[], cond: string) => {
+    reinjectInline(kw); // 'then'
+    branches.push({ cond, body: parseSeq(IF_STOPS) });
+  };
+  const inlineDoBody = (): SNode[] => {
+    reinjectInline('do');
+    return parseSeq(new Set(['done']));
+  };
+  function parseIf(): SNode {
+    const cond0 = afterWord(stmts[p]);
+    p++; // "if COND"
+    const branches: { cond: string; body: SNode[] }[] = [];
+    inlineThen('then', branches, cond0);
+    while (firstWord(stmts[p] ?? '') === 'elif') {
+      const c = afterWord(stmts[p]);
+      p++;
+      inlineThen('then', branches, c);
+    }
+    let elseBody: SNode[] | null = null;
+    if (firstWord(stmts[p] ?? '') === 'else') {
+      const inline = afterWord(stmts[p]);
+      p++;
+      if (inline) stmts.splice(p, 0, inline);
+      elseBody = parseSeq(new Set(['fi']));
+    }
+    expect('fi');
+    p++;
+    return { t: 'if', branches, elseBody };
+  }
+  function parseFor(): SNode {
+    const toks = (stmts[p] ?? '').trim().split(/\s+/);
+    p++; // "for VAR in WORDS"
+    const varName = toks[1] ?? '';
+    const inIdx = toks.indexOf('in');
+    if (!varName || inIdx < 1) throw new Error('for 语法：for 变量 in 词…; do … done');
+    const words = toks.slice(inIdx + 1).join(' ');
+    const body = inlineDoBody();
+    expect('done');
+    p++;
+    return { t: 'for', varName, words, body };
+  }
+  function parseWhile(): SNode {
+    const cond = afterWord(stmts[p]);
+    p++;
+    const body = inlineDoBody();
+    expect('done');
+    p++;
+    return { t: 'while', cond, body };
+  }
+  function parseSeq(stops: Set<string>): SNode[] {
+    const nodes: SNode[] = [];
+    while (p < stmts.length) {
+      const fw = firstWord(stmts[p]);
+      if (stops.has(fw)) break;
+      if (fw === 'if') nodes.push(parseIf());
+      else if (fw === 'for') nodes.push(parseFor());
+      else if (fw === 'while') nodes.push(parseWhile());
+      else if (CTRL_KW.has(fw)) throw new Error(`意外的 ${fw}`);
+      else {
+        nodes.push({ t: 'cmd', text: stmts[p] });
+        p++;
+      }
+    }
+    return nodes;
+  }
+  const result = parseSeq(new Set());
+  if (p < stmts.length) throw new Error(`意外的 ${firstWord(stmts[p])}`);
+  return result;
+}
+
+// for 词表展开：subst $VAR + 按空白切 + glob（* ?）匹配 cwd
+function expandWords(text: string, ctx: ShellCtx): string[] {
+  if (!text.trim()) return [];
+  const out: string[] = [];
+  for (const t of tokenize(text).map((x) => subst(x, ctx))) {
+    if (/[*?]/.test(t)) {
+      const re = globToRe(t);
+      const hits = children(ctx.cwd).filter((n) => re.test(n.name)).map((n) => n.name);
+      out.push(...(hits.length ? hits : [t]));
+    } else out.push(t);
+  }
+  return out;
+}
+
+const MAX_LOOP = 5000; // while/for 迭代上限（防失控；够交互用，又不至于卡死/堆爆输出）
+const OUT_CAP = 100000; // 单次执行累计输出上限（字符）；超了就截断，防失控循环堆出几 MB
+
+// 顶层执行：解析成 AST 后逐节点执行。含 if/for/while；叶子语句走 runLine。
+export async function run(text: string, ctx: ShellCtx): Promise<CmdResult> {
+  if (!text.trim()) return { out: '', code: 0 };
+  let ast: SNode[];
+  try {
+    ast = parseStatements(splitStatements(text));
+  } catch (e) {
+    return { out: '', err: 'qzsh: 语法错误：' + (e instanceof Error ? e.message : String(e)), code: 2 };
+  }
+  const outs: string[] = [];
+  const errs: string[] = [];
+  let lastCode = 0;
+  let cd: string | undefined;
+  let clear = false;
+  let loops = 0;
+  let outLen = 0;
+  let truncated = false;
+  const collect = (arr: string[], s: string) => {
+    if (truncated) return;
+    arr.push(s);
+    outLen += s.length;
+    if (outLen > OUT_CAP) {
+      truncated = true;
+      errs.push('…（输出过多，已截断）');
+    }
+  };
+
+  const runLeaf = async (line: string) => {
+    const res = await runLine(line, ctx);
+    if (res.out) collect(outs, res.out);
+    if (res.err) collect(errs, res.err);
+    if (res.cd) {
+      cd = res.cd;
+      ctx.cwd = res.cd;
+    }
+    if (res.clear) clear = true;
+    lastCode = res.code;
+  };
+  const execNodes = async (nodes: SNode[]) => {
+    for (const n of nodes) await execNode(n);
+  };
+  const execNode = async (n: SNode): Promise<void> => {
+    if (n.t === 'cmd') return runLeaf(n.text);
+    if (n.t === 'if') {
+      for (const br of n.branches) {
+        await runLeaf(br.cond); // 条件命令的退出码决定走哪支
+        if (lastCode === 0) return execNodes(br.body);
+      }
+      if (n.elseBody) await execNodes(n.elseBody);
+      return;
+    }
+    if (n.t === 'for') {
+      for (const w of expandWords(n.words, ctx)) {
+        ctx.env[n.varName] = w;
+        await execNodes(n.body);
+        if (++loops > MAX_LOOP || truncated) return;
+        if (loops % 256 === 0) await new Promise((r) => setTimeout(r)); // 周期性让出主线程，别冻 UI
+      }
+      return;
+    }
+    // while
+    for (;;) {
+      await runLeaf(n.cond);
+      if (lastCode !== 0) break;
+      await execNodes(n.body);
+      if (++loops > MAX_LOOP) {
+        errs.push('while: 超过最大迭代次数');
+        break;
+      }
+      if (truncated) break; // 输出已截断，没必要再空转
+      if (loops % 256 === 0) await new Promise((r) => setTimeout(r));
+    }
+  };
+
+  await execNodes(ast);
   return { out: outs.join('\n'), err: errs.length ? errs.join('\n') : undefined, code: lastCode, cd, clear };
 }
 
@@ -1162,7 +1414,14 @@ async function runPipeline(line: string, ctx: ShellCtx): Promise<CmdResult> {
       }
     }
     const fn = COMMANDS[cmd];
-    if (!fn) {
+    // 不是内置命令、但形如路径（./x、a/b）且指向文本文件 → 当脚本执行（sh/./file）
+    let scriptNode: VNode | undefined;
+    if (!fn && cmd.includes('/')) {
+      const sid = resolvePath(ctx.cwd, cmd);
+      const sn = sid ? getNode(sid) : undefined;
+      if (sn?.type === 'file' && sn.kind !== 'binary') scriptNode = sn;
+    }
+    if (!fn && !scriptNode) {
       errAccum.push(`qzsh: ${cmd}: 未找到命令`);
       code = 127;
       pipedOut = '';
@@ -1185,7 +1444,19 @@ async function runPipeline(line: string, ctx: ShellCtx): Promise<CmdResult> {
       stageStdin = n.kind === 'binary' ? '' : n.content;
     }
 
-    const res = await fn(args, ctx, stageStdin);
+    let res: CmdResult;
+    if (fn) {
+      res = await fn(args, ctx, stageStdin);
+    } else if (sourceDepth >= 25) {
+      res = { out: '', err: 'qzsh: 脚本嵌套过深', code: 1 };
+    } else {
+      sourceDepth++; // 脚本文件：解释执行其内容（含多行控制流），共享 ctx
+      try {
+        res = await run(scriptNode!.content, ctx);
+      } finally {
+        sourceDepth--;
+      }
+    }
     code = res.code;
     if (res.cd) cd = res.cd;
     if (res.clear) clear = true;

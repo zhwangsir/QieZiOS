@@ -65,7 +65,12 @@ export const MAN: Record<string, ManPage> = {
   alias: { title: '命令别名', syn: "alias [名=值]", desc: "给命令起别名（持久化、跨终端）。无参列出全部；alias ll='ls -l' 定义；之后输入 ll 即展开。" },
   unalias: { title: '删别名', syn: 'unalias <名>', desc: '删除一个命令别名。' },
   which: { title: '命令位置', syn: 'which <命令>', desc: '若命令是内置命令，按 PATH 显示其路径（如 /bin/ls）。' },
-  source: { title: '执行脚本', syn: 'source <文件>（或 . <文件>）', desc: '逐行执行一个文件里的命令（共享当前 shell 环境）。开终端时会自动 source /etc/profile。' },
+  source: { title: '执行脚本', syn: 'source <文件>（或 . <文件>）', desc: '执行一个文件里的命令（整文件解释、支持多行 if/for/while，共享当前 shell 环境）。开终端时会自动 source /etc/profile。' },
+  sh: { title: '跑脚本', syn: 'sh <脚本文件>（或 ./脚本.sh）', desc: '执行一个脚本文件，支持多行控制流。等价于 source。也可直接 ./文件 运行（路径指向文本文件即可）。' },
+  test: { title: '条件判断', syn: 'test 表达式（或 [ 表达式 ]）', desc: '判断条件并返回退出码（0真/1假），给 if/while 用。支持 -f/-d/-e 文件、-z/-n 空串、= != 字符串、-eq/-ne/-lt/-le/-gt/-ge 数值、前导 ! 取反。' },
+  if: { title: '条件', syn: 'if 条件; then …; [elif 条件; then …;] [else …;] fi', desc: '按条件命令的退出码（0=真）选择执行分支。例：if test -f a.txt; then echo 有; else echo 无; fi' },
+  for: { title: '循环（遍历）', syn: 'for 变量 in 词…; do …; done', desc: '遍历词表，每次把变量设为一个词后执行循环体。词表支持 $VAR 与通配 *。例：for f in *.txt; do echo $f; done' },
+  while: { title: '循环（条件）', syn: 'while 条件; do …; done', desc: '只要条件命令退出码为 0 就反复执行循环体（有最大迭代保护）。' },
   theme: { title: '改主题', syn: 'theme dark|light|#hex', desc: '切换明暗或设置主色。无参数显示当前主题。' },
   clear: { title: '清屏', syn: 'clear', desc: '清空终端输出（也可按 Ctrl+L）。' },
 };
