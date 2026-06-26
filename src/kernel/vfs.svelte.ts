@@ -244,7 +244,12 @@ export function trash(id: string): void {
 export function restoreFromTrash(id: string): void {
   const n = vfs.nodes[id];
   if (!n) return;
-  n.parentId = n.prevParent && vfs.nodes[n.prevParent] ? n.prevParent : 'root';
+  const target = n.prevParent && vfs.nodes[n.prevParent] ? n.prevParent : 'root';
+  // 还原前查重名（同 move 的 A7 处理）：删除后原目录可能已新建同名项、或一次还原多个同名项，
+  // 自动改唯一名，避免「同名并存、按路径只命中第一个、另一个永久不可达」。
+  // 此刻 n 仍在 'trash'，children(target) 不含 n，uniqueName 只对目标已有名去重。
+  n.name = uniqueName(target, n.name);
+  n.parentId = target;
   n.prevParent = undefined;
   n.updatedAt = Date.now();
 }
@@ -272,6 +277,14 @@ if (import.meta.env.DEV) {
     copyNode,
     children,
     rename,
+    createFile,
+    createDir,
+    trash,
+    restoreFromTrash,
+    purge,
+    resolvePath,
+    pathOf,
+    nodes: vfs.nodes,
   };
 }
 

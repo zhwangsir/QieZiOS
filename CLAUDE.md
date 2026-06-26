@@ -202,6 +202,7 @@ docker compose up -d   # 构建镜像 + 跑在 :8787；AI 网关/key 在 docker-
   - 🎉 **Phase H 全部完成（H1–H5 全 ✅）**——至此 G1–G7 + 融合三件套 + Phase H 整个「对标 Linux / Shell 自动化」backlog 清空，自治心跳已撤销。
 - 🚧 **完善与查漏阶段**（作者 `/loop` 自驱：完善功能 + 查漏 + 继续 · 详见 [[DEVPLAN-POLISH]]，第 2 轮见 [[DEVPLAN-POLISH-2]]）：两路子 Agent 审计出的正确性 bug(P0) + 功能/体验缺口(P1) + 一致性打磨(P2) backlog，每轮挑价值最高项推进。**第 1 轮（DEVPLAN-POLISH）全 ✅；第 2 轮（DEVPLAN-POLISH-2）进行中**：重新审计扩大后代码库得 D1-D5+A3 正确性 + E1-E8 功能缺口。
   - ✅ **D1 清空对话 mid-stream 崩溃修复**：Assistant 流式回调写 `chat.msgs[i]`（i 在 ask 时捕获），「清空」按钮原无 `disabled={busy}` → 流式中点清空 splice 数组 → undefined 解引用 `TypeError` + busy 卡死。修：回调改 `const m=chat.msgs[i]; if(!m) return;`（四事件全改 m，响应式不变）+ 清空按钮 busy 时禁用。实测：splice mid-stream 无 error、迟到事件被丢弃、busy 恢复不卡死。
+  - ✅ **D3 回收站还原重名去重**：`vfs.restoreFromTrash` 还原时不查目标目录重名 → 删 a.txt→新建同名→还原 = 同名并存、resolvePath 只命中第一个、另一个永久不可达（静默数据丢失）。修：还原落地前 `n.name = uniqueName(target, n.name)`（n 仍在 'trash' 故不误改自己，镜像 move 的 A7）。**补齐 A7(move)/A9(rename)/D3(restore) 数据完整性三件套**。实测：还原项→「d3 2.txt」、两者路径各自可达；无冲突不误改；文件夹还原子项按 id 仍 linked。
   - ✅ **B1 自定义壁纸**：上传图片(blobStore)/纯色，优先于内置预设；`wallpaperBlob.svelte.ts` 管 objectURL 生命周期。兑现「美观第一优先级」、破除「只有内置渐变」。
   - ✅ **A1 对话附图持久化修复**：`persisted()` 加 `serialize` 变换参，chat 存盘前剥图片字节(留 imageCount)→ 防多图撑爆配额致整段对话静默丢失。
   - ✅ **B4 记事本查找/替换**：TextEdit 加 Ctrl+F 查找条（计数/导航/区分大小写/替换·全部）+ 行字符状态栏，补齐裸 textarea 的基础编辑能力。

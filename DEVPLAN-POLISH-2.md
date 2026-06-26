@@ -11,7 +11,9 @@
   - ✅ 实现：双层防护——(1) 流式回调改 `const m = chat.msgs[i]; if (!m) return;`，四种事件（text/reasoning/tool/error）全改用 `m`（仍是响应式数组元素代理，mutate 照常触发响应式），对话被截断时迟到事件安全丢弃；(2) 「清空」按钮加 `disabled={busy}` + disabled 样式 + 动态 title，从 UI 关闭竞态窗口。
   - ✅ 浏览器实测（真 dev 服务 + 本地 GLM 流式）：流式中 `busy` 时「清空」disabled=true、流完恢复（停止→发送）；**直接 splice 清空 mid-stream（绕过禁用模拟迟到事件竞态）→ 无 console error/无 unhandledrejection（d1err=none）、msgCount 停在 0（迟到事件被守卫丢弃）、busy 恢复不卡死**；正常流式完成无回归。supervisor 子 Agent PASS（undefined 解引用彻底消除/四事件全改 m 无裸下标遗漏/响应式不变/Anthropic stream.on 与 OpenAI fetch 两条抛错路径都被 runAgent try/catch 兜住故 busy 必达 false/按钮禁用与 if gate 正交/stop 后迟到事件追加属良性/清空后再发 i 基于新数组正确/正常路径字节级等价）。npm check+build 0 错 0 警。
 - [ ] **D2 云同步上传被防抖的陈旧状态（静默漏数据）**：`system/sync.ts` 的 `gatherState()` 同步读 localStorage，但 `persisted()` 写盘有 150–500ms 防抖。改完笔记/移窗口后立刻点「☁️上传」→ 改动还在 pending 计时器里、没进 localStorage → 上传悄悄漏掉。修：加 `flushPersisted()`（立即触发所有挂起防抖）在 gatherState 前调。P1，逻辑+DOM 可验。
-- [ ] **D3 `restoreFromTrash` 撤销还原不查重名（同 A7/A9 类）**：`kernel/vfs.svelte.ts` restore 把节点放回 prevParent 时不查同名。删 a.txt → 新建同名 a.txt → 点撤销 → 同目录两个 a.txt 并存、路径只命中第一个。修：restore 落地前 `n.name = uniqueName(target, n.name)`（镜像 move）。P1，浏览器可验。
+- [x] **D3 `restoreFromTrash` 撤销还原不查重名（同 A7/A9 类）**：`kernel/vfs.svelte.ts` restore 把节点放回 prevParent 时不查同名。删 a.txt → 新建同名 a.txt → 点撤销 → 同目录两个 a.txt 并存、路径只命中第一个。修：restore 落地前 `n.name = uniqueName(target, n.name)`（镜像 move）。P1，浏览器可验。
+  - ✅ 实现：`restoreFromTrash` 先算 `target`（prevParent 在则用、否则 root），再 `n.name = uniqueName(target, n.name)` 然后才 `n.parentId = target`——此刻 n 仍在 'trash'，children(target) 不含 n，故只对目标已有名去重、不误改自己（与 move 的 A7 时机一致）。补齐 A7(move)/A9(rename)/D3(restore) 数据完整性三件套。顺带扩展 DEV 钩子 `__qzVfs`（仅 DEV）加 createFile/createDir/trash/restoreFromTrash/purge/resolvePath/pathOf/nodes 供测试。
+  - ✅ 浏览器实测（真 dev 服务 + `__qzVfs`）：删 d3.txt → 新建同名 d3.txt → 还原 → 还原项变「d3 2.txt」、新建项仍「d3.txt」、两者 parentId=root、名字唯一、**两条路径各自 resolvePath 回到自己 id（都可达，修复前另一个永久不可达）**；无冲突还原 d3-solo.txt 名不变（不误改）；文件夹 d3dir 碰撞还原→「d3dir 2」且子项仍 linked（按 id 关联不受改名影响）；trash→restore→trash 循环 prevParent 清理自洽。supervisor 子 Agent PASS（去重时机/无冲突不改/文件夹子项可达/顺序去重/prevParent 清理/B16·Trash 调用方良性改进/DEV 钩子全 DEV-only 且函数声明无 TDZ/纯内核无环 八点全过）。npm check+build 0 错 0 警。
 - [ ] **D4 VFS 父链遍历遇环死循环（无 visited/深度上限）**：`isInside`/`pathSegments`/`resolvePath` 的 `..` 走 `while(cur)` 跟 parentId，若持久化树/外部 sync blob 含父环（A↦B↦A）→ 无限循环挂死标签页、无恢复。修：三处遍历加深度上限或 visited 集。P2，需损坏态触发但 sync 使其可达，逻辑可验。
 - [ ] **D5 `iconPos`/`dockPrefs` 持久化映射只增不删（陈旧+泄漏）**：`purge` 删 VFS 节点不删 `qz.desktopIcons` 里它的 {x,y}；`removeUserApp` 不删 `dockPrefs.order/hidden` 里该 App id。长期堆积孤儿项（且随账号同步上云）。修：purge 内裁 iconPos、removeUserApp 内裁 dockPrefs。P2，浏览器可验。
 - [ ] **A3（承接第 1 轮唯一未做项）过期一次性 `at` 命令开机补发执行**：schedd 重新武装时过期任务 `delay=0` 立即 fire，命令型经 shell 跑（可能 rm/mkdir 等副作用），与真 `at`（过期不补）相反。修：重新武装时过期的**命令型**一次性任务只移除不执行；提醒型可保留补发通知或也丢弃。文件：`system/services.ts`。P1，浏览器可验。
@@ -29,4 +31,4 @@
 
 ---
 
-> 当前循环：第 2 轮审计建立本 backlog；**D1 已完成**（清空对话 mid-stream 崩溃修复）。下一项按协议挑价值最高的未完成项（候选：D3 还原撤销重名 / D2 同步陈旧状态 / E1 Markdown 预览）。
+> 当前循环：第 2 轮审计建立本 backlog；**D1、D3 已完成**（清空崩溃修复 + 还原撤销重名去重，后者补齐 A7/A9/D3 数据完整性三件套）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 D2 同步陈旧状态 / E1 Markdown 预览（可视特性，宜交替）。
