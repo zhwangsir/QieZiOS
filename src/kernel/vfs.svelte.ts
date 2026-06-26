@@ -179,6 +179,33 @@ export function move(id: string, destId: string): void {
   n.updatedAt = Date.now();
 }
 
+// 复制一个节点（文件/文件夹，递归）到目标文件夹。返回新节点 id。异步：二进制要复制 blobStore 里的字节。
+// 顶层名在目标目录里去重；子项落进新建的空目录、天然不冲突。属主归当前用户（像 cp 出来的新文件）。
+export async function copyNode(id: string, destParentId: string): Promise<string | undefined> {
+  const n = vfs.nodes[id];
+  const dest = vfs.nodes[destParentId];
+  if (!n || id === 'root' || !dest || dest.type !== 'dir') return;
+  if (id === destParentId || isInside(destParentId, id)) return; // 不能把目录复制进自己/子孙
+  return cloneInto(n, destParentId, uniqueName(destParentId, n.name));
+}
+async function cloneInto(n: VNode, destParentId: string, name: string): Promise<string> {
+  const newId = crypto.randomUUID();
+  const t = Date.now();
+  const owner = resolveOwner();
+  if (n.type === 'dir') {
+    vfs.nodes[newId] = { id: newId, name, type: 'dir', parentId: destParentId, content: '', mode: n.mode, owner, createdAt: t, updatedAt: t };
+    for (const c of children(n.id)) await cloneInto(c, newId, c.name); // 子项进空的新目录，原名即可
+  } else if (n.kind === 'binary' && n.blobId) {
+    const blob = await getBlob(n.blobId);
+    const newBlobId = crypto.randomUUID();
+    if (blob) await putBlob(newBlobId, blob);
+    vfs.nodes[newId] = { id: newId, name, type: 'file', parentId: destParentId, content: '', kind: 'binary', blobId: newBlobId, mime: n.mime, size: n.size, mode: n.mode, owner, createdAt: t, updatedAt: t };
+  } else {
+    vfs.nodes[newId] = { id: newId, name, type: 'file', parentId: destParentId, content: n.content ?? '', mode: n.mode, owner, createdAt: t, updatedAt: t };
+  }
+  return newId;
+}
+
 export function writeFile(id: string, content: string): void {
   const n = vfs.nodes[id];
   if (n && n.type === 'file') {
@@ -237,6 +264,8 @@ if (import.meta.env.DEV) {
     readBlob,
     isImage,
     getNode,
+    copyNode,
+    children,
   };
 }
 

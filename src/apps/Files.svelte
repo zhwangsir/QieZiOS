@@ -9,6 +9,7 @@
     rename,
     trash,
     move,
+    copyNode,
     getNode,
     pathSegments,
     setMode,
@@ -32,6 +33,9 @@
   let renamingId = $state<string | null>(null);
   let renameText = $state('');
   let dragOverId = $state<string | null>(null); // 拖放时高亮的目标文件夹
+  // 文件剪贴板：复制(cut=false)或剪切(cut=true)的源节点
+  let clip = $state<{ id: string; cut: boolean } | null>(null);
+  let pasting = $state(false);
 
   // 搜索：q 即时按名字过滤当前文件夹；aiHits 非空时改为展示 AI 语义搜索命中的文件（全盘）
   let q = $state('');
@@ -161,6 +165,33 @@ ${JSON.stringify(files)}`;
     trash(n.id);
   }
 
+  // 复制/剪切/粘贴。粘贴目标 = 当前文件夹（或指定文件夹）。剪切=move，复制=copyNode（递归、二进制复制字节）。
+  function copyItem(n: VNode) {
+    clip = { id: n.id, cut: false };
+  }
+  function cutItem(n: VNode) {
+    clip = { id: n.id, cut: true };
+  }
+  async function paste(destId: string = cwd) {
+    if (!clip || pasting) return;
+    const src = getNode(clip.id);
+    if (!src) {
+      clip = null;
+      return;
+    }
+    pasting = true;
+    try {
+      if (clip.cut) {
+        move(clip.id, destId);
+        clip = null; // 剪切一次性
+      } else {
+        await copyNode(clip.id, destId); // 复制可多次粘贴，clip 保留
+      }
+    } finally {
+      pasting = false;
+    }
+  }
+
   function onItemMenu(e: MouseEvent, n: VNode) {
     const me = currentUser();
     const writable = permits(n, me, 2);
@@ -175,6 +206,9 @@ ${JSON.stringify(files)}`;
           renameText = n.name;
         },
       },
+      { label: '复制', icon: '📄', onClick: () => copyItem(n) },
+      { label: '剪切', icon: '✂️', onClick: () => cutItem(n) },
+      ...(clip && n.type === 'dir' ? [{ label: '粘贴到此', icon: '📥', onClick: () => paste(n.id) }] : []),
       { label: '复制名称', icon: '📋', onClick: () => sys.clipboard.copy(n.name) },
       // 权限：在可读写 / 只读之间切（属主段），目录用 7xx、文件用 6xx
       writable
@@ -224,6 +258,13 @@ ${JSON.stringify(files)}`;
       disabled={uploading}
       onclick={() => fileInput?.click()}>{uploading ? '上传中…' : '⬆上传'}</button>
     <input bind:this={fileInput} type="file" accept="image/*" multiple class="hidden" onchange={onUpload} />
+    {#if clip}
+      <button
+        class="rounded-md bg-qz-accent/80 px-2 py-1 text-xs text-qz-accent-contrast hover:brightness-110 disabled:opacity-50"
+        title={`粘贴${clip.cut ? '（剪切）' : ''}到当前文件夹`}
+        disabled={pasting}
+        onclick={() => paste()}>{pasting ? '粘贴中…' : clip.cut ? '📥 粘贴(剪)' : '📥 粘贴'}</button>
+    {/if}
   </div>
 
   <!-- 搜索：输入即过滤当前文件夹；🤖 跨全盘语义搜索 -->
@@ -259,9 +300,16 @@ ${JSON.stringify(files)}`;
   {/if}
 
   <!-- 内容网格 -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="grid flex-1 content-start gap-1 overflow-auto p-3"
     style="grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));"
+    onkeydown={(e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && clip) {
+        e.preventDefault();
+        paste();
+      }
+    }}
   >
     {#each items as n (n.id)}
       {@const readable = permits(n, currentUser(), 4)}
@@ -280,6 +328,13 @@ ${JSON.stringify(files)}`;
         oncontextmenu={(e) => onItemMenu(e, n)}
         onkeydown={(e) => {
           if (e.key === 'Enter') open(n);
+          else if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+            e.preventDefault();
+            copyItem(n);
+          } else if ((e.ctrlKey || e.metaKey) && (e.key === 'x' || e.key === 'X')) {
+            e.preventDefault();
+            cutItem(n);
+          }
         }}
       >
         <div class="relative text-3xl">

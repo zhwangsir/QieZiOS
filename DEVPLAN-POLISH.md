@@ -49,7 +49,10 @@
 - [x] **B4 记事本查找/替换**：TextEdit 是裸 textarea，无查找替换/行号/字数（Studio 的 CodeMirror 反而有，两编辑器割裂）。加 Ctrl+F 查找+替换 + 字数行数。
   - ✅ 实现：Ctrl+F 唤起查找条（查找输入 + n/total 计数 + 上/下导航环绕 + 区分大小写开关 + 替换输入/替换/全部 + 关闭/Esc）；`matchIndices` 非重叠命中、`gotoMatch` setSelectionRange 选中、`replaceCurrent`/`replaceAll`（gated on writable，直接写 node.content 经 bind 自动存）；底部状态栏「行 · 字符」。bind:this 引用用 `$state` + 局部 const 捕获避免闭包丢失收窄。
   - ✅ 浏览器实测：Ctrl+F 开条、查 alpha 计数 4（大小写不敏感含 Alpha）、Enter 选中并前进（2/4）、替换全部→`X beta…`、计数 0/0、状态栏「4 行 · 44 字符」。supervisor 子 Agent PASS（replaceAll 预算 idxs 单遍拼接不重复替换、replaceCurrent 命中才替、node.content 赋值合法触发存盘、$state ref 闭包收窄、权限 gating、Ctrl+F/Esc 作用域不影响别处、边界全过；计数显示按建议 clamp）。npm check+build 0 错 0 警。
-- [ ] **B5 Files 复制/剪切/粘贴 + 多选**：现只能新建/重命名/拖拽移动/删除，无复制文件本身、无多选。vfs 加 `copyNode`，组件加 selection。文件：`apps/Files.svelte`、`kernel/vfs.svelte.ts`。
+- [x] **B5 Files 复制/剪切/粘贴**（多选拆为 B15）：现只能新建/重命名/拖拽移动/删除，无复制文件本身。vfs 加 `copyNode`。文件：`apps/Files.svelte`、`kernel/vfs.svelte.ts`。
+  - ✅ 实现：vfs `copyNode`(递归深拷贝；顶层 uniqueName 去重、子项进新空目录原名、二进制 getBlob+putBlob 复制出独立新 blobId、属主归当前用户、防复制进自己/子孙)；Files `clip`{id,cut} + copyItem/cutItem/paste(cut→move、copy→copyNode 可多次)；右键 复制/剪切/(目录)粘贴到此 + 工具栏粘贴按钮 + 键盘 Ctrl+C/X(item)·Ctrl+V(网格)。
+  - ✅ 浏览器实测：copyNode 复制含文本+二进制的文件夹→递归全复制、二进制 blobId 不同但字节相同、改原文副本不变(深拷贝独立)；UI 右键复制→工具栏粘贴→生成「x 2.txt」内容正确。supervisor 子 Agent PASS（递归终止/blob 独立/isInside 防自包含/async pasting 锁/move 复用/键盘冒泡不双处理/无回归全过）。npm check+build 0 错 0 警。
+- [ ] **B15 Files 多选 + 批量操作**（B5 拆出）：网格项 Ctrl/Shift 多选 + 框选 + 批量 删除/移动/复制。需要 selection 状态 + 各操作支持多 id。文件：`apps/Files.svelte`。
 - [ ] **B6 通知中心 / 系统托盘**：顶栏右侧只有时钟、通知弹完即焚无历史。加托盘区（通知历史面板 + 明暗/桌宠快捷开关）。文件：`shell/TopBar.svelte`、`system/notifications.svelte.ts`、新面板组件。
 - [ ] **B7 窗口四角四分屏 + 键盘平铺**：snap 只有左/右/最大化。加拖到角→1/4 屏 + Super/Ctrl+方向键平铺。文件：`shell/Window.svelte`、`shell/Desktop.svelte`。
 - [ ] **B8 Spotlight 搜文件正文 + 动作命令**：现只搜 App 名/文件名、结果硬截断。加遍历 `vfs.nodes.content` 搜正文 + 常用系统动作（切暗色/清空回收站等）。文件：`shell/Spotlight.svelte`。
