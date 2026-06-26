@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 server/sync-store.json
+server/accounts-store.json
 
 # Editor directories and files
 .vscode/*

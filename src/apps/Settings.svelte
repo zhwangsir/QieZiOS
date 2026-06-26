@@ -4,7 +4,8 @@
   import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
   import { aiConfig, AI_MODELS, AI_PRESETS, ENV_AI_KEY, type AiPreset } from '../system/aiConfig.svelte';
   import { runAgent } from '../system/ai';
-  import { syncToken, pushSync, pullSync } from '../system/sync';
+  import { pushSync, pullSync } from '../system/sync';
+  import { account, loggedIn, register, login, logout } from '../system/account.svelte';
   import { sys } from '../system/sys';
 
   const modes: Array<['dark' | 'light', string]> = [
@@ -29,7 +30,24 @@
     if (p.useEnvKey && ENV_AI_KEY) aiConfig.apiKey = ENV_AI_KEY;
   }
 
-  // 云同步（雏形，需 npm run serve 部署）
+  // 账号（登录/注册）+ 云同步（需 npm run serve 部署 / dev 下本地后端在跑）
+  let authUser = $state('');
+  let authPass = $state('');
+  let authBusy = $state(false);
+  let authMsg = $state('');
+  async function doAuth(kind: 'login' | 'register') {
+    authBusy = true;
+    authMsg = '';
+    try {
+      await (kind === 'register' ? register(authUser.trim(), authPass) : login(authUser.trim(), authPass));
+      authPass = '';
+      sys.notify('账号', { body: `已${kind === 'register' ? '注册并登录' : '登录'}：${account.username}`, level: 'success' });
+    } catch (e) {
+      authMsg = e instanceof Error ? e.message : String(e);
+    }
+    authBusy = false;
+  }
+
   let syncBusy = $state(false);
   let syncMsg = $state('');
   async function doPush() {
@@ -371,24 +389,52 @@
     </div>
   </section>
 
-  <!-- 云同步（雏形，需 npm run serve 部署） -->
+  <!-- 账号 + 云同步（需 npm run serve 部署 / dev 下本地后端在跑） -->
   <section class="flex flex-col gap-2">
-    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">☁️ 云同步</h2>
-    <p class="text-[11px] leading-relaxed text-qz-muted">
-      把桌面布局/文件/主题/已装 App 同步到自托管后端，多设备共享。token = <code>{syncToken()}</code>（当密钥，别外泄）。
-      不含 AI key。⚠️ 需 <code>npm run serve</code> 部署后可用。
-    </p>
-    <div class="flex items-center gap-2">
-      <button
-        class="rounded-qz bg-qz-accent px-3 py-1.5 text-xs font-medium text-qz-accent-contrast active:scale-95 disabled:opacity-40"
-        disabled={syncBusy}
-        onclick={doPush}>上传到云</button>
-      <button
-        class="rounded-qz bg-qz-elevated px-3 py-1.5 text-xs hover:brightness-110 disabled:opacity-40"
-        disabled={syncBusy}
-        onclick={doPull}>从云恢复</button>
-      {#if syncMsg}<span class="text-[11px] text-qz-muted">{syncMsg}</span>{/if}
-    </div>
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">👤 账号 & 云同步</h2>
+    {#if loggedIn()}
+      <p class="text-[11px] leading-relaxed text-qz-muted">
+        已登录：<b class="text-qz-text">{account.username}</b>。把桌面布局/文件/主题/已装 App 按账号同步到后端，多设备共享（不含 AI key）。
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          class="rounded-qz bg-qz-accent px-3 py-1.5 text-xs font-medium text-qz-accent-contrast active:scale-95 disabled:opacity-40"
+          disabled={syncBusy}
+          onclick={doPush}>上传到云</button>
+        <button
+          class="rounded-qz bg-qz-elevated px-3 py-1.5 text-xs hover:brightness-110 disabled:opacity-40"
+          disabled={syncBusy}
+          onclick={doPull}>从云恢复</button>
+        <button class="rounded-qz px-3 py-1.5 text-xs text-qz-muted ring-1 ring-qz-border hover:bg-qz-elevated" onclick={logout}
+          >退出登录</button>
+        {#if syncMsg}<span class="text-[11px] text-qz-muted">{syncMsg}</span>{/if}
+      </div>
+    {:else}
+      <p class="text-[11px] leading-relaxed text-qz-muted">
+        登录或注册一个账号，数据按账号隔离同步到自托管后端。⚠️ 需 <code>npm run serve</code> 部署（dev 下需本地后端在跑）。
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <input
+          class="w-28 rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+          placeholder="用户名"
+          bind:value={authUser} />
+        <input
+          class="w-28 rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+          type="password"
+          placeholder="密码"
+          bind:value={authPass}
+          onkeydown={(e) => e.key === 'Enter' && authUser && authPass && doAuth('login')} />
+        <button
+          class="rounded-qz bg-qz-accent px-3 py-1.5 text-xs font-medium text-qz-accent-contrast active:scale-95 disabled:opacity-40"
+          disabled={authBusy || !authUser || !authPass}
+          onclick={() => doAuth('login')}>登录</button>
+        <button
+          class="rounded-qz bg-qz-elevated px-3 py-1.5 text-xs hover:brightness-110 disabled:opacity-40"
+          disabled={authBusy || !authUser || !authPass}
+          onclick={() => doAuth('register')}>注册</button>
+      </div>
+      {#if authMsg}<span class="text-[11px] text-red-400">{authMsg}</span>{/if}
+    {/if}
   </section>
 
   <!-- 全局自定义 CSS：深度换肤，注入 <style> 即时生效 -->

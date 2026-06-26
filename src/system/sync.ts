@@ -1,19 +1,12 @@
 // ───────────────────────────────────────────────────────────
-// 跨设备同步（雏形）· 把本地状态推到 /sync/<token> 或从云端拉回。
-// token 当密钥（自托管单人足够）；排除 qz.ai（含 API key）与 token 本身，不上云。
-// ⚠️ /sync 由生产后端 server/index.mjs 提供 → 仅在 `npm run serve` 部署下可用（dev 无此端点）。
+// 跨设备同步 · 账号制：登录后把本地状态推到 /sync（按账号隔离）或从云端拉回。
+// 鉴权靠 account.token（Authorization: Bearer）。排除敏感/本机项不上云。
+// ⚠️ /auth、/sync 由 server/index.mjs 提供：dev 经 vite 代理转发本地 node 服务，生产同源。
 // ───────────────────────────────────────────────────────────
-const TOKEN_KEY = 'qz.syncToken';
-const EXCLUDE = new Set([TOKEN_KEY, 'qz.ai']);
+import { account } from './account.svelte';
 
-export function syncToken(): string {
-  let t = localStorage.getItem(TOKEN_KEY);
-  if (!t) {
-    t = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-    localStorage.setItem(TOKEN_KEY, t);
-  }
-  return t;
-}
+// 不上云：会话/凭据（qz.account）、AI 配置含 key（qz.ai）、旧 token（qz.syncToken）
+const EXCLUDE = new Set(['qz.account', 'qz.ai', 'qz.syncToken']);
 
 // 收集要同步的本地状态（所有 qz.* 键，排除敏感/本机项）
 export function gatherState(): Record<string, string> {
@@ -29,20 +22,22 @@ export function gatherState(): Record<string, string> {
 }
 
 export async function pushSync(): Promise<number> {
+  if (!account.token) throw new Error('请先登录账号');
   const state = gatherState();
-  const res = await fetch('/sync/' + syncToken(), {
+  const res = await fetch('/sync', {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + account.token },
     body: JSON.stringify(state),
   });
-  if (!res.ok) throw new Error('上传失败（HTTP ' + res.status + '）—— 同步需在 npm run serve 的部署下使用');
+  if (!res.ok) throw new Error('上传失败（HTTP ' + res.status + '）');
   return Object.keys(state).length;
 }
 
 // 拉取并写回本地。返回恢复的键数（调用方通常随后 location.reload() 让状态生效）。
 export async function pullSync(): Promise<number> {
-  const res = await fetch('/sync/' + syncToken());
-  if (res.status === 404) throw new Error('云端还没有这个 token 的数据');
+  if (!account.token) throw new Error('请先登录账号');
+  const res = await fetch('/sync', { headers: { authorization: 'Bearer ' + account.token } });
+  if (res.status === 404) throw new Error('云端还没有你的数据');
   if (!res.ok) throw new Error('下载失败（HTTP ' + res.status + '）');
   const body = await res.json();
   const data = (body && body.data) || {};
@@ -57,5 +52,5 @@ export async function pullSync(): Promise<number> {
 }
 
 if (import.meta.env.DEV) {
-  (globalThis as unknown as { __qzSync: unknown }).__qzSync = { syncToken, gatherState, pushSync, pullSync };
+  (globalThis as unknown as { __qzSync: unknown }).__qzSync = { gatherState, pushSync, pullSync };
 }

@@ -3,4 +3,5 @@ dist
 .git
 *.local
 server/sync-store.json
+server/accounts-store.json
 *.log

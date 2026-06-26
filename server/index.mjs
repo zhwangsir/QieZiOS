@@ -15,6 +15,7 @@ import https from 'node:https';
 import { createReadStream, existsSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash, randomUUID } from 'node:crypto';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const DIST = join(ROOT, '..', 'dist');
@@ -64,6 +65,90 @@ function sync(req, res, url) {
   }
   res.writeHead(405);
   res.end('method not allowed');
+}
+
+// ── 账号体系（G7.1，功能优先 / 安全待硬化）──────────────────
+// ⚠️ 简单实现：密码 sha256 无盐、随机 token 当会话、明文存文件。够单机自托管把功能跑通；
+//   真鉴权（盐+慢哈希、限流、HTTPS、token 过期）留作后续硬化。
+const ACCT_FILE = process.env.ACCT_FILE || join(ROOT, 'accounts-store.json');
+let acct = { users: {}, data: {} }; // users[name]={passHash,tokens[]}；data[name]={data,updatedAt}
+try {
+  acct = JSON.parse(readFileSync(ACCT_FILE, 'utf8'));
+} catch {
+  /* 首次无文件：空 */
+}
+const saveAcct = () => writeFileSync(ACCT_FILE, JSON.stringify(acct));
+const sha = (s) => createHash('sha256').update(String(s)).digest('hex');
+const json = (res, code, obj) => {
+  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(obj));
+};
+const readBody = (req) =>
+  new Promise((resolve) => {
+    let b = '';
+    req.on('data', (c) => {
+      b += c;
+      if (b.length > 8_000_000) req.destroy();
+    });
+    req.on('end', () => resolve(b));
+    req.on('error', () => resolve(''));
+  });
+const userByToken = (token) => {
+  if (!token) return null;
+  for (const [u, rec] of Object.entries(acct.users)) if ((rec.tokens || []).includes(token)) return u;
+  return null;
+};
+
+// /auth/register | /auth/login → 返回 {username, token}
+async function auth(req, res, url) {
+  if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+  let p;
+  try {
+    p = JSON.parse((await readBody(req)) || '{}');
+  } catch {
+    return json(res, 400, { error: 'bad json' });
+  }
+  const username = String(p.username || '').trim();
+  const password = String(p.password || '');
+  if (!username || !password) return json(res, 400, { error: '缺少用户名或密码' });
+  if (!/^[\w.-]{1,32}$/.test(username)) return json(res, 400, { error: '用户名只允许字母数字 . _ -（≤32）' });
+  if (url.pathname === '/auth/register') {
+    if (acct.users[username]) return json(res, 409, { error: '用户名已存在' });
+    const token = randomUUID().replace(/-/g, '');
+    acct.users[username] = { passHash: sha(password), tokens: [token] };
+    saveAcct();
+    return json(res, 200, { username, token });
+  }
+  if (url.pathname === '/auth/login') {
+    const rec = acct.users[username];
+    if (!rec || rec.passHash !== sha(password)) return json(res, 401, { error: '用户名或密码错误' });
+    const token = randomUUID().replace(/-/g, '');
+    rec.tokens = (rec.tokens || []).concat(token).slice(-10); // 保留最近 10 个会话
+    saveAcct();
+    return json(res, 200, { username, token });
+  }
+  return json(res, 404, { error: 'unknown auth endpoint' });
+}
+
+// 账号制同步：靠 Authorization: Bearer <token> 解析出用户，按用户隔离存取
+async function acctSync(req, res) {
+  const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+  const user = userByToken(token);
+  if (!user) return json(res, 401, { error: '未登录或会话失效' });
+  if (req.method === 'GET') {
+    const blob = acct.data[user];
+    return json(res, blob ? 200 : 404, blob || { error: 'not found' });
+  }
+  if (req.method === 'PUT' || req.method === 'POST') {
+    try {
+      acct.data[user] = { data: JSON.parse(await readBody(req)), updatedAt: Date.now() };
+      saveAcct();
+      return json(res, 200, { ok: true });
+    } catch {
+      return json(res, 400, { error: 'bad json' });
+    }
+  }
+  return json(res, 405, { error: 'method not allowed' });
 }
 
 const MIME = {
@@ -122,7 +207,9 @@ http
   .createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/aiproxy/')) proxy(req, res, url);
-    else if (url.pathname.startsWith('/sync/')) sync(req, res, url);
+    else if (url.pathname.startsWith('/auth/')) auth(req, res, url);
+    else if (url.pathname === '/sync') acctSync(req, res); // 账号制（Bearer token 鉴权）
+    else if (url.pathname.startsWith('/sync/')) sync(req, res, url); // 旧 token 制（兼容）
     else serveStatic(req, res, url);
   })
   .listen(PORT, () => {

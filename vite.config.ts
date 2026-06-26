@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
   // 服务器到服务器没有 CORS，于是让 Vite 当中间人。流式 SSE 也能原样透传。
   // 生产环境需由真正的反向代理（未来的 Node 后端 / nginx）提供同样的 /aiproxy 路径。
   const target = env.VITE_AI_PROXY_TARGET || 'https://dgmt.top'
+  // dev 下把账号/同步端点转发到本地 node 后端（需另跑 `node server/index.mjs`）；
+  // 生产同源由 server/index.mjs 直接提供，无需代理。本地后端没跑时这两路会连接失败（功能降级，不影响其它）。
+  const backend = env.VITE_BACKEND_TARGET || 'http://localhost:8787'
   return {
     plugins: [svelte(), tailwindcss()],
     server: {
@@ -20,6 +23,8 @@ export default defineConfig(({ mode }) => {
           secure: true,
           rewrite: (p) => p.replace(/^\/aiproxy/, ''),
         },
+        '/auth': { target: backend, changeOrigin: true },
+        '/sync': { target: backend, changeOrigin: true },
       },
     },
   }
