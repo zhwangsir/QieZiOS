@@ -34,9 +34,10 @@
   // rAF 批处理：pointermove 触发极密，每帧只写一次几何，稳住帧率
   let raf = 0, nx = 0, ny = 0, nw = 0, nh = 0;
 
-  // 边缘吸附：当前拖到了哪个吸附区（null = 没吸附）
-  let snapZone: 'left' | 'right' | 'max' | null = null;
+  // 边缘吸附：当前拖到了哪个吸附区（null = 没吸附）。tl/tr/bl/br = 四角四分之一屏
+  let snapZone: 'left' | 'right' | 'max' | 'tl' | 'tr' | 'bl' | 'br' | null = null;
   const SNAP_T = 18; // 边缘判定带宽度（px）
+  const CORNER_R = 0.2; // 上/下边缘靠两侧 20% 宽内 → 四分之一屏（角落）
 
   function flush() {
     raf = 0;
@@ -94,10 +95,21 @@
     const W = layer.clientWidth;
     const H = layer.clientHeight;
     const half = Math.round(W / 2);
+    const halfH = Math.round(H / 2);
+    const x = e.clientX - r.left;
+    const nearLeftSide = x < W * CORNER_R;
+    const nearRightSide = r.right - e.clientX < W * CORNER_R;
     if (e.clientY - r.top <= SNAP_T) {
-      snapZone = 'max';
-      snapState.preview = { x: 0, y: 0, w: W, h: H };
-    } else if (e.clientX - r.left <= SNAP_T) {
+      // 上边缘：靠左/右 20% → 上半的四分之一屏（tl/tr），中间 → 最大化
+      if (nearLeftSide) { snapZone = 'tl'; snapState.preview = { x: 0, y: 0, w: half, h: halfH }; }
+      else if (nearRightSide) { snapZone = 'tr'; snapState.preview = { x: W - half, y: 0, w: W - half, h: halfH }; }
+      else { snapZone = 'max'; snapState.preview = { x: 0, y: 0, w: W, h: H }; }
+    } else if (r.bottom - e.clientY <= SNAP_T) {
+      // 下边缘：靠左/右 20% → 下半的四分之一屏（bl/br），中间不吸附
+      if (nearLeftSide) { snapZone = 'bl'; snapState.preview = { x: 0, y: halfH, w: half, h: H - halfH }; }
+      else if (nearRightSide) { snapZone = 'br'; snapState.preview = { x: W - half, y: halfH, w: W - half, h: H - halfH }; }
+      else { snapZone = null; snapState.preview = null; }
+    } else if (x <= SNAP_T) {
       snapZone = 'left';
       snapState.preview = { x: 0, y: 0, w: half, h: H };
     } else if (r.right - e.clientX <= SNAP_T) {

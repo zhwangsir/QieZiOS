@@ -7,6 +7,7 @@
     cycleWindows,
     closeAll,
     cascade,
+    setBounds,
   } from '../kernel/processes.svelte';
   import { createDir, createFile } from '../kernel/vfs.svelte';
   import { sys } from '../system/sys';
@@ -26,6 +27,22 @@
 
   // 当前活动窗 id（派生）：传给每个 Window 决定是否高亮
   const active = $derived(activeId());
+
+  // 键盘平铺：把活动窗吸到左半/右半/最大化/还原（几何用窗口层尺寸算，和拖拽吸附一致）
+  let winLayer = $state<HTMLElement>();
+  function tile(zone: 'left' | 'right' | 'max' | 'restore') {
+    const id = activeId();
+    if (!id) return;
+    if (zone === 'max') return setBounds(id, { maximized: true });
+    if (zone === 'restore') return setBounds(id, { maximized: false });
+    const layer = winLayer;
+    if (!layer) return;
+    const W = layer.clientWidth;
+    const H = layer.clientHeight;
+    const half = Math.round(W / 2);
+    const rect = zone === 'left' ? { x: 0, y: 0, width: half, height: H } : { x: W - half, y: 0, width: W - half, height: H };
+    setBounds(id, { maximized: false, ...rect });
+  }
 
   // 桌面空白处右键菜单（窗口内的右键由窗口/App 自己处理）
   function onDesktopMenu(e: MouseEvent) {
@@ -70,6 +87,12 @@
     } else if (e.key === '`' && (e.altKey || e.ctrlKey)) {
       cycleWindows();
       e.preventDefault();
+    } else if (e.ctrlKey && e.altKey && e.key.startsWith('Arrow')) {
+      // Ctrl+Alt+方向键 平铺活动窗：←左半 →右半 ↑最大化 ↓还原
+      const zone = ({ ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'max', ArrowDown: 'restore' } as const)[
+        e.key as 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown'
+      ];
+      if (zone) { tile(zone); e.preventDefault(); }
     }
   }
 </script>
@@ -104,7 +127,7 @@
 
   <!-- 窗口层：top-9 让出顶栏高度；isolate 把窗口的 z-index 关进自己的层叠上下文，
        不会盖过顶栏/Dock。遍历进程 → 按 appId 查注册表拿组件 → 塞进窗口渲染。 -->
-  <div class="absolute inset-x-0 bottom-0 top-9 isolate">
+  <div class="absolute inset-x-0 bottom-0 top-9 isolate" bind:this={winLayer}>
     {#each processes as proc (proc.id)}
       {@const def = resolveAppDef(proc.appId)}
       <Window {proc} active={active === proc.id}>
