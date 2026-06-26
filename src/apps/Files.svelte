@@ -11,9 +11,14 @@
     move,
     getNode,
     pathSegments,
+    setMode,
+    setOwner,
+    DEFAULT_OWNER,
     type VNode,
   } from '../kernel/vfs.svelte';
   import { openMenu } from '../shell/menu.svelte';
+  import { permits, modeStr, accessStr } from '../system/permissions';
+  import { currentUser } from '../system/account.svelte';
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
   import { sys } from '../system/sys';
@@ -104,11 +109,19 @@ ${JSON.stringify(files)}`;
     if (renamingId) return;
     if (n.type === 'dir') {
       goTo(n.id);
-    } else if (isImage(n)) {
-      sys.openApp('imageviewer', { title: n.name, data: n.id });
-    } else {
-      sys.openApp('textedit', { title: n.name, data: n.id });
+      return;
     }
+    // 文件：受读权限约束（与终端 cat 一致）
+    if (!permits(n, currentUser(), 4)) {
+      sys.notify('权限不够', { body: `${n.name}：当前用户无读权限`, level: 'warn' });
+      return;
+    }
+    sys.openApp(isImage(n) ? 'imageviewer' : 'textedit', { title: n.name, data: n.id });
+  }
+
+  // 改权限/属主（右键菜单用）。modeFile/modeDir 按类型取
+  function chmod(n: VNode, fileMode: number, dirMode: number) {
+    setMode(n.id, n.type === 'dir' ? dirMode : fileMode);
   }
 
   function newDir() {
@@ -149,6 +162,9 @@ ${JSON.stringify(files)}`;
   }
 
   function onItemMenu(e: MouseEvent, n: VNode) {
+    const me = currentUser();
+    const writable = permits(n, me, 2);
+    const isOwner = (n.owner ?? DEFAULT_OWNER) === me;
     openMenu(e, [
       { label: '打开', icon: n.type === 'dir' ? '📂' : '↗', onClick: () => open(n) },
       {
@@ -160,6 +176,12 @@ ${JSON.stringify(files)}`;
         },
       },
       { label: '复制名称', icon: '📋', onClick: () => sys.clipboard.copy(n.name) },
+      // 权限：在可读写 / 只读之间切（属主段），目录用 7xx、文件用 6xx
+      writable
+        ? { label: '设为只读', icon: '🔒', separator: true, onClick: () => chmod(n, 0o444, 0o555) }
+        : { label: '设为可读写', icon: '🔓', separator: true, onClick: () => chmod(n, 0o644, 0o755) },
+      { label: '设为私密 (600)', icon: '🙈', onClick: () => chmod(n, 0o600, 0o700) },
+      ...(isOwner ? [] : [{ label: `归我所有 (${me})`, icon: '👤', onClick: () => setOwner(n.id, me) }]),
       { label: '删除', icon: '🗑️', danger: true, separator: true, onClick: () => trash(n.id) },
     ]);
   }
@@ -242,9 +264,11 @@ ${JSON.stringify(files)}`;
     style="grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));"
   >
     {#each items as n (n.id)}
+      {@const readable = permits(n, currentUser(), 4)}
       <div
         class="group/item relative flex flex-col items-center gap-1 rounded-lg p-2 hover:bg-qz-elevated"
         style={dragOverId === n.id ? 'box-shadow: inset 0 0 0 2px var(--color-qz-accent)' : ''}
+        title={`${modeStr(n)}  属主 ${n.owner ?? DEFAULT_OWNER}`}
         role="button"
         tabindex="0"
         draggable={renamingId !== n.id}
@@ -258,7 +282,10 @@ ${JSON.stringify(files)}`;
           if (e.key === 'Enter') open(n);
         }}
       >
-        <div class="text-3xl">{iconFor(n)}</div>
+        <div class="relative text-3xl">
+          {iconFor(n)}
+          {#if !readable}<span class="absolute bottom-0 right-0 text-[11px]" title="无读权限">🔒</span>{/if}
+        </div>
 
         {#if renamingId === n.id}
           <!-- svelte-ignore a11y_autofocus -->
@@ -276,6 +303,7 @@ ${JSON.stringify(files)}`;
           />
         {:else}
           <span class="line-clamp-2 w-full text-center text-xs leading-tight">{n.name}</span>
+          <span class="w-full truncate text-center text-[9px] text-qz-muted">{n.owner ?? DEFAULT_OWNER} · {accessStr(n, currentUser())}</span>
         {/if}
 
         <!-- 悬停操作 -->

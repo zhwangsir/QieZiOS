@@ -1,5 +1,7 @@
 <script lang="ts">
   import { getNode, writeFile } from '../kernel/vfs.svelte';
+  import { permits } from '../system/permissions';
+  import { currentUser } from '../system/account.svelte';
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
 
@@ -7,6 +9,8 @@
   let { data }: { data?: unknown } = $props();
 
   const node = $derived(typeof data === 'string' ? getNode(data) : undefined);
+  // 写权限：无写权限则只读（与终端「无写位则拒写」一致）
+  const writable = $derived(!!node && permits(node, currentUser(), 2));
   const hasKey = $derived(!!aiConfig.apiKey);
 
   // ── AI 面板的本地状态（组件内 $state：开关 / 忙 / 输出 / 当前动作名 / 中止句柄） ──
@@ -68,11 +72,11 @@
     aiBusy = false;
   }
   function replaceWith() {
-    if (node && aiOut.trim()) writeFile(node.id, aiOut.trim());
+    if (node && writable && aiOut.trim()) writeFile(node.id, aiOut.trim());
     closeAi();
   }
   function appendOut() {
-    if (node && aiOut.trim()) writeFile(node.id, (node.content ?? '') + '\n\n' + aiOut.trim());
+    if (node && writable && aiOut.trim()) writeFile(node.id, (node.content ?? '') + '\n\n' + aiOut.trim());
     closeAi();
   }
   function closeAi() {
@@ -97,10 +101,17 @@
       </div>
     {/if}
 
-    <!-- 正文：bind 到文件节点 content → persisted 自动存盘（防抖） -->
+    {#if !writable}
+      <div class="shrink-0 border-b border-qz-border bg-amber-500/15 px-3 py-1 text-[11px] text-amber-300">
+        🔒 只读 —— 当前用户对此文件无写权限（chmod +w 或改属主后可编辑）
+      </div>
+    {/if}
+
+    <!-- 正文：bind 到文件节点 content → persisted 自动存盘（防抖）。无写权限则只读 -->
     <textarea
       class="min-h-0 w-full flex-1 resize-none bg-transparent p-4 font-mono text-sm leading-relaxed text-qz-text outline-none"
       bind:value={node.content}
+      readonly={!writable}
       spellcheck="false"
       placeholder="空文件"
     ></textarea>
@@ -113,7 +124,7 @@
           <div class="flex shrink-0 gap-1">
             {#if aiBusy}
               <button class="rounded px-2 py-0.5 text-[11px] hover:bg-qz-elevated" onclick={stopAi}>停止</button>
-            {:else}
+            {:else if writable}
               <button
                 class="rounded bg-qz-accent px-2 py-0.5 text-[11px] text-qz-accent-contrast active:scale-95"
                 onclick={replaceWith}>替换</button>

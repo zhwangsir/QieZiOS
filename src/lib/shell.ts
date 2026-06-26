@@ -18,10 +18,10 @@ import {
   isImage,
   setMode,
   setOwner,
-  defaultMode,
   DEFAULT_OWNER,
   type VNode,
 } from '../kernel/vfs.svelte';
+import { nodeMode, modeStr, permits } from '../system/permissions';
 import { sys } from '../system/sys';
 import { appList, appMeta } from '../apps/appList';
 import { settings } from '../system/settings.svelte';
@@ -194,23 +194,7 @@ function toAbsPath(ctx: ShellCtx, path: string): string {
   return normAbs((base === '/' ? '' : base) + '/' + path);
 }
 
-// ── 权限（mode/owner）相关 ────────────────────────────────
-function nodeMode(n: VNode): number {
-  return n.mode ?? defaultMode(n.type);
-}
-// rwxr-xr-x 风格权限串（首字符 d/-）
-function modeStr(n: VNode): string {
-  const m = nodeMode(n);
-  const triad = (t: number) => `${t & 4 ? 'r' : '-'}${t & 2 ? 'w' : '-'}${t & 1 ? 'x' : '-'}`;
-  return (n.type === 'dir' ? 'd' : '-') + triad((m >> 6) & 7) + triad((m >> 3) & 7) + triad(m & 7);
-}
-// best-effort 权限校验：bit 4=读 2=写 1=执行。root 全通过；属主看 owner 段，否则看 other 段（无 group）。
-function permits(n: VNode, user: string, bit: number): boolean {
-  if (user === 'root') return true;
-  const m = nodeMode(n);
-  const triad = user === (n.owner ?? DEFAULT_OWNER) ? (m >> 6) & 7 : m & 7;
-  return (triad & bit) !== 0;
-}
+// 权限判定（nodeMode/modeStr/permits）已抽到 system/permissions.ts，终端与 GUI 共用一套。
 
 // 命令收到上游/重定向来的 stdin（无则空串），返回 stdout/stderr/退出码（可同步或异步——curl 等用 Promise）
 type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult | Promise<CmdResult>;
