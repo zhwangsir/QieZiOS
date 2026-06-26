@@ -39,7 +39,9 @@
   - ✅ 浏览器实测：上传合成 PNG→`--qz-wallpaper` 变 `url(blob:…)`、ls 存 {image,blobId}；纯色→#ff0000；恢复预设→渐变；色值 persist→reload→恢复 #0033cc 且桌面真实 background 含该色。supervisor 子 Agent PASS（objectURL 生命周期/cancelled 守卫/异步→响应式重算链/初次加载解析/分层无环/缺 blob 优雅回退全过；orphan-blob 清理已按建议补 applySettings 路径）。npm check+build 0 错 0 警。
 - [ ] **B2 删除确认 + 撤销 toast**：Files/桌面图标/Trash 删除全程无确认，purge/清空回收站一键即焚。加轻量确认（非原生 confirm）或软删可撤销 toast。
 - [ ] **B3 Reminders 选具体时间（datetime）**：现只能「N 秒后」；底层 `Schedule.fireAt` 已支持绝对时间，纯 UI 缺口。加 `datetime-local` + 每天/每小时预设。文件：`apps/Reminders.svelte`。
-- [ ] **B4 记事本查找/替换**：TextEdit 是裸 textarea，无查找替换/行号/字数（Studio 的 CodeMirror 反而有，两编辑器割裂）。加 Ctrl+F 查找+替换 + 字数行数。文件：`apps/TextEdit.svelte`。
+- [x] **B4 记事本查找/替换**：TextEdit 是裸 textarea，无查找替换/行号/字数（Studio 的 CodeMirror 反而有，两编辑器割裂）。加 Ctrl+F 查找+替换 + 字数行数。
+  - ✅ 实现：Ctrl+F 唤起查找条（查找输入 + n/total 计数 + 上/下导航环绕 + 区分大小写开关 + 替换输入/替换/全部 + 关闭/Esc）；`matchIndices` 非重叠命中、`gotoMatch` setSelectionRange 选中、`replaceCurrent`/`replaceAll`（gated on writable，直接写 node.content 经 bind 自动存）；底部状态栏「行 · 字符」。bind:this 引用用 `$state` + 局部 const 捕获避免闭包丢失收窄。
+  - ✅ 浏览器实测：Ctrl+F 开条、查 alpha 计数 4（大小写不敏感含 Alpha）、Enter 选中并前进（2/4）、替换全部→`X beta…`、计数 0/0、状态栏「4 行 · 44 字符」。supervisor 子 Agent PASS（replaceAll 预算 idxs 单遍拼接不重复替换、replaceCurrent 命中才替、node.content 赋值合法触发存盘、$state ref 闭包收窄、权限 gating、Ctrl+F/Esc 作用域不影响别处、边界全过；计数显示按建议 clamp）。npm check+build 0 错 0 警。
 - [ ] **B5 Files 复制/剪切/粘贴 + 多选**：现只能新建/重命名/拖拽移动/删除，无复制文件本身、无多选。vfs 加 `copyNode`，组件加 selection。文件：`apps/Files.svelte`、`kernel/vfs.svelte.ts`。
 - [ ] **B6 通知中心 / 系统托盘**：顶栏右侧只有时钟、通知弹完即焚无历史。加托盘区（通知历史面板 + 明暗/桌宠快捷开关）。文件：`shell/TopBar.svelte`、`system/notifications.svelte.ts`、新面板组件。
 - [ ] **B7 窗口四角四分屏 + 键盘平铺**：snap 只有左/右/最大化。加拖到角→1/4 屏 + Super/Ctrl+方向键平铺。文件：`shell/Window.svelte`、`shell/Desktop.svelte`。

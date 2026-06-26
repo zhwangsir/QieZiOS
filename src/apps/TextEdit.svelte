@@ -84,10 +84,107 @@
     aiOut = '';
     aiLabel = '';
   }
+
+  // ── 查找/替换（Ctrl+F 唤起）+ 行/字符统计 ──────────────────────────────
+  let textarea = $state<HTMLTextAreaElement>();
+  let findInput = $state<HTMLInputElement>();
+  let findOpen = $state(false);
+  let findQuery = $state('');
+  let replaceText = $state('');
+  let caseSensitive = $state(false);
+  let curMatch = $state(0); // 当前命中序号（1-based，0=未定位）
+
+  const lineCount = $derived((node?.content ?? '').split('\n').length);
+  const charCount = $derived((node?.content ?? '').length);
+
+  // 所有命中位置（content/query/大小写一变就重算 → totalMatches 实时更新）
+  function matchIndices(): number[] {
+    const content = node?.content ?? '';
+    const q = findQuery;
+    if (!q) return [];
+    const hay = caseSensitive ? content : content.toLowerCase();
+    const needle = caseSensitive ? q : q.toLowerCase();
+    const out: number[] = [];
+    let i = hay.indexOf(needle);
+    while (i !== -1) {
+      out.push(i);
+      i = hay.indexOf(needle, i + needle.length); // 非重叠
+    }
+    return out;
+  }
+  const totalMatches = $derived(matchIndices().length);
+
+  // 跳到下一个/上一个命中并在 textarea 里选中（带环绕）
+  function gotoMatch(dir: 1 | -1) {
+    const ta = textarea;
+    const idxs = matchIndices();
+    if (!idxs.length || !ta) {
+      curMatch = 0;
+      return;
+    }
+    let target: number;
+    if (dir === 1) {
+      target = idxs.find((i) => i >= ta.selectionEnd) ?? idxs[0];
+    } else {
+      const prev = idxs.filter((i) => i < ta.selectionStart);
+      target = prev.length ? prev[prev.length - 1] : idxs[idxs.length - 1];
+    }
+    curMatch = idxs.indexOf(target) + 1;
+    ta.focus();
+    ta.setSelectionRange(target, target + findQuery.length);
+  }
+
+  function replaceCurrent() {
+    if (!node || !writable || !findQuery || !textarea) return;
+    const s = textarea.selectionStart;
+    const e = textarea.selectionEnd;
+    const sel = (node.content ?? '').slice(s, e);
+    const isMatch = caseSensitive ? sel === findQuery : sel.toLowerCase() === findQuery.toLowerCase();
+    if (!isMatch) {
+      gotoMatch(1); // 当前没选中命中 → 先定位
+      return;
+    }
+    const content = node.content ?? '';
+    const ta = textarea;
+    node.content = content.slice(0, s) + replaceText + content.slice(e);
+    // 等绑定回写后再找下一个
+    queueMicrotask(() => {
+      ta.setSelectionRange(s + replaceText.length, s + replaceText.length);
+      gotoMatch(1);
+    });
+  }
+
+  function replaceAll() {
+    if (!node || !writable || !findQuery) return;
+    const content = node.content ?? '';
+    const idxs = matchIndices();
+    if (!idxs.length) return;
+    let out = '';
+    let last = 0;
+    for (const i of idxs) {
+      out += content.slice(last, i) + replaceText;
+      last = i + findQuery.length;
+    }
+    out += content.slice(last);
+    node.content = out;
+    curMatch = 0;
+  }
+
+  function onKey(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault();
+      findOpen = true;
+      queueMicrotask(() => findInput?.focus());
+    } else if (e.key === 'Escape' && findOpen) {
+      findOpen = false;
+      textarea?.focus();
+    }
+  }
 </script>
 
 {#if node}
-  <div class="flex h-full flex-col">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="flex h-full flex-col" onkeydown={onKey}>
     <!-- AI 动作条（配了 key 才显示） -->
     {#if hasKey}
       <div class="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-qz-border px-2 py-1.5">
@@ -107,8 +204,50 @@
       </div>
     {/if}
 
+    <!-- 查找/替换条（Ctrl+F 唤起） -->
+    {#if findOpen}
+      <div class="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-qz-border bg-qz-surface/60 px-2 py-1.5 text-[11px]">
+        <input
+          bind:this={findInput}
+          bind:value={findQuery}
+          oninput={() => (curMatch = 0)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              gotoMatch(e.shiftKey ? -1 : 1);
+            }
+          }}
+          placeholder="查找"
+          class="min-w-0 flex-1 rounded bg-qz-elevated px-2 py-1 outline-none ring-1 ring-transparent focus:ring-qz-accent"
+        />
+        <span class="shrink-0 tabular-nums text-qz-muted">{totalMatches ? `${Math.min(curMatch, totalMatches)}/${totalMatches}` : '0/0'}</span>
+        <button class="rounded px-1.5 py-1 hover:bg-qz-elevated disabled:opacity-40" disabled={!totalMatches} onclick={() => gotoMatch(-1)} title="上一个">↑</button>
+        <button class="rounded px-1.5 py-1 hover:bg-qz-elevated disabled:opacity-40" disabled={!totalMatches} onclick={() => gotoMatch(1)} title="下一个">↓</button>
+        <label class="flex shrink-0 items-center gap-1 text-qz-muted" title="区分大小写">
+          <input type="checkbox" bind:checked={caseSensitive} /> Aa
+        </label>
+        {#if writable}
+          <input
+            bind:value={replaceText}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                replaceCurrent();
+              }
+            }}
+            placeholder="替换为"
+            class="min-w-0 flex-1 rounded bg-qz-elevated px-2 py-1 outline-none ring-1 ring-transparent focus:ring-qz-accent"
+          />
+          <button class="rounded px-2 py-1 hover:bg-qz-elevated" onclick={replaceCurrent}>替换</button>
+          <button class="rounded px-2 py-1 hover:bg-qz-elevated" onclick={replaceAll}>全部</button>
+        {/if}
+        <button class="rounded px-1.5 py-1 text-qz-muted hover:bg-qz-elevated" onclick={() => { findOpen = false; textarea?.focus(); }} title="关闭 (Esc)">✕</button>
+      </div>
+    {/if}
+
     <!-- 正文：bind 到文件节点 content → persisted 自动存盘（防抖）。无写权限则只读 -->
     <textarea
+      bind:this={textarea}
       class="min-h-0 w-full flex-1 resize-none bg-transparent p-4 font-mono text-sm leading-relaxed text-qz-text outline-none"
       bind:value={node.content}
       readonly={!writable}
@@ -137,6 +276,12 @@
         <div class="overflow-auto whitespace-pre-wrap px-3 pb-3 text-sm leading-relaxed">{aiOut.replace(/^\s+/, '') || '…'}</div>
       </div>
     {/if}
+
+    <!-- 状态栏：行/字符统计（Ctrl+F 查找替换） -->
+    <div class="flex shrink-0 items-center justify-between border-t border-qz-border px-3 py-1 text-[10px] text-qz-muted">
+      <span>{lineCount} 行 · {charCount} 字符</span>
+      <span>Ctrl+F 查找{writable ? '/替换' : ''}</span>
+    </div>
   </div>
 {:else}
   <div class="grid h-full place-items-center text-sm text-qz-muted">文件不存在或已删除</div>
