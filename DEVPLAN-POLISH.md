@@ -53,7 +53,10 @@
 - [x] **B1 自定义壁纸（上传图片 + 纯色）**：现只有 6 个内置 CSS 渐变。加本地图片上传（走 blobStore IndexedDB + objectURL）+ 纯色。美观=作者第一优先级、门面级可见。
   - ✅ 实现：`settings.customWallpaper`（{color|image|null}）；新 `system/wallpaperBlob.svelte.ts`（$effect 把 image blobId 异步解析成 objectURL $state，换图/清除时 revoke 旧的）；`theme.svelte.ts` 的 `--qz-wallpaper` 改 `wallpaperCss()`（纯色/图片优先于预设，图片用 `center / cover no-repeat url(...)` 铺满，未加载好回退预设）；Settings 壁纸区加 上传图片/纯色/恢复内置预设（换图/恢复时删旧 blob，含 applySettings 导入路径也删，免 IDB 堆积）。预设选中高亮排除自定义态。
   - ✅ 浏览器实测：上传合成 PNG→`--qz-wallpaper` 变 `url(blob:…)`、ls 存 {image,blobId}；纯色→#ff0000；恢复预设→渐变；色值 persist→reload→恢复 #0033cc 且桌面真实 background 含该色。supervisor 子 Agent PASS（objectURL 生命周期/cancelled 守卫/异步→响应式重算链/初次加载解析/分层无环/缺 blob 优雅回退全过；orphan-blob 清理已按建议补 applySettings 路径）。npm check+build 0 错 0 警。
-- [ ] **B2 删除确认 + 撤销 toast**：Files/桌面图标/Trash 删除全程无确认，purge/清空回收站一键即焚。加轻量确认（非原生 confirm）或软删可撤销 toast。
+- [x] **B2 删除确认（不可逆操作）**：Files/桌面图标/Trash 删除全程无确认，purge/清空回收站一键即焚。加轻量确认（非原生 confirm）或软删可撤销 toast。
+  - ✅ 实现：回收站「彻底删除」(单项)+「清空回收站」用**两次点击确认**（非模态）——首点变「确认?/确认清空？」红底白字 3s、再点才执行；切换/超时自动 revert，两态互斥，`onDestroy` 清 timer。软删除（Files/桌面图标 trash）本就可从回收站还原，故确认只加在**不可逆**操作上。
+  - ✅ 浏览器实测：彻底删除首点→「确认?」项数不变、再点→真删；清空首点→「确认清空？」不变、再点→清空为 0。**首次点击绝不删除**。supervisor 子 Agent PASS（首点无执行路径绕过/timer 生命周期无泄漏 + onDestroy 清理/互斥/restore 竞态 inert 自愈/无回归）。npm check+build 0 错 0 警。
+  - 备注：软删除的「撤销 toast」需给通知系统加 action 按钮，拆为后续 **B16**（可选增强）。
 - [x] **B3 Reminders 选具体时间（datetime）**：现只能「N 秒后」；底层 `Schedule.fireAt` 已支持绝对时间，纯 UI 缺口。加 `datetime-local` + 每天/每小时预设。文件：`apps/Reminders.svelte`。
   - ✅ 实现：mode 三选（多久后/指定时间/循环）；relative·repeat 用「数字 + 单位 s/m/h/d」算毫秒走 in/every；datetime 用 `<input type=datetime-local>` → `new Date().getTime()`（本地时区解析）校验未来 → `{in: ts-now}`，过去/空则警告不加；`fmtWhen` 远期显绝对时间、近期显「Ns 后」、循环显「每 N 单位」。
   - ✅ 浏览器实测：指定时间(分钟精度)建 fireAt 提醒、循环 2 小时→every=7200000、过去时间被拒、datetime 输入条件显示、fmtWhen「27s 后」「每 2 小时」。supervisor 子 Agent PASS（datetime 本地时区解析正确/in·every 契约/unit=d 不超 setInterval 上限/mode 切换无误加/secs·recurring 移除无残留/边界全过）。npm check+build 0 错 0 警。

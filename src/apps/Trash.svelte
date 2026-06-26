@@ -7,8 +7,44 @@
     TRASH,
     type VNode,
   } from '../kernel/vfs.svelte';
+  import { onDestroy } from 'svelte';
 
   const items = $derived(children(TRASH));
+
+  // 不可逆操作（彻底删除/清空）用「两次点击确认」防误删：首次点变成「确认?」3s，再点才真执行。
+  let confirmEmpty = $state(false);
+  let confirmPurgeId = $state<string | null>(null);
+  let emptyTimer: ReturnType<typeof setTimeout> | undefined;
+  let purgeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function clickEmpty() {
+    if (confirmEmpty) {
+      clearTimeout(emptyTimer);
+      confirmEmpty = false;
+      emptyTrash();
+      return;
+    }
+    confirmEmpty = true;
+    confirmPurgeId = null; // 互斥
+    clearTimeout(emptyTimer);
+    emptyTimer = setTimeout(() => (confirmEmpty = false), 3000);
+  }
+  function clickPurge(id: string) {
+    if (confirmPurgeId === id) {
+      clearTimeout(purgeTimer);
+      confirmPurgeId = null;
+      purge(id);
+      return;
+    }
+    confirmPurgeId = id;
+    confirmEmpty = false; // 互斥
+    clearTimeout(purgeTimer);
+    purgeTimer = setTimeout(() => (confirmPurgeId = null), 3000);
+  }
+  onDestroy(() => {
+    clearTimeout(emptyTimer);
+    clearTimeout(purgeTimer);
+  });
 
   function iconFor(n: VNode): string {
     if (n.type === 'dir') return '📁';
@@ -23,9 +59,12 @@
   <div class="flex items-center justify-between border-b border-qz-border px-3 py-2">
     <span class="text-xs text-qz-muted">回收站 · {items.length} 项</span>
     <button
-      class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110 disabled:opacity-40"
+      class="rounded-md px-2 py-1 text-xs hover:brightness-110 disabled:opacity-40"
+      class:bg-qz-elevated={!confirmEmpty}
+      class:bg-red-500={confirmEmpty}
+      class:text-white={confirmEmpty}
       disabled={items.length === 0}
-      onclick={emptyTrash}>清空回收站</button>
+      onclick={clickEmpty}>{confirmEmpty ? '确认清空？' : '清空回收站'}</button>
   </div>
 
   <div class="flex-1 overflow-auto p-2">
@@ -40,8 +79,11 @@
             class="rounded px-2 py-0.5 text-xs text-qz-accent hover:bg-qz-surface"
             onclick={() => restoreFromTrash(n.id)}>还原</button>
           <button
-            class="rounded px-2 py-0.5 text-xs text-red-400 hover:bg-qz-surface"
-            onclick={() => purge(n.id)}>彻底删除</button>
+            class="rounded px-2 py-0.5 text-xs hover:bg-qz-surface"
+            class:text-red-400={confirmPurgeId !== n.id}
+            class:bg-red-500={confirmPurgeId === n.id}
+            class:text-white={confirmPurgeId === n.id}
+            onclick={() => clickPurge(n.id)}>{confirmPurgeId === n.id ? '确认?' : '彻底删除'}</button>
         </div>
       {/each}
     {/if}
