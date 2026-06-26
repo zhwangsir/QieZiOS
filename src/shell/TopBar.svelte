@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { processes, minimize, restore, activeId, type Process } from '../kernel/processes.svelte';
+  import {
+    processes,
+    minimize,
+    restore,
+    close,
+    toggleMaximize,
+    activeId,
+    type Process,
+  } from '../kernel/processes.svelte';
   import { resolveAppDef } from '../apps/desktopApps.svelte';
   import { settings } from '../system/settings.svelte';
   import {
@@ -10,6 +18,7 @@
     type NoteLevel,
   } from '../system/notifications.svelte';
   import { openLaunchpad } from './launchpadState.svelte';
+  import { openMenu } from './menu.svelte';
 
   // 当前活动窗 id（内核统一计算，键盘/焦点高亮/任务栏共用同一份逻辑）
   const activeWin = $derived(activeId());
@@ -20,6 +29,17 @@
     } else {
       restore(p.id); // 否则 → 还原 + 聚焦置顶
     }
+  }
+
+  // 任务栏 chip 右键菜单（与 Dock/Window 标题栏一致：能直接关/最小化/最大化，不必先切到它）
+  function onChipMenu(e: MouseEvent, p: Process) {
+    openMenu(e, [
+      p.minimized
+        ? { label: '还原', icon: '▢', onClick: () => restore(p.id) }
+        : { label: '最小化', icon: '—', onClick: () => minimize(p.id) },
+      { label: p.maximized ? '还原大小' : '最大化', icon: '▣', onClick: () => toggleMaximize(p.id) },
+      { label: '关闭', icon: '✕', danger: true, separator: true, onClick: () => close(p.id) },
+    ]);
   }
 
   // 实时时钟
@@ -88,6 +108,7 @@
           : 'transparent'};"
         title={p.title}
         onclick={() => onChip(p)}
+        oncontextmenu={(e) => onChipMenu(e, p)}
       >
         <span class="shrink-0">{icon}</span>
         <span class="truncate">{p.title}</span>

@@ -94,7 +94,9 @@
 
 ## 四、P2 · 一致性打磨
 
-- [ ] **C1 右键菜单覆盖 + 删除反馈统一**：补 TopBar chip / Trash 项 / 桌面图标右键；统一删除反馈（toast + 可撤销）。文件：`shell/TopBar.svelte`、`apps/Trash.svelte`、`shell/DesktopIcons.svelte`、`shell/menu.svelte.ts`。
+- [x] **C1 右键菜单覆盖（一致性）**：补 TopBar chip 右键菜单；桌面图标/Files/Dock/Window 早已有右键，Trash 有可见按钮（还原/彻底删除带 B2 确认）→ 覆盖已齐。「删除反馈 toast + 可撤销」拆为 B16。文件：`shell/TopBar.svelte`。
+  - ✅ 实现：顶栏窗口切换 chip 加 `oncontextmenu`→ `onChipMenu`（最小化/还原 + 最大化/还原大小[动态 label] + 关闭[danger]），与 Dock/Window 一致——不必先切到窗口就能关/最大化。
+  - ✅ 浏览器实测：右键计算器 chip→菜单→关闭→只关它(时钟不动)；右键时钟→最大化→maximized；已最大化时显「还原大小」。supervisor 子 Agent PASS（动作用 p.id/动态 label 对应/MenuItem 形状与 Dock 一致/contextmenu·onclick 共存/close 后 chip 干净消失/无环无未用/无回归）。npm check+build 0 错 0 警。
 
 ---
 
