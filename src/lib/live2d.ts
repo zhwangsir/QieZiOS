@@ -51,54 +51,65 @@ export async function createPet(
     antialias: true,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const model: any = await Live2DModel.from(modelUrl);
-  app.stage.addChild(model);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const model: any = await Live2DModel.from(modelUrl);
+    app.stage.addChild(model);
 
-  const fit = () => {
-    const w = container.clientWidth || 300;
-    const h = container.clientHeight || 400;
-    model.anchor?.set?.(0.5, 0.5);
-    const s = Math.min(w / model.width, h / model.height) * 0.9;
-    model.scale.set(s);
-    model.position.set(w / 2, h / 2);
-  };
-  fit();
-  const ro = new ResizeObserver(fit);
-  ro.observe(container);
+    const fit = () => {
+      const w = container.clientWidth || 300;
+      const h = container.clientHeight || 400;
+      model.anchor?.set?.(0.5, 0.5);
+      const s = Math.min(w / model.width, h / model.height) * 0.9;
+      model.scale.set(s);
+      model.position.set(w / 2, h / 2);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(container);
 
-  return {
-    destroy() {
-      ro.disconnect();
-      try {
-        // removeView=false：canvas 由 Svelte 管，别让 Pixi 摘掉它
-        app.destroy(false, { children: true, texture: true, baseTexture: true });
-      } catch {
-        /* ignore */
-      }
-    },
-    react() {
-      try {
-        // 随机播一个动作组（模型没动作就静默忽略）
-        model.internalModel?.motionManager?.startRandomMotion?.();
-      } catch {
-        /* ignore */
-      }
-    },
-    expression() {
-      try {
-        model.expression?.(); // 不传名字 = 随机表情（模型没表情就忽略）
-      } catch {
-        /* ignore */
-      }
-    },
-    setMouth(open: number) {
-      try {
-        const v = Math.max(0, Math.min(1, open));
-        model.internalModel?.coreModel?.setParameterValueById?.('ParamMouthOpenY', v);
-      } catch {
-        /* ignore */
-      }
-    },
-  };
+    return {
+      destroy() {
+        ro.disconnect();
+        try {
+          // removeView=false：canvas 由 Svelte 管，别让 Pixi 摘掉它
+          app.destroy(false, { children: true, texture: true, baseTexture: true });
+        } catch {
+          /* ignore */
+        }
+      },
+      react() {
+        try {
+          // 随机播一个动作组（模型没动作就静默忽略）
+          model.internalModel?.motionManager?.startRandomMotion?.();
+        } catch {
+          /* ignore */
+        }
+      },
+      expression() {
+        try {
+          model.expression?.(); // 不传名字 = 随机表情（模型没表情就忽略）
+        } catch {
+          /* ignore */
+        }
+      },
+      setMouth(open: number) {
+        try {
+          const v = Math.max(0, Math.min(1, open));
+          model.internalModel?.coreModel?.setParameterValueById?.('ParamMouthOpenY', v);
+        } catch {
+          /* ignore */
+        }
+      },
+    };
+  } catch (e) {
+    // 装配中途失败（模型 URL 404 / 格式不支持等）→ 回收已建的 PIXI Application（含 WebGL 上下文）。
+    // 否则每次试错都泄漏一个 WebGL 上下文，反复几次就撞浏览器 ~16 个上限、之后再也建不出来。
+    try {
+      app.destroy(false, { children: true, texture: true, baseTexture: true });
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  }
 }

@@ -28,7 +28,9 @@
 - [x] **A5 拖拽中关窗泄漏 rAF + snap 预览**：`shell/Window.svelte` 拖动/缩放时窗口若被其它逻辑关闭，`onpointerup` 不触发 → pending rAF 不取消、`snapState.preview` 不清。修：组件卸载 `$effect` 清理里 `cancelAnimationFrame` + 清 preview。
   - ✅ 实现：加 `onDestroy` 兜底——`if (raf) cancelAnimationFrame(raf)`（无条件，覆盖拖/缩两路）+ `if (dragging) snapState.preview = null`（仅本窗在拖时清，preview 是全局单信号只归当前拖拽窗，避免误清别窗）。正常关窗时 raf=0/dragging=false → 两 guard 皆 no-op，零副作用。
   - ✅ 浏览器实测：正常连续开关多窗 onDestroy 各触发、0 残留、无 JS 错误。⏳ 拖拽中关窗的视觉场景因无头预览视口尺寸为 0（移动模式禁拖 + rAF 冻结）本会话无法复现 → **待真机验证**。supervisor 子 Agent PASS（rAF 无条件清/preview 仅 dragging 守卫不误清/resize 不写 preview 故只需清 rAF/无双清/无回归全过；仅 out:pop 过渡 150ms 内残留属罕见路径 cosmetic）。npm check+build 0 错 0 警。
-- [ ] **A6 Live2D 加载失败泄漏 WebGL 上下文**：`lib/live2d.ts` `createPet` 若 `Live2DModel.from` 抛错，已建的 PIXI `Application`（WebGL 上下文）不回收 → 反复填错 URL 耗尽浏览器 ~16 上下文上限。修：model 加载失败前 `app.destroy()`。
+- [x] **A6 Live2D 加载失败泄漏 WebGL 上下文**：`lib/live2d.ts` `createPet` 若 `Live2DModel.from` 抛错，已建的 PIXI `Application`（WebGL 上下文）不回收 → 反复填错 URL 耗尽浏览器 ~16 上下文上限。修：model 加载失败前 `app.destroy()`。
+  - ✅ 实现：`const app = new PIXI.Application` 之后的整段装配（Live2DModel.from / addChild / fit / ResizeObserver / 返回 Pet）包进 try；catch 里 `app.destroy(false,{children,texture,baseTexture})`（内层 try 吞二次错）后 `throw e` 重抛。成功路径 return 在 try 内、catch 不跑、行为与改前一致；失败路径回收已建 WebGL 上下文再抛。
+  - ✅ npm check+build 0 错 0 警。supervisor 子 Agent PASS（try/catch 作用域/闭包捕获 app·ro·model/不双重销毁/catch 不引用未建的 ro 无 ReferenceError/对半装配 app 调 destroy 安全/调用方错误态不变/无回归全过；仅 fit·ro.observe 抛这一极罕见边界会漏 ro 但 WebGL 上下文已可靠回收，可接受）。⏳ Live2D/WebGL 无头预览验不了 → **待真机验证**（反复填错模型 URL 不再耗尽上下文）。
 - [x] **A7 `vfs.move` 不查目标目录重名 → 同名并存、路径不可达**：`resolvePath` 只命中第一个同名，另一个永久无法按路径访问。修：move 落地前查重名，改名或拒绝。文件：`kernel/vfs.svelte.ts`。
   - ✅ 实现：`move` 在落地前 `n.name = uniqueName(destId, n.name)`——目标已有同名则改唯一名（「x 2.txt」），无冲突原样返回；调用时 n 仍在原父目录故 uniqueName 不把自己算进去。覆盖 GUI 拖拽（Files/DesktopIcons）+ shell `mv 进目录`。
   - ✅ 浏览器实测：根 a.txt(ROOT-A) `mv` 进已有 a.txt(INDIR-A) 的目录 → 得「a 2.txt(ROOT-A)」+原「a.txt(INDIR-A)」两者皆可达、根下不再有 a.txt。supervisor 子 Agent PASS（uniqueName 时机/无冲突不误改/同目录·跨目录 rename 路径不受影响/目录与二进制同样适用全过）。npm check+build 0 错 0 警。
