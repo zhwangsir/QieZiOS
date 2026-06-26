@@ -42,7 +42,8 @@
   let aiHits = $state<string[] | null>(null);
   let aiBusy = $state(false);
   let aiErr = $state('');
-  const hasKey = $derived(!!aiConfig.apiKey);
+  // provider 感知：OpenAI 兼容端点（本地等）无需 key，仅 Anthropic 强制要 key（与 Assistant 一致）
+  const hasKey = $derived(aiConfig.provider === 'openai' || !!aiConfig.apiKey);
 
   function onDrop(e: DragEvent, destId: string) {
     e.preventDefault();

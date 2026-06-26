@@ -216,6 +216,7 @@ docker compose up -d   # 构建镜像 + 跑在 :8787；AI 网关/key 在 docker-
   - ✅ **B2 删除确认**：回收站「彻底删除/清空」改两次点击确认（非模态，首点「确认?」3s 再点才执行），防不可逆误删；软删除靠回收站还原不强制确认。
   - ✅ **B7 窗口四角四分屏 + 键盘平铺**：拖到上/下边缘靠两侧 20%→四分之一屏(tl/tr/bl/br)，Ctrl+Alt+方向键平铺活动窗（左半/右半/最大化/还原）。拖拽四角 ⏳ 待真机验证。
   - ✅ **B11 快捷键速查面板**：`?` 唤起浮层列出所有快捷键（`Shortcuts.svelte`+`shortcutsState`），解决「快捷键无处可查」（尤其新加的 Ctrl+Alt 平铺）。
+  - ✅ **B10 桌宠引导 + AI 就绪 provider 感知**：DesktopPet/TextEdit/Files 的 `hasKey` 统一改 provider 感知（`provider==='openai'||!!apiKey`，与 Assistant 一致）→ 本地/网关无 key 不再被误判「没配 AI」隐藏 AI 功能；桌宠无-key 提示加「去设置 AI」跳转。
   - ✅ **融合打磨③·AI↔shell 互通**：AI 加 `run_shell` 工具（注入式，避免 ai→aiTools→shell 成环；常驻 aiShellCtx、cd 跨调用保留）→ 助手直接跑 ls/grep/ps/systemctl/pkg… 全部 coreutils；shell 加 `ai <问题>` 命令（可管道喂入）→ 命令行问 AI。两条驱动线合流。实测：AI agent loop 真调 run_shell 跑 `ls /` 答「15 个条目」、`ai 收到`→本地 GLM 回「收到」。
   - ✅ **融合打磨②·Files 权限感知**：权限判定抽到 `system/permissions.ts`（终端+GUI 共用）；Files 网格显示「属主·你的rwx」+ 无读权限显 🔒、双击受读权限约束（与终端 cat 一致）、右键设只读/可读写/私密/归我所有；TextEdit 无写权限则只读 banner。权限从「终端专属」变成全系统可见可控。实测 perm000 双击被拦、perm444 只读 banner、右键 644→444。
   - ✅ **融合打磨①·统一身份**：后端账号 = shell 当前用户 = 新建文件属主 串成一条线。`account.currentUser()`(账号名/访客 qiezi)；`vfs.setOwnerProvider`(注入,App 启动接上账号→新文件归当前账号,GUI/AI/shell 一致)；`shell.newCtx` USER 取 currentUser；登录时 `ensureUser` 把账号接进 shell 用户表(su/id//etc/passwd 都认)。实测：登录 carol→新终端 carol@、touch 文件 owner=carol、/etc/passwd 含 carol；登出回 qiezi。kernel 仍不反向依赖 system（靠注入）。

@@ -77,7 +77,9 @@
   - ✅ 实现：文件过滤改 `name 或 文本正文 includes(q)`，内容命中时 `snippetFor` 截含关键词片段显在文件名下；`ACTIONS` 动作列表（切换明暗主题/清空回收站/打开终端/打开设置/显示桌面·最小化所有/关闭所有窗口，各 label+keywords+run）按 q 匹配 → kind `action`，activate 调 run。结果顺序 apps+installed+actions+files+AI；keyed each 前缀加 `:` 分隔防未来 id 撞键。
   - ✅ 浏览器实测：搜 'brown'(只在内容)→ b8notes.txt 带片段「…brown fox…」；搜 '暗'→「切换明暗主题」、'终端'→「打开终端」动作；点动作→主题真翻转 + Spotlight 关闭。supervisor 子 Agent PASS（动作副作用 closeall 拷贝数组遍历安全/selected 越界有守卫不崩/正文扫描性能在节点量级可接受/snippetFor 边界/分层无环/无回归；建议的 keyed 前缀分隔已采纳）。npm check+build 0 错 0 警。
 - [ ] **B9 Dock 排序 + pin/unpin**：顺序写死、不能固定/拖排。存 `settings.dockOrder`/`dockPinned`。文件：`shell/Dock.svelte`、`system/settings.svelte.ts`。
-- [ ] **B10 桌宠/伙伴 无-key 引导**：未配 AI 时聊天直接走错误回落，无引导。加「去设置配 AI」提示+跳转（对齐其它 App 的 hasKey 守卫）。文件：`shell/DesktopPet.svelte`、`apps/Companion.svelte`。
+- [x] **B10 桌宠/伙伴 无-key 引导 + AI 就绪判断 provider 感知**：未配 AI 时聊天直接走错误回落，无引导。加「去设置配 AI」提示+跳转（对齐其它 App 的 hasKey 守卫）。文件：`shell/DesktopPet.svelte`、`apps/Companion.svelte`。
+  - ✅ 实现（比审计更深）：发现 DesktopPet/TextEdit/Files 的 `hasKey=!!apiKey` **非 provider 感知** → 本地/网关(OpenAI 兼容、无 key)被误判「没配 AI」、AI 功能被错误隐藏。三处统一改 `provider==='openai' || !!apiKey`（与 Assistant 的 aiReady 一致）。DesktopPet 无-key 提示加「去设置 AI →」跳转按钮（开设置 + 关气泡）。Companion 不用 AI 聊天（只加载 Live2D 模型 URL）故无需改。
+  - ✅ 浏览器实测：provider=openai+空 key → TextEdit AI 动作条显示、桌宠聊天显示输入框（修复误判）；provider=anthropic+空 key → 桌宠显「去设置 AI」按钮、点它开设置+关气泡。supervisor 子 Agent PASS（provider 逻辑与 Assistant 字节一致/hasKey 改语义后三文件所有用法仍对/跳转正确/有 key 用户无回归/仅 UI 门控不碰 complete 调用）。npm check+build 0 错 0 警。
 - [x] **B11 快捷键速查面板**：快捷键硬编码、无处可查。先做 `?` 唤起的速查面板（后续再做可重绑定）。文件：`shell/Desktop.svelte`、`apps/Settings.svelte`。
   - ✅ 实现：新 `shortcutsState.svelte.ts`（开关）+ `Shortcuts.svelte`（居中浮层，分组列出 窗口/系统/编辑·终端 共 12+ 条，kbd 标签，点遮罩/Esc/关闭按钮关）；Desktop onKey 加 `?` 唤起（input 聚焦不触发）+ shortcuts 开时 Esc/? 关并吞键；桌面右键菜单加「键盘快捷键 (?)」。z-[10003] 在 spotlight 之上。
   - ✅ 浏览器实测：`?`→开（列出含 Ctrl+Alt 平铺等 12 条）、Esc→关、`?`→重开、点外部→关、右键菜单项→开。supervisor 子 Agent PASS（onKey 顺序/吞键合理、? 在 input guard 后、点外部、z-index、无环、无回归全过）。npm check+build 0 错 0 警。

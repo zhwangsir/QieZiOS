@@ -4,6 +4,7 @@
   import { createPet, type Pet } from '../lib/live2d';
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
+  import { sys } from '../system/sys';
 
   let canvas = $state<HTMLCanvasElement>();
   let container = $state<HTMLElement>();
@@ -17,7 +18,9 @@
   let reply = $state('');
   let busy = $state(false);
   let ctrl: AbortController | null = null;
-  const hasKey = $derived(!!aiConfig.apiKey);
+  // AI 是否就绪（provider 感知，与 Assistant 一致）：OpenAI 兼容端点（本地 LM Studio 等）无需 key，
+  // 仅 Anthropic 强制要 key。原来只看 !!apiKey → 本地 provider 会被误判「没配 AI」。
+  const hasKey = $derived(aiConfig.provider === 'openai' || !!aiConfig.apiKey);
 
   $effect(() => {
     if (!pet.enabled || !canvas || !container) return;
@@ -133,7 +136,15 @@
               onclick={ask}>{busy ? '…' : '问'}</button>
           </div>
         {:else}
-          <div class="text-qz-muted">先在「设置 → AI」配置后才能聊天</div>
+          <div class="flex flex-col gap-1.5 text-qz-muted">
+            <span>还没配 AI，配置后就能和我聊天啦～</span>
+            <button
+              class="self-start rounded-md bg-qz-accent px-2 py-1 text-[11px] font-medium text-qz-accent-contrast active:scale-95"
+              onclick={() => {
+                sys.openApp('settings');
+                chatting = false;
+              }}>去设置 AI →</button>
+          </div>
         {/if}
       </div>
     {/if}

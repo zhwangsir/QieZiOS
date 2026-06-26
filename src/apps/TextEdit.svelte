@@ -11,7 +11,8 @@
   const node = $derived(typeof data === 'string' ? getNode(data) : undefined);
   // 写权限：无写权限则只读（与终端「无写位则拒写」一致）
   const writable = $derived(!!node && permits(node, currentUser(), 2));
-  const hasKey = $derived(!!aiConfig.apiKey);
+  // provider 感知：OpenAI 兼容端点（本地等）无需 key，仅 Anthropic 强制要 key（与 Assistant 一致）
+  const hasKey = $derived(aiConfig.provider === 'openai' || !!aiConfig.apiKey);
 
   // ── AI 面板的本地状态（组件内 $state：开关 / 忙 / 输出 / 当前动作名 / 中止句柄） ──
   let aiOpen = $state(false);
