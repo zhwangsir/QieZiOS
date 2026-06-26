@@ -188,6 +188,7 @@ docker compose up -d   # 构建镜像 + 跑在 :8787；AI 网关/key 在 docker-
   - 🚧 **G6.3 ✅ 远程 App 仓库（apt-like）**：`system/appRepo.svelte.ts`(catalog URL→装 App,幂等去重) + shell `pkg list/search/install/repo` + GUI「应用商店」(📦) + 示例 `public/apps.json`。实测 pkg 全子命令 + 商店 GUI 安装 + 去重均通。
   - ✅ **G7 后端账号 + 账号制同步**：`server/index.mjs` 加 `/auth/register`·`/auth/login` + 账号制 `/sync`(Bearer 鉴权、按用户隔离)；`system/account.svelte.ts`(持久会话) + `system/sync.ts`(账号制) + Settings 账号 UI + vite dev 代理 `/auth`·`/sync`→本地后端。实测服务端 curl 全过 + 浏览器全链路 push/pull 恢复。⚠️ 安全待硬化（功能优先，见记忆 [[prioritize-features-over-security]]）。
   - 🎉 **Phase G「对标 Linux」backlog 全部完成**（G1–G7 全 ✅）。自治心跳已撤销。
+  - ✅ **融合打磨①·统一身份**：后端账号 = shell 当前用户 = 新建文件属主 串成一条线。`account.currentUser()`(账号名/访客 qiezi)；`vfs.setOwnerProvider`(注入,App 启动接上账号→新文件归当前账号,GUI/AI/shell 一致)；`shell.newCtx` USER 取 currentUser；登录时 `ensureUser` 把账号接进 shell 用户表(su/id//etc/passwd 都认)。实测：登录 carol→新终端 carol@、touch 文件 owner=carol、/etc/passwd 含 carol；登出回 qiezi。kernel 仍不反向依赖 system（靠注入）。
 - 🚧 **Phase F 平台化 & 生态**：让系统托管真外部应用、可分发、可深度自定义。
   - ✅ **网页 App 嵌入**(`webApps`/`WebAppGallery`/`WebView`)：任意网址 → iframe 窗口 App（兑现「异构 App 平台」愿景，胡桃博客即可这么进系统）。实测：example.com 自动补 https→开 webview 窗口 iframe src 正确、持久化。
   - ✅ **App 导出/导入**(`appShare.ts`)：用户 App 序列化成 `.qzapp.json` 下载分享、导入安装（caps 一并带上）。实测：序列化→导入往返保真、无效文本拒绝。

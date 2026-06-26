@@ -37,6 +37,7 @@ import {
 } from '../kernel/services.svelte';
 import { MAN } from './man';
 import { repoConfig, fetchCatalog, installCatalogApp } from '../system/appRepo.svelte';
+import { currentUser } from '../system/account.svelte';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -54,9 +55,10 @@ export interface CmdResult {
 }
 
 export function newCtx(): ShellCtx {
+  const user = currentUser(); // 登录账号 → 就是你；否则访客 qiezi
   return {
     cwd: 'root',
-    env: { USER: 'qiezi', HOME: '/', SHELL: 'qzsh', HOSTNAME: 'qiezios', PATH: '/bin' },
+    env: { USER: user, HOME: user === 'root' ? '/root' : '/', SHELL: 'qzsh', HOSTNAME: 'qiezios', PATH: '/bin' },
     code: 0,
     pid: 0,
   };

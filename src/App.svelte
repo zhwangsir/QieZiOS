@@ -3,11 +3,15 @@
   import { settings } from './system/settings.svelte';
   import { activeTokens, applyTokens } from './system/theme.svelte';
   import { processes } from './kernel/processes.svelte';
-  import { vfs } from './kernel/vfs.svelte';
+  import { vfs, setOwnerProvider } from './kernel/vfs.svelte';
   import { startServices } from './kernel/services.svelte';
+  import { account } from './system/account.svelte';
   import { sys } from './system/sys';
   import './system/services'; // 登记系统自带服务（通知中心等）
   import Desktop from './shell/Desktop.svelte';
+
+  // 统一身份：新建文件的属主 = 当前登录账号（未登录 = 访客 qiezi）。
+  setOwnerProvider(() => account.username || 'qiezi');
 
   // 把主题 token 写进 :root；settings 任意字段一变就重写。
   // $effect 会自动订阅 activeTokens() 里读到的每个 settings 字段。

@@ -1,4 +1,5 @@
 import { persisted } from '../kernel/persist.svelte';
+import { ensureUser } from './users.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 账号会话（持久化）。token = 服务端发的会话凭据；username 仅显示用。
@@ -9,6 +10,12 @@ export const account = persisted<{ username: string; token: string }>('qz.accoun
 
 export function loggedIn(): boolean {
   return !!account.token;
+}
+
+// 当前系统身份：登录了就是账号名，否则访客 qiezi。
+// VFS 新建文件的属主、shell 新终端的 USER 都取它 → 账号/用户/属主三者统一。
+export function currentUser(): string {
+  return account.username || 'qiezi';
 }
 
 async function post(path: string, username: string, password: string): Promise<void> {
@@ -26,6 +33,7 @@ async function post(path: string, username: string, password: string): Promise<v
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
   account.username = body.username ?? username;
   account.token = body.token ?? '';
+  ensureUser(account.username); // 把账号接进 shell 用户表（su/id//etc/passwd 都认）
 }
 
 export function register(username: string, password: string): Promise<void> {
@@ -37,4 +45,8 @@ export function login(username: string, password: string): Promise<void> {
 export function logout(): void {
   account.username = '';
   account.token = '';
+}
+
+if (import.meta.env.DEV) {
+  (globalThis as unknown as { __qzAcct: unknown }).__qzAcct = { account, currentUser, register, login, logout };
 }

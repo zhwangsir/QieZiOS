@@ -32,6 +32,13 @@ export function defaultMode(type: 'dir' | 'file'): number {
   return type === 'dir' ? 0o755 : 0o644;
 }
 
+// 新建文件/目录的属主 = 当前登录用户（账号登录 → 你建的文件归你）。
+// 用「注入」避免内核反向依赖 system 层：App 启动时 setOwnerProvider 接上账号。
+let resolveOwner: () => string = () => DEFAULT_OWNER;
+export function setOwnerProvider(fn: () => string): void {
+  resolveOwner = fn;
+}
+
 // 回收站用一个「哨兵 parentId」标记，不需要真节点：
 // children('trash') 即回收站内容；普通文件夹 children 自然不含它们（parentId 已变成 'trash'）。
 export const TRASH = 'trash';
@@ -86,7 +93,7 @@ export function createDir(parentId: string, name = '新建文件夹'): string {
   const id = crypto.randomUUID();
   const t = Date.now();
   const finalName = uniqueName(parentId, name);
-  vfs.nodes[id] = { id, name: finalName, type: 'dir', parentId, content: '', mode: 0o755, owner: DEFAULT_OWNER, createdAt: t, updatedAt: t };
+  vfs.nodes[id] = { id, name: finalName, type: 'dir', parentId, content: '', mode: 0o755, owner: resolveOwner(), createdAt: t, updatedAt: t };
   emit('fs.create', { kind: '文件夹', name: finalName });
   return id;
 }
@@ -95,7 +102,7 @@ export function createFile(parentId: string, name = '新建文本.txt', content 
   const id = crypto.randomUUID();
   const t = Date.now();
   const finalName = uniqueName(parentId, name);
-  vfs.nodes[id] = { id, name: finalName, type: 'file', parentId, content, mode: 0o644, owner: DEFAULT_OWNER, createdAt: t, updatedAt: t };
+  vfs.nodes[id] = { id, name: finalName, type: 'file', parentId, content, mode: 0o644, owner: resolveOwner(), createdAt: t, updatedAt: t };
   emit('fs.create', { kind: '文件', name: finalName });
   return id;
 }
@@ -118,7 +125,7 @@ export async function createBinaryFile(parentId: string, name: string, blob: Blo
     mime: blob.type,
     size: blob.size,
     mode: 0o644,
-    owner: DEFAULT_OWNER,
+    owner: resolveOwner(),
     createdAt: t,
     updatedAt: t,
   };

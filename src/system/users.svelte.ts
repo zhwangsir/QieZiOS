@@ -33,6 +33,11 @@ export function addUser(name: string): User {
   return u;
 }
 
+// 确保某用户存在（登录账号时把账号名接进 shell 用户表 → su/id//etc/passwd 都认它）
+export function ensureUser(name: string): User {
+  return getUser(name) ?? addUser(name);
+}
+
 // 渲染成 /etc/passwd 一行：name:x:uid:gid::home:shell
 export function passwdLine(u: User): string {
   return `${u.name}:x:${u.uid}:${u.gid}::${u.name === 'root' ? '/root' : '/'}:/bin/qzsh`;
