@@ -56,13 +56,14 @@ export function persisted<T extends object>(
   $effect.root(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     $effect(() => {
-      // $state.snapshot：把响应式代理「拍平」成普通对象，才能 JSON 序列化。
-      // 这里深度读取每个字段 → 任何字段（含嵌套）变化都会触发这次 effect。
+      // $state.snapshot：把响应式代理「拍平」成普通对象（深读 → 订阅每个字段，含键增删）。
+      // snapshot 必须留在 effect 体内以维持订阅；但更重的 serialize + JSON.stringify 推迟到
+      // 防抖回调里——高频变更（如 TextEdit 逐字输入）每次只做一次轻量 snapshot，停手后才序列化
+      // 一次整棵树，而不是每个键程都全量序列化（大文件/多文件时这是主要开销）。
       const snap = $state.snapshot(state) as T;
-      const json = JSON.stringify(serialize ? serialize(snap) : snap);
-      // 防抖写盘
+      // 防抖写盘：序列化也一并推迟，只有最后一次（防抖窗口内）真正写入。
       clearTimeout(timer);
-      timer = setTimeout(() => storage.set(key, json), debounceMs);
+      timer = setTimeout(() => storage.set(key, JSON.stringify(serialize ? serialize(snap) : snap)), debounceMs);
     });
   });
 
