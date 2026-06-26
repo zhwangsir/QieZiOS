@@ -175,7 +175,7 @@ docker compose up -d   # 构建镜像 + 跑在 :8787；AI 网关/key 在 docker-
 - 🚧 **Phase G 对标 Linux 的系统化补强**（当前自动推进阶段 · 详见 [[DEVPLAN-LINUX]]）：在浏览器沙箱内补齐"像真系统"的能力。**自治开发心跳（定时任务）**按 `DEVPLAN-LINUX.md` 逐项推进：每触发一次 = builder 子 Agent 实现 + supervisor 子 Agent 跑 check/build+审查 + 通过则提交推送+勾选，直到 backlog 清空自删。
   - ✅ **G1 终端与 Shell（旗舰）**：`vfs.resolvePath/pathOf` + `lib/shell.ts`(分词/重定向/coreutils) + `apps/Terminal.svelte`(🖥️ 滚动/历史/Tab 补全)。实测：cd/ls -l/echo>文件/cat/open 启动 App/退出码均通。
   - ✅ **G2 流、管道与文本处理**：G2.1 管道 `\|` + 重定向 `< > >> 2>`(命令模型带 stdin)；G2.2 grep/find/wc/head/tail/sort/uniq/cut。实测 4 级管道、递归 grep/find 均通。
-  - ✅ **G3 配置与虚拟文件系统**：G3.1 env/export/unset/which/source + `/etc/profile` 启动 rc + `$PATH`；G3.2 `system/vfsVirtual.ts` 挂 `/proc`·`/dev` 只读虚拟节点（ls/cat 虚拟感知）。实测 `ls /proc`、`cat /proc/<pid>/status` 等均通。
+  - ✅ **G3 配置与虚拟文件系统**：G3.1 env/export/unset/which/source + `/etc/profile` 启动 rc + `$PATH`；G3.2 `system/vfsVirtual.ts` 挂 `/proc`·`/dev` 只读虚拟节点（ls/cat 虚拟感知）。实测 `which ls`、`/etc/profile` 出厂、`ls /proc`、`cat /proc/<pid>/status` 等均通。
   - 🚧 **G4–G7 待办**：权限/所有权+用户模型 · 进程加深(ppid/信号/退出码)+可配置 init · 网络工具/man/远程 App 仓库 · 后端账号+同步鉴权。
 - 🚧 **Phase F 平台化 & 生态**：让系统托管真外部应用、可分发、可深度自定义。
   - ✅ **网页 App 嵌入**(`webApps`/`WebAppGallery`/`WebView`)：任意网址 → iframe 窗口 App（兑现「异构 App 平台」愿景，胡桃博客即可这么进系统）。实测：example.com 自动补 https→开 webview 窗口 iframe src 正确、持久化。
