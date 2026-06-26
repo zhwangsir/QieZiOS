@@ -81,7 +81,10 @@
 - [x] **B8 Spotlight 搜文件正文 + 动作命令**：现只搜 App 名/文件名、结果硬截断。加遍历 `vfs.nodes.content` 搜正文 + 常用系统动作（切暗色/清空回收站等）。文件：`shell/Spotlight.svelte`。
   - ✅ 实现：文件过滤改 `name 或 文本正文 includes(q)`，内容命中时 `snippetFor` 截含关键词片段显在文件名下；`ACTIONS` 动作列表（切换明暗主题/清空回收站/打开终端/打开设置/显示桌面·最小化所有/关闭所有窗口，各 label+keywords+run）按 q 匹配 → kind `action`，activate 调 run。结果顺序 apps+installed+actions+files+AI；keyed each 前缀加 `:` 分隔防未来 id 撞键。
   - ✅ 浏览器实测：搜 'brown'(只在内容)→ b8notes.txt 带片段「…brown fox…」；搜 '暗'→「切换明暗主题」、'终端'→「打开终端」动作；点动作→主题真翻转 + Spotlight 关闭。supervisor 子 Agent PASS（动作副作用 closeall 拷贝数组遍历安全/selected 越界有守卫不崩/正文扫描性能在节点量级可接受/snippetFor 边界/分层无环/无回归；建议的 keyed 前缀分隔已采纳）。npm check+build 0 错 0 警。
-- [ ] **B9 Dock 排序 + pin/unpin**：顺序写死、不能固定/拖排。存 `settings.dockOrder`/`dockPinned`。文件：`shell/Dock.svelte`、`system/settings.svelte.ts`。
+- [x] **B9 Dock 排序 + pin/unpin**：顺序写死、不能固定/拖排。存 `settings.dockOrder`/`dockPinned`。文件：`shell/Dock.svelte`、`system/settings.svelte.ts`。
+  - ✅ 实现：新 `system/dockPrefs.svelte.ts`（持久 `qz.dock`：`order` 自定义排序 + `hidden` 取消固定）——**单独成模块不塞 settings**，因 settings 的 SETTINGS_KEYS 是主题导入/导出白名单、Dock 布局不该随配色主题走（但仍随账号同步 `qz.*`，跨设备保留）。导出 `sortDockApps`(stable sort：order 内按 order、order 外保持原相对序，过滤 hidden 但**运行中 App 即使取消固定也保留**圆点可见)/`isPinned`/`pinApp`/`unpinApp`/`moveDockApp`(左/右移整条写回防掉位)/`dragReorder`(插入式)/`resetDock`。Dock：`apps=$derived(sortDockApps(visibleAppDefs(),running))`；右键菜单加 左移/右移(到头不显)·固定/取消固定·重置 Dock 布局；HTML5 native drag 重排（拖拽中半透明）。空 Dock 恢复路径：Launchpad 🍆 启任意 App→运行中回 Dock→右键「重置」。
+  - ✅ 浏览器实测（真 dev 服务 reload 全链路）：Dock 20 个 draggable 按钮；右键最左 App→只显「右移」(无左移，边界对)+从 Dock 移除+重置；点右移→欢迎↔助手 交换且整条 order 持久化；右键计算器→从 Dock 移除→消失(20→19)、hidden=['calculator']；**reload 后** 自定义序(助手/欢迎)+隐藏(计算器仍无,19)均存活；重置→回 20、默认序、计算器回归、qz.dock 清空。0 console error。supervisor 子 Agent PASS（stable sort 的 `Infinity-Infinity=NaN` 回落原索引 tiebreak 正确不丢不重/pin·unpin 运行态语义/move·drag 边界 no-op/whole-array 写回不掉位/$state 整体赋值触发 $derived/qz.dock 不进主题白名单但进同步/无环·分层/拖拽与 click·hover 不冲突/空 Dock 可恢复/无回归）。npm check+build 0 错 0 警。
+  - ⏳ 拖拽重排（native HTML5 drag）的指针手势无头预览无法可靠模拟 → **待真机验证**（`dragReorder` 纯函数 + 逻辑已 supervisor 核过；菜单「左移/右移」提供等价的可验证重排路径）。
 - [x] **B10 桌宠/伙伴 无-key 引导 + AI 就绪判断 provider 感知**：未配 AI 时聊天直接走错误回落，无引导。加「去设置配 AI」提示+跳转（对齐其它 App 的 hasKey 守卫）。文件：`shell/DesktopPet.svelte`、`apps/Companion.svelte`。
   - ✅ 实现（比审计更深）：发现 DesktopPet/TextEdit/Files 的 `hasKey=!!apiKey` **非 provider 感知** → 本地/网关(OpenAI 兼容、无 key)被误判「没配 AI」、AI 功能被错误隐藏。三处统一改 `provider==='openai' || !!apiKey`（与 Assistant 的 aiReady 一致）。DesktopPet 无-key 提示加「去设置 AI →」跳转按钮（开设置 + 关气泡）。Companion 不用 AI 聊天（只加载 Live2D 模型 URL）故无需改。
   - ✅ 浏览器实测：provider=openai+空 key → TextEdit AI 动作条显示、桌宠聊天显示输入框（修复误判）；provider=anthropic+空 key → 桌宠显「去设置 AI」按钮、点它开设置+关气泡。supervisor 子 Agent PASS（provider 逻辑与 Assistant 字节一致/hasKey 改语义后三文件所有用法仍对/跳转正确/有 key 用户无回归/仅 UI 门控不碰 complete 调用）。npm check+build 0 错 0 警。
@@ -105,4 +108,10 @@
 
 ---
 
-> 进度记录见各项后的「✅ …」注脚。当前循环：刚建立本 backlog，正在做 **B1 自定义壁纸**（破除「只有内置渐变」、兑现美观第一优先级）。
+> 进度记录见各项后的「✅ …」注脚。
+
+---
+
+## 🎉 完善与查漏计划全部完成（2026-06-27）
+
+P0 正确性/健壮性（A1–A9 + purge 误报排除）、P1 功能完善（B1–B16）、P2 一致性（C1）—— **全部 `[x]`**，无 `[ ]` 剩余。每项均经 builder 实现 → supervisor 子 Agent 审 diff → 浏览器/DOM 级验证（几何/拖拽/淡出等无头验不了的标 ⏳ 待真机验证）→ 提交推送，全程 `npm check`+`build` 0 错 0 警。期间 supervisor 拦下 1 个真崩溃（B6 nid 撞历史 id）、揪出 2 个既存 bug（A9 DesktopIcons 二次 blur 误提交）、采纳多条加固建议。自驱完善循环就此清空 backlog、停止心跳。
