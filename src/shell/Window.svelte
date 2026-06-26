@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { onDestroy } from 'svelte';
   import {
     focus,
     close,
@@ -77,6 +78,13 @@
     snapState.preview = null; // 收掉预览框
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
   }
+
+  // 拖拽/缩放中若窗口被卸载（AI/快捷键关窗、Alt+` 等），onUp 不会触发 →
+  // pending rAF 不取消、snapState.preview 残留一个吸附预览框。卸载时兜底清理。
+  onDestroy(() => {
+    if (raf) cancelAnimationFrame(raf);
+    if (dragging) snapState.preview = null; // 仅当本窗正在拖（preview 归本窗所有）才收，免误清别窗的
+  });
 
   // 拖拽中：根据指针离窗口层各边的距离，决定吸附区并写预览框（layer 坐标系）
   function updateSnap(e: PointerEvent) {

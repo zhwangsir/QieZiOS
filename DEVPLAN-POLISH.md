@@ -25,7 +25,9 @@
   - ✅ 浏览器实测：VFS 建/写防抖后落盘（120ms 前没、250/500ms 后有）、chat 序列化路径仍剥图留 imageCount、快速三连写只末值落盘、rm→trash 持久化、刷新各存储正常加载。supervisor 子 Agent PASS（订阅字节级不变/闭包捕获无陈旧无饥饿/serialize 纯函数/异常 locus 非回归/debounce 语义不变）。npm check+build 0 错 0 警。
 - [ ] **A3 过期一次性 `at` 命令开机并发补发执行**：schedd 重新武装时 `Math.max(0,delay)` 让过期任务立即 fire，命令型会经 shell 执行 → 刷新后批量跑过期命令（与真 `at` 过期不补相反，可能 rm 等意外副作用）。修：重新武装时过期的命令型一次性任务只移除不执行（提醒型可保留补发通知或也丢弃）。文件：`system/services.ts`。
 - [ ] **A4 `bgPromises` Map 只增不删（后台作业泄漏）**：`lib/shell.ts` 每个 `cmd &` 的 promise 永久留存（含完整结果串），`jobs.list` 封顶 30 但 bgPromises 无清理。修：作业完成后裁剪 bgPromises（与 jobs.list 同步/保留最近 N）。
-- [ ] **A5 拖拽中关窗泄漏 rAF + snap 预览**：`shell/Window.svelte` 拖动/缩放时窗口若被其它逻辑关闭，`onpointerup` 不触发 → pending rAF 不取消、`snapState.preview` 不清。修：组件卸载 `$effect` 清理里 `cancelAnimationFrame` + 清 preview。
+- [x] **A5 拖拽中关窗泄漏 rAF + snap 预览**：`shell/Window.svelte` 拖动/缩放时窗口若被其它逻辑关闭，`onpointerup` 不触发 → pending rAF 不取消、`snapState.preview` 不清。修：组件卸载 `$effect` 清理里 `cancelAnimationFrame` + 清 preview。
+  - ✅ 实现：加 `onDestroy` 兜底——`if (raf) cancelAnimationFrame(raf)`（无条件，覆盖拖/缩两路）+ `if (dragging) snapState.preview = null`（仅本窗在拖时清，preview 是全局单信号只归当前拖拽窗，避免误清别窗）。正常关窗时 raf=0/dragging=false → 两 guard 皆 no-op，零副作用。
+  - ✅ 浏览器实测：正常连续开关多窗 onDestroy 各触发、0 残留、无 JS 错误。⏳ 拖拽中关窗的视觉场景因无头预览视口尺寸为 0（移动模式禁拖 + rAF 冻结）本会话无法复现 → **待真机验证**。supervisor 子 Agent PASS（rAF 无条件清/preview 仅 dragging 守卫不误清/resize 不写 preview 故只需清 rAF/无双清/无回归全过；仅 out:pop 过渡 150ms 内残留属罕见路径 cosmetic）。npm check+build 0 错 0 警。
 - [ ] **A6 Live2D 加载失败泄漏 WebGL 上下文**：`lib/live2d.ts` `createPet` 若 `Live2DModel.from` 抛错，已建的 PIXI `Application`（WebGL 上下文）不回收 → 反复填错 URL 耗尽浏览器 ~16 上下文上限。修：model 加载失败前 `app.destroy()`。
 - [x] **A7 `vfs.move` 不查目标目录重名 → 同名并存、路径不可达**：`resolvePath` 只命中第一个同名，另一个永久无法按路径访问。修：move 落地前查重名，改名或拒绝。文件：`kernel/vfs.svelte.ts`。
   - ✅ 实现：`move` 在落地前 `n.name = uniqueName(destId, n.name)`——目标已有同名则改唯一名（「x 2.txt」），无冲突原样返回；调用时 n 仍在原父目录故 uniqueName 不把自己算进去。覆盖 GUI 拖拽（Files/DesktopIcons）+ shell `mv 进目录`。
