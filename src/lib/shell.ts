@@ -35,6 +35,7 @@ import {
   enableService,
   disableService,
 } from '../kernel/services.svelte';
+import { MAN } from './man';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -217,7 +218,9 @@ let sourceDepth = 0; // source 嵌套深度（防循环 source 把栈打爆）
 const SIGNALS: Record<number, string> = { 1: 'HUP', 2: 'INT', 9: 'KILL', 15: 'TERM', 18: 'CONT', 19: 'STOP' };
 
 const COMMANDS: Record<string, CmdFn> = {
-  help: () => ({
+  help: (args, ctx, stdin) => {
+    if (args.length) return COMMANDS.man(args, ctx, stdin); // help <命令> = man <命令>
+    return {
     out:
       '可用命令：\n' +
       '  pwd ls cd cat echo  —— 浏览/查看\n' +
@@ -229,13 +232,25 @@ const COMMANDS: Record<string, CmdFn> = {
       '  curl[-i/-I] fetch hostname —— 网络（受浏览器 CORS 限制）\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset which source(.) —— 环境/配置\n' +
-      '  whoami date theme clear help\n' +
+      '  date theme clear  man <命令>（详细用法）\n' +
       '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>。\n' +
       '/etc/profile 在每次开终端时执行（改它=持久化你的 export/别名）。\n' +
       '虚拟文件系统（只读）：ls /proc（进程）、cat /proc/<pid>/status、ls /dev、cat /dev/clipboard。\n' +
-      '试试：ls /proc  /  cat /dev/clipboard  /  ls | grep txt  /  which ls',
-    code: 0,
-  }),
+      '试试：man ls  /  ls /proc  /  cat /dev/clipboard  /  ls | grep txt',
+      code: 0,
+    };
+  },
+  // man：查看命令手册页（man <命令>），无参数列出所有手册页
+  man: (args) => {
+    const name = args[0];
+    if (!name) return { out: '有手册页的命令：\n' + Object.keys(MAN).sort().join('  ') + '\n\n用法：man <命令>', code: 0 };
+    const p = MAN[name];
+    if (!p) return { out: '', err: `man: 没有 ${name} 的手册页（试试 man 看列表）`, code: 1 };
+    return {
+      out: `NAME\n    ${name} — ${p.title}\n\nSYNOPSIS\n    ${p.syn}\n\nDESCRIPTION\n    ${p.desc}`,
+      code: 0,
+    };
+  },
 
   pwd: (_a, ctx) => ({ out: pathOf(ctx.cwd), code: 0 }),
   whoami: (_a, ctx) => ({ out: ctx.env.USER || 'qiezi', code: 0 }),
