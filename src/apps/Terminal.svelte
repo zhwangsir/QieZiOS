@@ -3,6 +3,7 @@
   // 滚动输出区 + 输入行 + 命令历史(↑/↓) + Tab 补全(命令/路径)。
   import { run, newCtx, COMMAND_NAMES, ensureEtcProfile, ensureEtcPasswd } from '../lib/shell';
   import { pathOf, resolvePath, children } from '../kernel/vfs.svelte';
+  import { cmdHistory, addHistory } from '../system/shellPrefs.svelte';
   import { onMount, tick } from 'svelte';
 
   type Line = { kind: 'in' | 'out' | 'err'; text: string };
@@ -15,7 +16,7 @@
     { kind: 'out', text: 'QieZiOS qzsh —— 输入 help 看命令。Tab 补全，↑/↓ 翻历史。' },
   ]);
   let input = $state('');
-  let history = $state<string[]>([]);
+  // 命令历史改用持久化共享存储（cmdHistory）→ 跨终端/刷新保留
   let histIdx = $state(-1); // -1 = 不在翻历史
   let scroller: HTMLElement;
   let inputEl: HTMLInputElement;
@@ -58,7 +59,7 @@
     histIdx = -1;
     const cmd = line.trim();
     if (cmd) {
-      history.push(cmd);
+      addHistory(cmd);
       busy = true;
       scrollToEnd();
       try {
@@ -80,10 +81,11 @@
   }
 
   function recallHistory(dir: -1 | 1) {
-    if (!history.length) return;
-    if (histIdx === -1) histIdx = history.length;
-    histIdx = Math.min(history.length, Math.max(0, histIdx + dir));
-    input = histIdx === history.length ? '' : history[histIdx];
+    const hist = cmdHistory.list;
+    if (!hist.length) return;
+    if (histIdx === -1) histIdx = hist.length;
+    histIdx = Math.min(hist.length, Math.max(0, histIdx + dir));
+    input = histIdx === hist.length ? '' : hist[histIdx];
   }
 
   // Tab 补全：首词补命令名，否则补当前目录下的路径

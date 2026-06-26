@@ -62,6 +62,8 @@ export const MAN: Record<string, ManPage> = {
   env: { title: '列环境变量', syn: 'env', desc: '打印所有环境变量（KEY=VALUE）。' },
   export: { title: '设环境变量', syn: 'export KEY=VALUE', desc: '设置环境变量（当前 shell 会话内）。要持久化可写进 /etc/profile。' },
   unset: { title: '删环境变量', syn: 'unset KEY...', desc: '删除一个或多个环境变量。' },
+  alias: { title: '命令别名', syn: "alias [名=值]", desc: "给命令起别名（持久化、跨终端）。无参列出全部；alias ll='ls -l' 定义；之后输入 ll 即展开。" },
+  unalias: { title: '删别名', syn: 'unalias <名>', desc: '删除一个命令别名。' },
   which: { title: '命令位置', syn: 'which <命令>', desc: '若命令是内置命令，按 PATH 显示其路径（如 /bin/ls）。' },
   source: { title: '执行脚本', syn: 'source <文件>（或 . <文件>）', desc: '逐行执行一个文件里的命令（共享当前 shell 环境）。开终端时会自动 source /etc/profile。' },
   theme: { title: '改主题', syn: 'theme dark|light|#hex', desc: '切换明暗或设置主色。无参数显示当前主题。' },

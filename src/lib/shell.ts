@@ -39,6 +39,7 @@ import { MAN } from './man';
 import { repoConfig, fetchCatalog, installCatalogApp } from '../system/appRepo.svelte';
 import { currentUser } from '../system/account.svelte';
 import { complete } from '../system/ai';
+import { aliases, setAlias, removeAlias } from '../system/shellPrefs.svelte';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -221,7 +222,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  curl[-i/-I] fetch hostname —— 网络（受浏览器 CORS 限制）\n' +
       '  ai <问题> —— 命令行问 AI（可管道喂入）\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
-      '  env export unset which source(.) —— 环境/配置\n' +
+      '  env export unset alias unalias which source(.) —— 环境/配置\n' +
       '  date theme clear  man <命令>（详细用法）\n' +
       '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>。\n' +
       '/etc/profile 在每次开终端时执行（改它=持久化你的 export/别名）。\n' +
@@ -263,6 +264,29 @@ const COMMANDS: Record<string, CmdFn> = {
   },
   unset: (args, ctx) => {
     for (const k of args) delete ctx.env[k];
+    return { out: '', code: 0 };
+  },
+  // 别名：alias（列出）/ alias 名=值（定义，持久化）/ alias 名（查一条）
+  alias: (args) => {
+    if (!args.length) {
+      const lines = Object.entries(aliases.map).map(([k, v]) => `alias ${k}='${v}'`);
+      return { out: lines.join('\n'), code: 0 };
+    }
+    const joined = args.join(' ');
+    const eq = joined.indexOf('=');
+    if (eq < 0) {
+      const v = aliases.map[joined];
+      return v ? { out: `alias ${joined}='${v}'`, code: 0 } : { out: '', err: `alias: ${joined}: 未定义`, code: 1 };
+    }
+    const name = joined.slice(0, eq).trim();
+    const value = joined.slice(eq + 1).trim();
+    if (!name) return { out: '', err: 'alias: 用法 alias 名=值（如 alias ll=\'ls -l\'）', code: 2 };
+    setAlias(name, value);
+    return { out: '', code: 0 };
+  },
+  unalias: (args) => {
+    if (!args.length) return { out: '', err: 'unalias: 用法 unalias <名>', code: 2 };
+    for (const a of args) removeAlias(a);
     return { out: '', code: 0 };
   },
   // which：命令在不在「PATH」里（内置命令一律算在 PATH 第一段下）
@@ -1126,8 +1150,17 @@ async function runPipeline(line: string, ctx: ShellCtx): Promise<CmdResult> {
     const { rest, redir, error } = extractRedirs(toks);
     if (error) return { out: '', err: error, code: 2 };
 
-    const [cmd, ...args] = rest;
+    let [cmd, ...args] = rest;
     if (!cmd) return { out: '', err: 'qzsh: 语法错误：空命令', code: 2 };
+    // 别名展开（单次、非递归）：首词是别名 → 替换成别名内容 + 原参数
+    const aliasVal = aliases.map[cmd];
+    if (aliasVal) {
+      const exp = tokenize(aliasVal).map((t) => subst(t, ctx));
+      if (exp.length) {
+        args = [...exp.slice(1), ...args];
+        cmd = exp[0];
+      }
+    }
     const fn = COMMANDS[cmd];
     if (!fn) {
       errAccum.push(`qzsh: ${cmd}: 未找到命令`);
