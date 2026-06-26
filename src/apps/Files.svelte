@@ -33,9 +33,12 @@
   let renamingId = $state<string | null>(null);
   let renameText = $state('');
   let dragOverId = $state<string | null>(null); // 拖放时高亮的目标文件夹
-  // 文件剪贴板：复制(cut=false)或剪切(cut=true)的源节点
-  let clip = $state<{ id: string; cut: boolean } | null>(null);
+  // 文件剪贴板：复制(cut=false)或剪切(cut=true)的一组源节点
+  let clip = $state<{ ids: string[]; cut: boolean } | null>(null);
   let pasting = $state(false);
+  // 多选：选中的节点 id 列表 + 上次点击的锚点（给 Shift 范围选）
+  let selected = $state<string[]>([]);
+  let lastClicked = $state<string | null>(null);
 
   // 搜索：q 即时按名字过滤当前文件夹；aiHits 非空时改为展示 AI 语义搜索命中的文件（全盘）
   let q = $state('');
@@ -65,15 +68,18 @@
     aiHits = null;
     aiErr = '';
     cwd = id;
+    clearSelection(); // 进新文件夹清掉选择
   }
   function clearSearch() {
     q = '';
     aiHits = null;
     aiErr = '';
+    clearSelection();
   }
 
   // AI 语义搜索：把全盘文本文件的名字+内容片段交给模型，按相关性挑 id
   async function aiSearch() {
+    clearSelection(); // 切到全盘搜索结果 → 清掉当前目录的选择，免计数跨视图
     const query = q.trim();
     if (!query || aiBusy || !hasKey) return;
     aiBusy = true;
@@ -166,29 +172,63 @@ ${JSON.stringify(files)}`;
   function del(n: VNode, e: Event) {
     e.stopPropagation();
     trash(n.id);
+    selected = selected.filter((x) => x !== n.id);
   }
 
-  // 复制/剪切/粘贴。粘贴目标 = 当前文件夹（或指定文件夹）。剪切=move，复制=copyNode（递归、二进制复制字节）。
+  // ── 多选 ──────────────────────────────────────────────
+  // 点击选择：普通=单选；Ctrl/⌘=切换；Shift=从锚点到此的范围。
+  function onItemClick(n: VNode, e: MouseEvent) {
+    if (renamingId) return;
+    if (e.ctrlKey || e.metaKey) {
+      selected = selected.includes(n.id) ? selected.filter((x) => x !== n.id) : [...selected, n.id];
+      lastClicked = n.id;
+    } else if (e.shiftKey && lastClicked) {
+      const ids = items.map((it) => it.id);
+      const a = ids.indexOf(lastClicked);
+      const b = ids.indexOf(n.id);
+      if (a !== -1 && b !== -1) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        selected = ids.slice(lo, hi + 1);
+      }
+    } else {
+      selected = [n.id];
+      lastClicked = n.id;
+    }
+  }
+  function clearSelection() {
+    selected = [];
+    lastClicked = null;
+  }
+  // 对某节点操作时的「有效目标」：它在多选里就用整个多选，否则就这一个
+  function effectiveTargets(n: VNode): string[] {
+    return selected.length > 1 && selected.includes(n.id) ? [...selected] : [n.id];
+  }
+  function delTargets(ids: string[]) {
+    for (const id of ids) trash(id);
+    selected = selected.filter((x) => !ids.includes(x));
+    lastClicked = null;
+  }
+
+  // 复制/剪切/粘贴（支持多选）。粘贴目标 = 当前文件夹（或指定文件夹）。剪切=move，复制=copyNode（递归、二进制复制字节）。
   function copyItem(n: VNode) {
-    clip = { id: n.id, cut: false };
+    clip = { ids: effectiveTargets(n), cut: false };
   }
   function cutItem(n: VNode) {
-    clip = { id: n.id, cut: true };
+    clip = { ids: effectiveTargets(n), cut: true };
   }
   async function paste(destId: string = cwd) {
     if (!clip || pasting) return;
-    const src = getNode(clip.id);
-    if (!src) {
-      clip = null;
-      return;
-    }
     pasting = true;
     try {
-      if (clip.cut) {
-        move(clip.id, destId);
+      const wasCut = clip.cut;
+      for (const id of clip.ids) {
+        if (!getNode(id)) continue;
+        if (wasCut) move(id, destId);
+        else await copyNode(id, destId); // 复制可多次粘贴，clip 保留
+      }
+      if (wasCut) {
         clip = null; // 剪切一次性
-      } else {
-        await copyNode(clip.id, destId); // 复制可多次粘贴，clip 保留
+        clearSelection(); // 被剪走的项已离开当前目录
       }
     } finally {
       pasting = false;
@@ -199,6 +239,10 @@ ${JSON.stringify(files)}`;
     const me = currentUser();
     const writable = permits(n, me, 2);
     const isOwner = (n.owner ?? DEFAULT_OWNER) === me;
+    // 右键一个未选中的项 → 先把它设为唯一选择，避免「右键 A 却对之前选中的 B 操作」的困惑
+    if (!selected.includes(n.id)) selected = [n.id];
+    const tgts = effectiveTargets(n);
+    const suffix = tgts.length > 1 ? ` ${tgts.length} 项` : '';
     openMenu(e, [
       { label: '打开', icon: n.type === 'dir' ? '📂' : '↗', onClick: () => open(n) },
       {
@@ -209,9 +253,9 @@ ${JSON.stringify(files)}`;
           renameText = n.name;
         },
       },
-      { label: '复制', icon: '📄', onClick: () => copyItem(n) },
-      { label: '剪切', icon: '✂️', onClick: () => cutItem(n) },
-      ...(clip && n.type === 'dir' ? [{ label: '粘贴到此', icon: '📥', onClick: () => paste(n.id) }] : []),
+      { label: '复制' + suffix, icon: '📄', onClick: () => copyItem(n) },
+      { label: '剪切' + suffix, icon: '✂️', onClick: () => cutItem(n) },
+      ...(clip && n.type === 'dir' ? [{ label: `粘贴到此（${clip.ids.length}）`, icon: '📥', onClick: () => paste(n.id) }] : []),
       { label: '复制名称', icon: '📋', onClick: () => sys.clipboard.copy(n.name) },
       // 权限：在可读写 / 只读之间切（属主段），目录用 7xx、文件用 6xx
       writable
@@ -219,7 +263,7 @@ ${JSON.stringify(files)}`;
         : { label: '设为可读写', icon: '🔓', separator: true, onClick: () => chmod(n, 0o644, 0o755) },
       { label: '设为私密 (600)', icon: '🙈', onClick: () => chmod(n, 0o600, 0o700) },
       ...(isOwner ? [] : [{ label: `归我所有 (${me})`, icon: '👤', onClick: () => setOwner(n.id, me) }]),
-      { label: '删除', icon: '🗑️', danger: true, separator: true, onClick: () => trash(n.id) },
+      { label: '删除' + suffix, icon: '🗑️', danger: true, separator: true, onClick: () => delTargets(tgts) },
     ]);
   }
 
@@ -302,15 +346,29 @@ ${JSON.stringify(files)}`;
     <div class="border-b border-qz-border px-3 py-1 text-[11px] text-red-400">⚠️ {aiErr}</div>
   {/if}
 
+  <!-- 多选操作条 -->
+  {#if selected.length}
+    <div class="flex items-center gap-2 border-b border-qz-border bg-qz-accent/10 px-3 py-1 text-[11px]">
+      <span class="text-qz-text">已选 {selected.length} 项</span>
+      <button class="rounded px-1.5 py-0.5 text-red-400 hover:bg-qz-elevated" onclick={() => delTargets([...selected])}>删除选中</button>
+      <button class="ml-auto rounded px-1.5 py-0.5 text-qz-muted hover:bg-qz-elevated" onclick={clearSelection}>取消选择</button>
+    </div>
+  {/if}
+
   <!-- 内容网格 -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="grid flex-1 content-start gap-1 overflow-auto p-3"
     style="grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));"
+    onclick={clearSelection}
     onkeydown={(e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && clip) {
         e.preventDefault();
         paste();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected.length) {
+        e.preventDefault();
+        delTargets([...selected]);
       }
     }}
   >
@@ -318,6 +376,10 @@ ${JSON.stringify(files)}`;
       {@const readable = permits(n, currentUser(), 4)}
       <div
         class="group/item relative flex flex-col items-center gap-1 rounded-lg p-2 hover:bg-qz-elevated"
+        class:ring-2={selected.includes(n.id)}
+        class:ring-inset={selected.includes(n.id)}
+        class:ring-qz-accent={selected.includes(n.id)}
+        class:bg-qz-elevated={selected.includes(n.id)}
         style={dragOverId === n.id ? 'box-shadow: inset 0 0 0 2px var(--color-qz-accent)' : ''}
         title={`${modeStr(n)}  属主 ${n.owner ?? DEFAULT_OWNER}`}
         role="button"
@@ -327,6 +389,7 @@ ${JSON.stringify(files)}`;
         ondragover={n.type === 'dir' ? (e) => { e.preventDefault(); dragOverId = n.id; } : undefined}
         ondragleave={n.type === 'dir' ? () => { if (dragOverId === n.id) dragOverId = null; } : undefined}
         ondrop={n.type === 'dir' ? (e) => onDrop(e, n.id) : undefined}
+        onclick={(e) => { e.stopPropagation(); onItemClick(n, e); }}
         ondblclick={() => open(n)}
         oncontextmenu={(e) => onItemMenu(e, n)}
         onkeydown={(e) => {
