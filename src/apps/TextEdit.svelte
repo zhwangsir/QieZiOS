@@ -4,6 +4,7 @@
   import { currentUser } from '../system/account.svelte';
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
+  import { renderMarkdown } from '../lib/markdown';
 
   // data = 要打开的文件 id（由文件管理器在 launch 时通过启动参数传入）
   let { data }: { data?: unknown } = $props();
@@ -11,6 +12,9 @@
   const node = $derived(typeof data === 'string' ? getNode(data) : undefined);
   // 写权限：无写权限则只读（与终端「无写位则拒写」一致）
   const writable = $derived(!!node && permits(node, currentUser(), 2));
+  // Markdown 文件：可切「编辑/预览」，预览复用 renderMarkdown（与 AI 回复同一安全渲染器）
+  const isMarkdown = $derived(!!node && /\.(md|markdown)$/i.test(node.name));
+  let preview = $state(false);
   // provider 感知：OpenAI 兼容端点（本地等）无需 key，仅 Anthropic 强制要 key（与 Assistant 一致）
   const hasKey = $derived(aiConfig.provider === 'openai' || !!aiConfig.apiKey);
 
@@ -174,6 +178,7 @@
   function onKey(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
       e.preventDefault();
+      preview = false; // 查找/替换作用于 textarea，先切回编辑态
       findOpen = true;
       queueMicrotask(() => findInput?.focus());
     } else if (e.key === 'Escape' && findOpen) {
@@ -186,6 +191,27 @@
 {#if node}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="flex h-full flex-col" onkeydown={onKey}>
+    <!-- Markdown 工具条：编辑/预览切换（仅 .md/.markdown 文件） -->
+    {#if isMarkdown}
+      <div class="flex shrink-0 items-center gap-2 border-b border-qz-border px-2 py-1.5">
+        <span class="text-[11px] text-qz-muted">📝 Markdown</span>
+        <div class="flex overflow-hidden rounded text-[11px] ring-1 ring-qz-border">
+          <button
+            class="px-2 py-0.5 transition"
+            class:bg-qz-accent={!preview}
+            class:text-qz-accent-contrast={!preview}
+            class:hover:bg-qz-elevated={preview}
+            onclick={() => (preview = false)}>编辑</button>
+          <button
+            class="px-2 py-0.5 transition"
+            class:bg-qz-accent={preview}
+            class:text-qz-accent-contrast={preview}
+            class:hover:bg-qz-elevated={!preview}
+            onclick={() => (preview = true)}>预览</button>
+        </div>
+      </div>
+    {/if}
+
     <!-- AI 动作条（配了 key 才显示） -->
     {#if hasKey}
       <div class="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-qz-border px-2 py-1.5">
@@ -246,15 +272,26 @@
       </div>
     {/if}
 
-    <!-- 正文：bind 到文件节点 content → persisted 自动存盘（防抖）。无写权限则只读 -->
-    <textarea
-      bind:this={textarea}
-      class="min-h-0 w-full flex-1 resize-none bg-transparent p-4 font-mono text-sm leading-relaxed text-qz-text outline-none"
-      bind:value={node.content}
-      readonly={!writable}
-      spellcheck="false"
-      placeholder="空文件"
-    ></textarea>
+    <!-- 正文：Markdown 预览态渲染只读 HTML；否则 textarea bind 到 content → persisted 自动存盘 -->
+    {#if isMarkdown && preview}
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+      <div class="min-h-0 flex-1 overflow-auto break-words p-4 text-sm leading-relaxed text-qz-text">
+        {#if (node.content ?? '').trim()}
+          {@html renderMarkdown(node.content ?? '')}
+        {:else}
+          <span class="text-qz-muted">（空文件 —— 切到「编辑」写点 Markdown）</span>
+        {/if}
+      </div>
+    {:else}
+      <textarea
+        bind:this={textarea}
+        class="min-h-0 w-full flex-1 resize-none bg-transparent p-4 font-mono text-sm leading-relaxed text-qz-text outline-none"
+        bind:value={node.content}
+        readonly={!writable}
+        spellcheck="false"
+        placeholder="空文件"
+      ></textarea>
+    {/if}
 
     <!-- AI 输出预览面板：流式进来，用户决定替换/追加/丢弃（不自动毁原文） -->
     {#if aiOpen}

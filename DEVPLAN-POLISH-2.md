@@ -20,7 +20,9 @@
 
 ## 二、P1 · 功能 / 体验完善（价值/成本比排序）
 
-- [ ] **E1 Markdown 预览（`.md` 文件可切「编辑/预览」）**：`lib/markdown.ts` 已有 `renderMarkdown()`（AI 回复在用），TextEdit 打开 .md 只显原文。加「编辑/预览」切换 + `{@html renderMarkdown(content)}`。单文件、复用现成、DOM 可验。**成本低、价值高、推荐优先。**
+- [x] **E1 Markdown 预览（`.md` 文件可切「编辑/预览」）**：`lib/markdown.ts` 已有 `renderMarkdown()`（AI 回复在用），TextEdit 打开 .md 只显原文。加「编辑/预览」切换 + `{@html renderMarkdown(content)}`。单文件、复用现成、DOM 可验。**成本低、价值高、推荐优先。**
+  - ✅ 实现：TextEdit 加 `isMarkdown = $derived(/\.(md|markdown)$/i.test(node.name))` + `preview = $state(false)`；仅 markdown 文件显顶部「📝 Markdown · 编辑/预览」分段切换条；正文区 `{#if isMarkdown && preview}` 渲染只读 `<div>{@html renderMarkdown(content)}</div>`（空内容显占位）`{:else}` 原 textarea；Ctrl+F 分支加 `preview=false`（查找/替换作用于 textarea，先切回编辑）。复用 AI 回复同款安全渲染器（先转义再套白名单标签 → 无 XSS）。
+  - ✅ 浏览器实测（真 dev 服务，隔离掉 session 还原的旧窗口后）：`.md` 显工具条、`.txt` 不显（toolbar=0）；预览态 textarea 消失、渲染出 `<strong>`/`<code>`/`<pre>`/`<a href>`/标题 `div.font-semibold`/列表项全部正确；切「编辑」textarea 带内容回来；预览态 Ctrl+F → 切回编辑 + 查找条打开 + focus。0 console error。supervisor 子 Agent PASS（renderMarkdown 先 escapeHtml 再白名单标签、链接 URL 被 https?:// 约束死无 javascript:/突破面 → 无 XSS；isMarkdown/preview 切换响应式正确、AI 写回实时重渲染；预览态 textarea ref=undefined 但 gotoMatch/replaceCurrent/onKey 全有 null 守卫且查找只能经先 preview=false 的 Ctrl+F 唤起；非 md 字节级零回归；只读文件协同；空 md 占位/大小写扩展名/叶子 import 无环 八点全过）。npm check+build 0 错 0 警。
 - [ ] **E2 图片查看器缩放/旋转/适应窗口**：`ImageViewer.svelte` 只有 object-contain，无缩放旋转。加 scale/rotate $state + 工具栏 + 滚轮缩放 + 拖拽平移（纯 CSS transform 走 GPU）。单文件、DOM 可验、契合丝滑。
 - [ ] **E3 计算器键盘输入 + 历史**：`Calculator.svelte` 只有 onclick，无键盘。加 `<svelte:window>` keydown（数字/运算符/Enter=`=`/Esc=C/Backspace）+ 计算历史侧栏。单文件、DOM 可验。
 - [ ] **E4 文件管理器排序 + 列表/网格视图**：`Files.svelte` items 用原序、只有网格。加 sortBy(name/type/size/mtime)+sortDir + grid/list 切换（list 显大小/属主权限）。可能需给 VNode 加 mtime。中成本、DOM 可验。
@@ -31,4 +33,4 @@
 
 ---
 
-> 当前循环：第 2 轮审计建立本 backlog；**D1、D3 已完成**（清空崩溃修复 + 还原撤销重名去重，后者补齐 A7/A9/D3 数据完整性三件套）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 D2 同步陈旧状态 / E1 Markdown 预览（可视特性，宜交替）。
+> 当前循环：第 2 轮审计建立本 backlog；**D1、D3、E1 已完成**（清空崩溃修复 + 还原撤销重名去重 + 记事本 Markdown 预览）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 D2 同步陈旧状态（correctness）/ E2 图片缩放旋转（可视特性）。
