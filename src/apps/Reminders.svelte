@@ -3,9 +3,15 @@
   import { sys } from '../system/sys';
   import { windowVisible } from '../lib/winctx';
 
+  type Unit = 's' | 'm' | 'h' | 'd';
   let title = $state('');
-  let secs = $state(10);
-  let recurring = $state(false);
+  let mode = $state<'relative' | 'datetime' | 'repeat'>('relative');
+  let amount = $state(10);
+  let unit = $state<Unit>('s');
+  let whenStr = $state(''); // datetime-local 的值
+
+  const UNIT_MS: Record<Unit, number> = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+  const UNIT_LABEL: Record<Unit, string> = { s: '秒', m: '分', h: '小时', d: '天' };
 
   // 秒级心跳，让倒计时实时刷新；最小化时暂停
   let now = $state(Date.now());
@@ -16,19 +22,43 @@
     return () => clearInterval(t);
   });
 
+  // 把毫秒格式化成「N 天/小时/分/秒」（整除才用大单位）
+  function fmtDuration(ms: number): string {
+    if (ms % 86400000 === 0) return `${ms / 86400000} 天`;
+    if (ms % 3600000 === 0) return `${ms / 3600000} 小时`;
+    if (ms % 60000 === 0) return `${ms / 60000} 分`;
+    return `${Math.round(ms / 1000)} 秒`;
+  }
+
   function add() {
     const t = title.trim() || '提醒';
-    const ms = Math.max(1, Math.round(secs)) * 1000;
-    sys.schedule.add(recurring ? { title: t, every: ms } : { title: t, in: ms });
-    sys.notify('已设定提醒', { body: `${t} · ${recurring ? '每隔 ' : ''}${secs}s`, level: 'success', timeout: 1500 });
+    if (mode === 'datetime') {
+      const ts = whenStr ? new Date(whenStr).getTime() : NaN;
+      if (Number.isNaN(ts) || ts <= Date.now()) {
+        sys.notify('请选择一个将来的时间', { level: 'warn', timeout: 1800 });
+        return;
+      }
+      sys.schedule.add({ title: t, in: ts - Date.now() });
+      sys.notify('已设定提醒', { body: `${t} · ${new Date(ts).toLocaleString()}`, level: 'success', timeout: 1500 });
+    } else {
+      const ms = Math.max(1, Math.round(amount)) * UNIT_MS[unit];
+      sys.schedule.add(mode === 'repeat' ? { title: t, every: ms } : { title: t, in: ms });
+      sys.notify('已设定提醒', {
+        body: `${t} · ${mode === 'repeat' ? '每隔 ' : ''}${amount} ${UNIT_LABEL[unit]}${mode === 'repeat' ? '' : '后'}`,
+        level: 'success',
+        timeout: 1500,
+      });
+    }
     title = '';
   }
 
   function fmtWhen(s: { every?: number; fireAt?: number }): string {
-    if (s.every) return `每 ${Math.round(s.every / 1000)}s`;
+    if (s.every) return `每 ${fmtDuration(s.every)}`;
     if (s.fireAt) {
-      const r = Math.round((s.fireAt - now) / 1000);
-      return r > 0 ? `${r}s 后` : '即将…';
+      const r = s.fireAt - now;
+      if (r <= 0) return '即将…';
+      if (r < 90000) return `${Math.round(r / 1000)}s 后`;
+      return new Date(s.fireAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
     return '';
   }
@@ -44,18 +74,38 @@
         if (e.key === 'Enter') add();
       }}
     />
-    <div class="flex items-center gap-2 text-xs">
-      <input
-        type="number"
-        min="1"
-        max="86400"
-        class="w-20 rounded-qz bg-qz-surface px-2 py-1 text-right outline-none ring-1 ring-qz-border focus:ring-qz-accent"
-        bind:value={secs}
-      />
-      <span class="text-qz-muted">秒</span>
-      <label class="flex items-center gap-1 text-qz-muted">
-        <input type="checkbox" bind:checked={recurring} class="accent-qz-accent" /> 循环
-      </label>
+    <div class="flex flex-wrap items-center gap-2 text-xs">
+      <select
+        bind:value={mode}
+        class="rounded-qz bg-qz-surface px-2 py-1 outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+      >
+        <option value="relative">多久后</option>
+        <option value="datetime">指定时间</option>
+        <option value="repeat">循环</option>
+      </select>
+      {#if mode === 'datetime'}
+        <input
+          type="datetime-local"
+          bind:value={whenStr}
+          class="rounded-qz bg-qz-surface px-2 py-1 outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+        />
+      {:else}
+        <input
+          type="number"
+          min="1"
+          class="w-16 rounded-qz bg-qz-surface px-2 py-1 text-right outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+          bind:value={amount}
+        />
+        <select
+          bind:value={unit}
+          class="rounded-qz bg-qz-surface px-2 py-1 outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+        >
+          <option value="s">秒</option>
+          <option value="m">分</option>
+          <option value="h">小时</option>
+          <option value="d">天</option>
+        </select>
+      {/if}
       <button
         class="ml-auto rounded-qz bg-qz-accent px-3 py-1 font-medium text-qz-accent-contrast active:scale-95"
         onclick={add}>添加</button>
