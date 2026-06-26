@@ -1,6 +1,7 @@
 <script lang="ts">
   import { settings, accentPresets, SETTINGS_KEYS, type Settings } from '../system/settings.svelte';
   import { wallpapers } from '../system/wallpaper';
+  import { putBlob, deleteBlob } from '../kernel/blobStore';
   import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
   import { aiConfig, AI_MODELS, AI_PRESETS, ENV_AI_KEY, type AiPreset } from '../system/aiConfig.svelte';
   import { runAgent } from '../system/ai';
@@ -16,6 +17,30 @@
   let presetName = $state('');
   let importText = $state('');
   let importError = $state(false);
+
+  // 自定义壁纸：上传图片（存 blobStore）/ 纯色 / 恢复内置预设。换掉旧图时顺手删它的 blob 省空间。
+  async function uploadWallpaper(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const id = 'wp-' + crypto.randomUUID().slice(0, 8);
+    await putBlob(id, file);
+    const prev = settings.customWallpaper;
+    settings.customWallpaper = { type: 'image', blobId: id };
+    if (prev && prev.type === 'image') void deleteBlob(prev.blobId);
+    input.value = ''; // 允许再次选同一文件
+  }
+  function setColorWallpaper(value: string) {
+    const prev = settings.customWallpaper;
+    settings.customWallpaper = { type: 'color', value };
+    if (prev && prev.type === 'image') void deleteBlob(prev.blobId);
+  }
+  function useBuiltinWallpaper(id: string) {
+    const prev = settings.customWallpaper;
+    settings.wallpaperId = id;
+    settings.customWallpaper = null; // 选内置预设即清掉自定义
+    if (prev && prev.type === 'image') void deleteBlob(prev.blobId);
+  }
 
   // AI 配色：用一句话描述外观 → 让带 set_theme 工具的 agent 直接改主题
   let themeWish = $state('');
@@ -101,7 +126,13 @@
   function applySettings(src: Partial<Settings>) {
     const picked: Record<string, unknown> = {};
     for (const k of SETTINGS_KEYS) if (src[k] !== undefined) picked[k] = src[k];
+    // 若本次会覆盖掉一张自定义图片壁纸 → 顺手删它的 blob，免得 IndexedDB 堆积孤儿
+    const prev = settings.customWallpaper;
+    const next = picked.customWallpaper as Settings['customWallpaper'] | undefined;
     Object.assign(settings, picked);
+    if (prev?.type === 'image' && (!next || next.type !== 'image' || next.blobId !== prev.blobId)) {
+      void deleteBlob(prev.blobId);
+    }
   }
 
   function savePreset() {
@@ -325,13 +356,40 @@
       {#each wallpapers as w (w.id)}
         <button
           class="h-14 rounded-qz transition-transform hover:scale-[1.03]"
-          style="background: {w.css}; border: {settings.wallpaperId === w.id
+          style="background: {w.css}; border: {!settings.customWallpaper && settings.wallpaperId === w.id
             ? '2px solid var(--color-qz-accent)'
             : '1px solid var(--color-qz-border)'};"
           title={w.name}
-          onclick={() => (settings.wallpaperId = w.id)}
+          onclick={() => useBuiltinWallpaper(w.id)}
         ></button>
       {/each}
+    </div>
+    <!-- 自定义壁纸：上传图片 / 纯色 / 恢复内置预设 -->
+    <div class="flex flex-wrap items-center gap-2">
+      <label
+        class="cursor-pointer rounded-qz bg-qz-surface px-2.5 py-1.5 text-xs ring-1 ring-qz-border transition-colors hover:ring-qz-accent"
+      >
+        上传图片
+        <input type="file" accept="image/*" class="hidden" onchange={uploadWallpaper} />
+      </label>
+      <label class="flex items-center gap-1.5 rounded-qz bg-qz-surface px-2.5 py-1.5 text-xs ring-1 ring-qz-border">
+        纯色
+        <input
+          type="color"
+          class="h-5 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+          value={settings.customWallpaper?.type === 'color' ? settings.customWallpaper.value : '#1b1b27'}
+          oninput={(e) => setColorWallpaper((e.target as HTMLInputElement).value)}
+        />
+      </label>
+      {#if settings.customWallpaper}
+        <span class="text-xs text-qz-muted"
+          >当前：{settings.customWallpaper.type === 'image' ? '自定义图片' : '自定义纯色'}</span
+        >
+        <button
+          class="rounded-qz px-2.5 py-1.5 text-xs text-qz-muted ring-1 ring-qz-border transition-colors hover:ring-qz-accent"
+          onclick={() => useBuiltinWallpaper(settings.wallpaperId)}>恢复内置预设</button
+        >
+      {/if}
     </div>
   </section>
 

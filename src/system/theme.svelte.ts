@@ -1,5 +1,6 @@
 import { settings } from './settings.svelte';
 import { wallpapers } from './wallpaper';
+import { customWallpaperUrl } from './wallpaperBlob.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 主题 · 把「设置」翻译成一组 CSS token，写进 :root
@@ -32,7 +33,6 @@ const palettes: Record<'dark' | 'light', Tokens> = {
 // 在 effect 里调用它 → 会自动订阅它读到的每个 settings 字段。
 export function activeTokens(): Tokens {
   const base = palettes[settings.mode];
-  const wp = wallpapers.find((w) => w.id === settings.wallpaperId) ?? wallpapers[0];
   return {
     ...base,
     '--color-qz-accent': settings.accent,
@@ -40,8 +40,21 @@ export function activeTokens(): Tokens {
     '--radius-qz': `${settings.radius}px`,
     '--qz-blur': `${settings.blur}px`,
     '--qz-surface-opacity': String(settings.surfaceOpacity),
-    '--qz-wallpaper': wp.css,
+    '--qz-wallpaper': wallpaperCss(),
   };
+}
+
+// 算当前壁纸的 background 值：自定义纯色/图片优先，否则用内置预设。
+// 图片用 background 简写带上 cover/center/no-repeat → 直接铺满；图片还没解析好时先用预设兜底。
+function wallpaperCss(): string {
+  const cw = settings.customWallpaper;
+  if (cw && cw.type === 'color') return cw.value;
+  if (cw && cw.type === 'image') {
+    const u = customWallpaperUrl();
+    if (u) return `center / cover no-repeat url("${u}")`;
+  }
+  const wp = wallpapers.find((w) => w.id === settings.wallpaperId) ?? wallpapers[0];
+  return wp.css;
 }
 
 // 把 token 写到 <html> 的 inline style —— inline 优先级高于样式表里的 :root 默认值，

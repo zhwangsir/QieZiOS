@@ -5,6 +5,13 @@ import { persisted } from '../kernel/persist.svelte';
 // 这些值驱动 theme.svelte.ts 算出 token；改它们 = 改系统外观。
 // 用 persisted 包起来 → 改了自动存盘、刷新还在。
 // ───────────────────────────────────────────────────────────
+// 自定义壁纸：纯色/渐变（直接喂 background）或上传的图片（字节存 blobStore，按 blobId 取）。
+// null = 用内置预设（wallpaperId）。
+export type CustomWallpaper =
+  | { type: 'color'; value: string }
+  | { type: 'image'; blobId: string }
+  | null;
+
 export interface Settings {
   mode: 'dark' | 'light';   // 明 / 暗
   accent: string;           // 主色（#hex）
@@ -12,7 +19,8 @@ export interface Settings {
   blur: number;             // 磨砂模糊（px）
   surfaceOpacity: number;   // 面板半透明度（0~1）
   fontScale: number;        // 界面缩放（根字号倍率，0.85~1.2）
-  wallpaperId: string;      // 当前壁纸 id
+  wallpaperId: string;      // 当前内置壁纸 id（customWallpaper 为 null 时生效）
+  customWallpaper: CustomWallpaper; // 自定义壁纸（图片/纯色），优先于内置预设
   customCss: string;        // 全局自定义 CSS（深度换肤，注入 <style>）
 }
 
@@ -24,6 +32,7 @@ const defaults: Settings = {
   surfaceOpacity: 0.66,
   fontScale: 1,
   wallpaperId: 'aurora',
+  customWallpaper: null,
   customCss: '',
 };
 
