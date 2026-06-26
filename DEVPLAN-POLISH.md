@@ -61,7 +61,9 @@
   - ✅ 实现：`notifications.svelte.ts` 加持久化 `noteHistory`（封顶 40 + `lastSeen`）+ `unreadCount`/`markNotesSeen`/`clearHistory`；`pushNote` 同时进活动 toast 与历史。TopBar 右侧加系统托盘：明暗切换(🌙/☀️ 跟随 mode)、通知铃铛🔔(未读角标>9 显 9+) + 下拉面板(等级竖条/标题/正文/相对时间，倒序，含清空+空态)，点外部关闭、打开即清未读。
   - ✅ 浏览器实测：3 条通知→历史累积、角标计数、面板倒序、打开清未读、明暗切换(colorScheme+图标跟随)、清空→空态。**supervisor 子 Agent 抓到 1 个真崩溃**：`nid` 刷新后重置为 0 而 `noteHistory` 持久化 → 新通知 id 撞历史旧 id → keyed each 重复 key `each_key_duplicate` 崩溃（单会话测试漏掉）→ 已修：`nid` 从历史最大 id 之上起步。复现验证：刷新后开机通知 id=9（不撞旧 [5,6,7,8]）、历史全唯一、开面板无崩溃无 JS 错误。npm check+build 0 错 0 警。
 - [ ] **B7 窗口四角四分屏 + 键盘平铺**：snap 只有左/右/最大化。加拖到角→1/4 屏 + Super/Ctrl+方向键平铺。文件：`shell/Window.svelte`、`shell/Desktop.svelte`。
-- [ ] **B8 Spotlight 搜文件正文 + 动作命令**：现只搜 App 名/文件名、结果硬截断。加遍历 `vfs.nodes.content` 搜正文 + 常用系统动作（切暗色/清空回收站等）。文件：`shell/Spotlight.svelte`。
+- [x] **B8 Spotlight 搜文件正文 + 动作命令**：现只搜 App 名/文件名、结果硬截断。加遍历 `vfs.nodes.content` 搜正文 + 常用系统动作（切暗色/清空回收站等）。文件：`shell/Spotlight.svelte`。
+  - ✅ 实现：文件过滤改 `name 或 文本正文 includes(q)`，内容命中时 `snippetFor` 截含关键词片段显在文件名下；`ACTIONS` 动作列表（切换明暗主题/清空回收站/打开终端/打开设置/显示桌面·最小化所有/关闭所有窗口，各 label+keywords+run）按 q 匹配 → kind `action`，activate 调 run。结果顺序 apps+installed+actions+files+AI；keyed each 前缀加 `:` 分隔防未来 id 撞键。
+  - ✅ 浏览器实测：搜 'brown'(只在内容)→ b8notes.txt 带片段「…brown fox…」；搜 '暗'→「切换明暗主题」、'终端'→「打开终端」动作；点动作→主题真翻转 + Spotlight 关闭。supervisor 子 Agent PASS（动作副作用 closeall 拷贝数组遍历安全/selected 越界有守卫不崩/正文扫描性能在节点量级可接受/snippetFor 边界/分层无环/无回归；建议的 keyed 前缀分隔已采纳）。npm check+build 0 错 0 警。
 - [ ] **B9 Dock 排序 + pin/unpin**：顺序写死、不能固定/拖排。存 `settings.dockOrder`/`dockPinned`。文件：`shell/Dock.svelte`、`system/settings.svelte.ts`。
 - [ ] **B10 桌宠/伙伴 无-key 引导**：未配 AI 时聊天直接走错误回落，无引导。加「去设置配 AI」提示+跳转（对齐其它 App 的 hasKey 守卫）。文件：`shell/DesktopPet.svelte`、`apps/Companion.svelte`。
 - [ ] **B11 快捷键速查面板**：快捷键硬编码、无处可查。先做 `?` 唤起的速查面板（后续再做可重绑定）。文件：`shell/Desktop.svelte`、`apps/Settings.svelte`。

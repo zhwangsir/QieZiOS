@@ -3,13 +3,39 @@
   import { appRegistry } from '../apps/registry';
   import { userApps, type UserApp } from '../apps/userApps.svelte';
   import { launchUserApp } from '../apps/desktopApps.svelte';
-  import { vfs, type VNode } from '../kernel/vfs.svelte';
+  import { vfs, emptyTrash, type VNode } from '../kernel/vfs.svelte';
+  import { processes, minimize, close } from '../kernel/processes.svelte';
+  import { settings } from '../system/settings.svelte';
   import { sys } from '../system/sys';
+
+  // 系统动作命令（命令面板）：label/keywords 参与匹配，run 真执行
+  interface ActionDef {
+    id: string;
+    label: string;
+    icon: string;
+    keywords: string;
+    run: () => void;
+  }
+  const ACTIONS: ActionDef[] = [
+    { id: 'theme', label: '切换明暗主题', icon: '🌓', keywords: '主题 明暗 暗色 明色 dark light theme',
+      run: () => (settings.mode = settings.mode === 'dark' ? 'light' : 'dark') },
+    { id: 'emptytrash', label: '清空回收站', icon: '🗑️', keywords: '回收站 清空 trash empty 删除',
+      run: () => { emptyTrash(); sys.notify('已清空回收站', { level: 'success', timeout: 1500 }); } },
+    { id: 'terminal', label: '打开终端', icon: '🖥️', keywords: '终端 terminal shell 命令行',
+      run: () => sys.openApp('terminal') },
+    { id: 'settings', label: '打开设置', icon: '⚙️', keywords: '设置 settings 偏好 主题 ai 壁纸',
+      run: () => sys.openApp('settings') },
+    { id: 'minall', label: '显示桌面 · 最小化所有窗口', icon: '🪟', keywords: '桌面 最小化 显示 desktop minimize',
+      run: () => { for (const p of processes) if (!p.minimized) minimize(p.id); } },
+    { id: 'closeall', label: '关闭所有窗口', icon: '🚪', keywords: '关闭 全部 close all 退出',
+      run: () => { for (const p of [...processes]) close(p.id); } },
+  ];
 
   type Result =
     | { kind: 'app'; id: string; title: string; icon: string }
     | { kind: 'userapp'; app: UserApp }
-    | { kind: 'file'; node: VNode; icon: string }
+    | { kind: 'action'; action: ActionDef }
+    | { kind: 'file'; node: VNode; icon: string; sub?: string }
     | { kind: 'ai'; query: string };
 
   let query = $state('');
@@ -23,6 +49,16 @@
     }
   });
 
+  // 文件内容命中时，截一段含关键词的片段做预览（名字命中而非内容命中则不显示）
+  function snippetFor(n: VNode, q: string): string | undefined {
+    if (n.type !== 'file' || n.kind === 'binary') return undefined;
+    const content = n.content ?? '';
+    const idx = content.toLowerCase().indexOf(q);
+    if (idx < 0) return undefined;
+    const start = Math.max(0, idx - 20);
+    return (start > 0 ? '…' : '') + content.slice(start, idx + q.length + 25).replace(/\s+/g, ' ').trim() + '…';
+  }
+
   const results = $derived.by<Result[]>(() => {
     const q = query.trim().toLowerCase();
     const apps: Result[] = Object.entries(appRegistry)
@@ -32,15 +68,26 @@
     const installed: Result[] = userApps.list
       .filter((a) => !q || a.name.toLowerCase().includes(q))
       .map((a) => ({ kind: 'userapp', app: a }));
+    // 动作命令：仅有输入时按 label/keywords 匹配
+    const actions: Result[] = q
+      ? ACTIONS.filter((a) => a.label.toLowerCase().includes(q) || a.keywords.toLowerCase().includes(q))
+          .map((a) => ({ kind: 'action', action: a }))
+      : [];
+    // 文件：名字 或 文本正文 命中
     const files: Result[] = q
       ? Object.values(vfs.nodes)
-          .filter((n) => n.id !== 'root' && n.parentId !== 'trash' && n.name.toLowerCase().includes(q))
+          .filter((n) => n.id !== 'root' && n.parentId !== 'trash')
+          .filter(
+            (n) =>
+              n.name.toLowerCase().includes(q) ||
+              (n.type === 'file' && n.kind !== 'binary' && (n.content ?? '').toLowerCase().includes(q)),
+          )
           .slice(0, 6)
-          .map((n) => ({ kind: 'file', node: n, icon: n.type === 'dir' ? '📁' : '📄' }))
+          .map((n) => ({ kind: 'file', node: n, icon: n.type === 'dir' ? '📁' : '📄', sub: snippetFor(n, q) }))
       : [];
     // 有输入就在末尾挂一个「问 AI」入口（放最后，不抢 App 的默认 Enter）
     const ai: Result[] = query.trim() ? [{ kind: 'ai', query: query.trim() }] : [];
-    return [...apps, ...installed, ...files].slice(0, 9).concat(ai);
+    return [...apps, ...installed, ...actions, ...files].slice(0, 10).concat(ai);
   });
 
   function activate(r: Result) {
@@ -50,6 +97,8 @@
       launchUserApp(r.app);
     } else if (r.kind === 'app') {
       sys.openApp(r.id);
+    } else if (r.kind === 'action') {
+      r.action.run();
     } else if (r.node.type === 'dir') {
       sys.openApp('files', { title: r.node.name, data: r.node.id });
     } else {
@@ -89,28 +138,33 @@
       <!-- svelte-ignore a11y_autofocus -->
       <input
         class="w-full bg-transparent px-4 py-3 text-base text-qz-text outline-none placeholder:text-qz-muted"
-        placeholder="搜索 App、文件，或问 AI…"
+        placeholder="搜索 App、文件（含正文）、动作，或问 AI…"
         bind:value={query}
         autofocus
         onkeydown={onKey}
       />
       {#if results.length}
         <div class="max-h-80 overflow-auto border-t border-qz-border p-1">
-          {#each results as r, i (r.kind === 'app' ? 'a' + r.id : r.kind === 'userapp' ? 'u' + r.app.id : r.kind === 'file' ? 'f' + r.node.id : 'ai')}
+          {#each results as r, i (r.kind === 'app' ? 'app:' + r.id : r.kind === 'userapp' ? 'user:' + r.app.id : r.kind === 'action' ? 'act:' + r.action.id : r.kind === 'file' ? 'file:' + r.node.id : 'ai')}
             <button
               class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm"
               class:bg-qz-elevated={i === selected}
               onpointerenter={() => (selected = i)}
               onclick={() => activate(r)}
             >
-              <span class="text-lg"
-                >{r.kind === 'ai' ? '🤖' : r.kind === 'userapp' ? r.app.icon : r.icon}</span>
-              <span class="flex-1 truncate">
-                {#if r.kind === 'app'}{r.title}{:else if r.kind === 'userapp'}{r.app.name}{:else if r.kind === 'file'}{r.node.name}{:else}问
-                  AI：{r.query}{/if}
+              <span class="shrink-0 text-lg"
+                >{r.kind === 'ai' ? '🤖' : r.kind === 'userapp' ? r.app.icon : r.kind === 'action' ? r.action.icon : r.icon}</span>
+              <span class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate">
+                  {#if r.kind === 'app'}{r.title}{:else if r.kind === 'userapp'}{r.app.name}{:else if r.kind === 'action'}{r.action.label}{:else if r.kind === 'file'}{r.node.name}{:else}问
+                    AI：{r.query}{/if}
+                </span>
+                {#if r.kind === 'file' && r.sub}
+                  <span class="truncate text-xs text-qz-muted">{r.sub}</span>
+                {/if}
               </span>
-              <span class="text-xs text-qz-muted"
-                >{r.kind === 'app' ? 'App' : r.kind === 'userapp' ? '我的' : r.kind === 'file' ? '文件' : 'AI'}</span>
+              <span class="shrink-0 text-xs text-qz-muted"
+                >{r.kind === 'app' ? 'App' : r.kind === 'userapp' ? '我的' : r.kind === 'action' ? '动作' : r.kind === 'file' ? '文件' : 'AI'}</span>
             </button>
           {/each}
         </div>
