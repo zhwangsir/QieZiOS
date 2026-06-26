@@ -224,6 +224,40 @@ function evalTest(args: string[], ctx: ShellCtx): boolean {
   return false;
 }
 
+// ── 终端定时辅助（at/crontab 用）─────────────────────────────
+// 解析延时/间隔：+10s / 5m / 1h / 30（裸数字=秒）。返回毫秒，非法返回 null。
+function parseDelay(spec: string): number | null {
+  const m = /^\+?(\d+)([smh]?)$/.exec((spec ?? '').trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  const unit = m[2] || 's';
+  return n * (unit === 'h' ? 3600000 : unit === 'm' ? 60000 : 1000);
+}
+// 把毫秒格式化成 3s / 5m / 1h（整除才用大单位）。
+function fmtDur(ms: number): string {
+  if (ms >= 3600000 && ms % 3600000 === 0) return `${ms / 3600000}h`;
+  if (ms >= 60000 && ms % 60000 === 0) return `${ms / 60000}m`;
+  return `${Math.round(ms / 1000)}s`;
+}
+// 列出有 command 的定时任务（at=一次性、crontab=循环），按 filter 过滤。
+function listSchedCmds(filter: (s: { every?: number }) => boolean): CmdResult {
+  const items = sys.schedule.list().filter((s) => s.command && filter(s));
+  if (!items.length) return { out: '（无定时任务）', code: 0 };
+  const lines = items.map((s) => {
+    const when = s.every ? `每 ${fmtDur(s.every)}` : s.fireAt ? new Date(s.fireAt).toLocaleTimeString() : '?';
+    return `[${s.id}]  ${when}\t${s.command}`;
+  });
+  return { out: lines.join('\n'), code: 0 };
+}
+// 取消一个定时命令（只取消符合 filter 的命令型任务，不误删提醒）。
+function cancelSchedCmd(id: string | undefined, filter: (s: { every?: number }) => boolean): CmdResult {
+  if (!id) return { out: '', err: '用法：-r <id>', code: 2 };
+  const s = sys.schedule.list().find((x) => x.id === id && x.command && filter(x));
+  if (!s) return { out: '', err: `没有这个定时任务 [${id}]`, code: 1 };
+  sys.schedule.cancel(id);
+  return { out: `已取消 [${id}]`, code: 0 };
+}
+
 // 把（可能相对的）路径参数解析成规范绝对路径串。cwd 永远是真实节点 → 用 pathOf 取其绝对路径。
 function toAbsPath(ctx: ShellCtx, path: string): string {
   if (path.startsWith('/')) return normAbs(path);
@@ -253,6 +287,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  whoami id su sudo useradd users —— 用户/账户\n' +
       '  open apps ps pstree kill[-9/-STOP/-CONT] —— 应用/进程\n' +
       '  cmd & · jobs · fg [n] · bg · wait —— 后台作业\n' +
+      '  at +<N>[s|m|h] <命令> · atq · crontab <间隔> <命令> —— 终端定时\n' +
       '  systemctl [list|status|start|stop|enable|disable] —— 后台服务\n' +
       '  pkg [list|search|install|repo] —— 远程 App 仓库（apt 式）\n' +
       '  curl[-i/-I] fetch hostname —— 网络（受浏览器 CORS 限制）\n' +
@@ -596,6 +631,33 @@ const COMMANDS: Record<string, CmdFn> = {
     const ps = jobs.list.filter((j) => j.status === 'running').map((j) => bgPromises.get(j.n)).filter(Boolean);
     await Promise.all(ps as Promise<CmdResult>[]);
     return { out: '', code: 0 };
+  },
+
+  // ── 终端定时（对标 at/crontab）：到点经 schedd 服务跑 shell 命令 ──────────────
+  // at +<N>[s|m|h] <命令>：一次性定时；at -l / atq 列出；at -r <id> 取消。
+  at: (args) => {
+    const sub = args[0];
+    if (sub === '-l' || sub === '-q') return listSchedCmds((s) => !s.every);
+    if (sub === '-r' || sub === '-d') return cancelSchedCmd(args[1], (s) => !s.every);
+    const delay = parseDelay(sub ?? '');
+    if (delay == null) return { out: '', err: 'at: 用法 at +<N>[s|m|h] <命令>  /  at -l  /  at -r <id>', code: 2 };
+    const command = args.slice(1).join(' ').trim();
+    if (!command) return { out: '', err: 'at: 缺少要执行的命令', code: 2 };
+    const id = sys.schedule.add({ title: `at: ${command}`, in: delay, command });
+    return { out: `已排程 [${id}]：${fmtDur(delay)}后执行  ${command}`, code: 0 };
+  },
+  atq: (args, ctx, stdin) => COMMANDS.at(['-l'], ctx, stdin), // at -l 的别名
+  // crontab <间隔>[s|m|h] <命令>：循环定时；crontab -l 列出；crontab -r <id> 删除。
+  crontab: (args) => {
+    const sub = args[0];
+    if (sub === '-l') return listSchedCmds((s) => !!s.every);
+    if (sub === '-r' || sub === '-d') return cancelSchedCmd(args[1], (s) => !!s.every);
+    const every = parseDelay(sub ?? '');
+    if (every == null) return { out: '', err: 'crontab: 用法 crontab <间隔>[s|m|h] <命令>  /  crontab -l  /  crontab -r <id>', code: 2 };
+    const command = args.slice(1).join(' ').trim();
+    if (!command) return { out: '', err: 'crontab: 缺少要执行的命令', code: 2 };
+    const id = sys.schedule.add({ title: `cron: ${command}`, every: Math.max(1000, every), command });
+    return { out: `已添加循环任务 [${id}]：每 ${fmtDur(Math.max(1000, every))}执行  ${command}`, code: 0 };
   },
 
   // kill [-信号] <pid>：TERM/KILL/HUP/INT→关闭，STOP→挂起(最小化)，CONT→恢复

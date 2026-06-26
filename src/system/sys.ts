@@ -50,12 +50,13 @@ export const sys = {
   },
   // 定时器：in=多少毫秒后一次性 / every=每隔多少毫秒循环。到点由 schedd 服务发 notify。
   schedule: {
-    add(opts: { title: string; body?: string; in?: number; every?: number }): string {
+    add(opts: { title: string; body?: string; in?: number; every?: number; command?: string }): string {
       const full = addSchedule({
         title: opts.title,
         body: opts.body,
         fireAt: opts.in != null ? Date.now() + opts.in : undefined,
         every: opts.every,
+        command: opts.command,
       });
       emit('sched.add', full);
       return full.id;

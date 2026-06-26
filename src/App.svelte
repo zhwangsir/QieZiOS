@@ -7,6 +7,7 @@
   import { startServices } from './kernel/services.svelte';
   import { account } from './system/account.svelte';
   import { setShellRunner } from './system/aiTools';
+  import { setScheduleRunner } from './system/schedules.svelte';
   import { run as shellRun, newCtx } from './lib/shell';
   import { sys } from './system/sys';
   import './system/services'; // 登记系统自带服务（通知中心等）
@@ -20,6 +21,14 @@
   setShellRunner(async (command) => {
     const res = await shellRun(command, aiShellCtx);
     if (res.cd) aiShellCtx.cwd = res.cd; // 让 AI 的 cd 在后续命令里生效
+    return { out: res.out, err: res.err, code: res.code };
+  });
+
+  // 终端定时（at/crontab）：到点的命令也经 shell 跑（独立常驻 ctx，不与 AI 串 cd）。
+  const cronShellCtx = newCtx();
+  setScheduleRunner(async (command) => {
+    const res = await shellRun(command, cronShellCtx);
+    if (res.cd) cronShellCtx.cwd = res.cd;
     return { out: res.out, err: res.err, code: res.code };
   });
 

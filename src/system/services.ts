@@ -2,7 +2,7 @@ import { registerService } from '../kernel/services.svelte';
 import { on, emit } from '../kernel/bus.svelte';
 import { pushNote, type NoteLevel } from './notifications.svelte';
 import { pushClip } from './clipboard.svelte';
-import { schedules, removeSchedule, type Schedule } from './schedules.svelte';
+import { schedules, removeSchedule, runScheduled, type Schedule } from './schedules.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 系统自带服务的注册处（import 本模块即登记；App 在开机时 startServices()）。
@@ -47,7 +47,23 @@ registerService({
   after: ['notifyd'], // 定时器到点要经 notifyd 弹通知 → 让 notifyd 先起（演示依赖排序）
   start() {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
-    const fire = (s: Schedule) => emit('notify', { title: s.title || '提醒', body: s.body, level: 'info' });
+    const fire = (s: Schedule) => {
+      // 有 command（at/crontab）→ 经注入的运行器跑 shell，到点用通知回报结果；否则只是提醒。
+      if (s.command) {
+        void runScheduled(s.command)
+          .then((res) => {
+            const tail = (res.out || res.err || '').trim().split('\n').pop()?.slice(0, 60) ?? '';
+            emit('notify', {
+              title: `⏰ ${s.title || s.command}`,
+              body: tail || '已执行',
+              level: res.code === 0 ? 'success' : 'warn',
+            });
+          })
+          .catch(() => emit('notify', { title: `⏰ ${s.command}`, body: '执行出错', level: 'warn' }));
+        return;
+      }
+      emit('notify', { title: s.title || '提醒', body: s.body, level: 'info' });
+    };
     const arm = (s: Schedule) => {
       if (timers.has(s.id)) return;
       if (s.every && s.every > 0) {
