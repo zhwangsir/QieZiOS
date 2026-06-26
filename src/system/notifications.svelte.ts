@@ -8,6 +8,8 @@ export interface Note {
   body?: string;
   level: NoteLevel;
   ts: number;
+  // 可选操作按钮（如「撤销」）。只在活动 toast 上有意义；进历史/持久化时剥掉（函数不序列化）。
+  action?: { label: string; run: () => void };
 }
 
 export const notifications = $state<{ items: Note[] }>({ items: [] });
@@ -21,11 +23,17 @@ export const noteHistory = persisted<{ items: Note[]; lastSeen: number }>('qz.no
 // 会和持久化历史里的旧 id 撞 → 通知中心 keyed {#each (n.id)} 出现重复 key → Svelte each_key_duplicate 崩溃。
 let nid = noteHistory.items.reduce((m, n) => Math.max(m, n.id), 0);
 
-export function pushNote(p: { title: string; body?: string; level?: NoteLevel; timeout?: number }): number {
+export function pushNote(p: {
+  title: string;
+  body?: string;
+  level?: NoteLevel;
+  timeout?: number;
+  action?: { label: string; run: () => void };
+}): number {
   const id = ++nid;
-  const note: Note = { id, title: p.title, body: p.body, level: p.level ?? 'info', ts: Date.now() };
+  const note: Note = { id, title: p.title, body: p.body, level: p.level ?? 'info', ts: Date.now(), action: p.action };
   notifications.items.push(note);
-  noteHistory.items.push({ ...note });
+  noteHistory.items.push({ ...note, action: undefined }); // 历史不留 action 函数
   if (noteHistory.items.length > HISTORY_CAP) noteHistory.items.splice(0, noteHistory.items.length - HISTORY_CAP);
   const timeout = p.timeout ?? 4500;
   // setTimeout（非 rAF）：隐藏标签页里也会触发，自动消失才靠谱

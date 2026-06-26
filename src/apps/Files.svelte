@@ -8,6 +8,7 @@
     isImage,
     rename,
     trash,
+    restoreFromTrash,
     move,
     copyNode,
     getNode,
@@ -23,6 +24,19 @@
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
   import { sys } from '../system/sys';
+  import { pushNote } from '../system/notifications.svelte';
+
+  // 删除后弹一条带「撤销」的 toast（撤销 = 从回收站还原）。trash 是软删除，6s 内可一键撤销。
+  function trashWithUndo(ids: string[], label: string) {
+    const undoIds = [...ids];
+    pushNote({
+      title: ids.length > 1 ? `已删除 ${ids.length} 项` : '已删除',
+      body: label,
+      level: 'info',
+      timeout: 6000,
+      action: { label: '撤销', run: () => undoIds.forEach((id) => restoreFromTrash(id)) },
+    });
+  }
 
   // data = 可选的起始文件夹 id（桌面文件夹图标双击时传入）
   let { data }: { data?: unknown } = $props();
@@ -173,6 +187,7 @@ ${JSON.stringify(files)}`;
     e.stopPropagation();
     trash(n.id);
     selected = selected.filter((x) => x !== n.id);
+    trashWithUndo([n.id], n.name);
   }
 
   // ── 多选 ──────────────────────────────────────────────
@@ -204,9 +219,11 @@ ${JSON.stringify(files)}`;
     return selected.length > 1 && selected.includes(n.id) ? [...selected] : [n.id];
   }
   function delTargets(ids: string[]) {
+    const names = ids.map((id) => getNode(id)?.name).filter(Boolean);
     for (const id of ids) trash(id);
     selected = selected.filter((x) => !ids.includes(x));
     lastClicked = null;
+    trashWithUndo(ids, names.slice(0, 3).join('、') + (names.length > 3 ? '…' : ''));
   }
 
   // 复制/剪切/粘贴（支持多选）。粘贴目标 = 当前文件夹（或指定文件夹）。剪切=move，复制=copyNode（递归、二进制复制字节）。

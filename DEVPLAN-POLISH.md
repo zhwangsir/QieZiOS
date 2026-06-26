@@ -57,6 +57,9 @@
   - ✅ 实现：回收站「彻底删除」(单项)+「清空回收站」用**两次点击确认**（非模态）——首点变「确认?/确认清空？」红底白字 3s、再点才执行；切换/超时自动 revert，两态互斥，`onDestroy` 清 timer。软删除（Files/桌面图标 trash）本就可从回收站还原，故确认只加在**不可逆**操作上。
   - ✅ 浏览器实测：彻底删除首点→「确认?」项数不变、再点→真删；清空首点→「确认清空？」不变、再点→清空为 0。**首次点击绝不删除**。supervisor 子 Agent PASS（首点无执行路径绕过/timer 生命周期无泄漏 + onDestroy 清理/互斥/restore 竞态 inert 自愈/无回归）。npm check+build 0 错 0 警。
   - 备注：软删除的「撤销 toast」需给通知系统加 action 按钮，拆为后续 **B16**（可选增强）。
+- [x] **B16 删除撤销 toast（通知 action 按钮）**：软删除（trash）后弹一条带「撤销」的 toast，6s 内一键还原。
+  - ✅ 实现：`Note` 加可选 `action:{label,run}`（只对活动 toast，进历史剥掉函数免序列化）；`Notifications.svelte` toast 改 `<div>`（内嵌 action 按钮，stopPropagation→run+dismiss）；Files `trashWithUndo` 在 del(单)/delTargets(批) 后弹「已删除[N 项] + 名字 + 撤销」（撤销=restoreFromTrash 闭包捕获 ids）。直接调 pushNote（绕开 sys.notify 的 bus，避免 action 函数过事件总线）。
+  - ✅ 浏览器实测：选 2 文件删→toast「已删除 2 项…撤销」、点撤销→两文件还原回根目录（证 action.run 执行）。toast 视觉淡出受无头 out:fade 冻结验不了（dismissNote 已从数组移除、真机会淡出）。supervisor 子 Agent PASS（action 序列化双保险/div 回归无问题/restore 幂等空安全/del·delTargets 接入/分层无环/无回归）。npm check+build 0 错 0 警。
 - [x] **B3 Reminders 选具体时间（datetime）**：现只能「N 秒后」；底层 `Schedule.fireAt` 已支持绝对时间，纯 UI 缺口。加 `datetime-local` + 每天/每小时预设。文件：`apps/Reminders.svelte`。
   - ✅ 实现：mode 三选（多久后/指定时间/循环）；relative·repeat 用「数字 + 单位 s/m/h/d」算毫秒走 in/every；datetime 用 `<input type=datetime-local>` → `new Date().getTime()`（本地时区解析）校验未来 → `{in: ts-now}`，过去/空则警告不加；`fmtWhen` 远期显绝对时间、近期显「Ns 后」、循环显「每 N 单位」。
   - ✅ 浏览器实测：指定时间(分钟精度)建 fireAt 提醒、循环 2 小时→every=7200000、过去时间被拒、datetime 输入条件显示、fmtWhen「27s 后」「每 2 小时」。supervisor 子 Agent PASS（datetime 本地时区解析正确/in·every 契约/unit=d 不超 setInterval 上限/mode 切换无误加/secs·recurring 移除无残留/边界全过）。npm check+build 0 错 0 警。
