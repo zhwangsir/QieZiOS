@@ -2,7 +2,7 @@
   import { processes, restore, minimize, close, activeId } from '../kernel/processes.svelte';
   import { klog, type LogLevel } from '../kernel/log.svelte';
   import { eventLog } from '../kernel/bus.svelte';
-  import { services, stopService, restartService } from '../kernel/services.svelte';
+  import { services, restartService, startService, enableService, disableService, listServices } from '../kernel/services.svelte';
   import { vfs, TRASH } from '../kernel/vfs.svelte';
   import { windowVisible } from '../lib/winctx';
   import { appMeta } from './appList';
@@ -22,6 +22,9 @@
   });
 
   const active = $derived(activeId());
+
+  // 全部后台服务（含禁用/停止的）。listServices 内部读 services.running + 禁用清单 → 响应式。
+  const svcList = $derived(listServices());
 
   // 进程树：以 init(0) 为根按父子排序，带 depth 缩进。子进程紧跟父进程。
   const procTree = $derived.by(() => {
@@ -162,25 +165,45 @@
         <div class="px-3 py-6 text-center text-sm text-qz-muted">没有窗口进程</div>
       {/if}
 
-      <!-- 后台服务：无窗口的常驻进程 -->
-      <div class="mt-2 border-t border-qz-border px-3 py-1.5 text-[11px] text-qz-muted">后台服务（无窗口）</div>
-      {#each services.running as s (s.id)}
+      <!-- 后台服务：无窗口常驻进程（init / systemctl）。列全部已注册服务含禁用 -->
+      <div class="mt-2 border-t border-qz-border px-3 py-1.5 text-[11px] text-qz-muted">后台服务（init / systemctl）</div>
+      {#each svcList as s (s.id)}
+        {@const color =
+          s.status === 'running'
+            ? 'text-emerald-400'
+            : s.status === 'crashed'
+              ? 'text-red-400'
+              : s.status === 'disabled'
+                ? 'text-amber-400'
+                : 'text-qz-muted'}
+        {@const label = s.status === 'running' ? '运行' : s.status === 'crashed' ? '崩溃' : s.status === 'disabled' ? '禁用' : '停止'}
         <div class="flex items-center gap-2 border-b border-qz-border/50 px-3 py-1.5 text-xs hover:bg-qz-elevated/50">
           <span class="w-10 text-qz-muted">⚙</span>
-          <span class="flex min-w-0 flex-1 items-center gap-1 truncate">
+          <span
+            class="flex min-w-0 flex-1 items-center gap-1 truncate"
+            title={s.after.length || s.requires.length ? `after:${s.after.join(',') || '-'} requires:${s.requires.join(',') || '-'}` : ''}
+          >
             {s.name}
             {#if s.restarts > 0}<span class="rounded bg-qz-surface px-1 text-[9px] text-amber-400">↻{s.restarts}</span>{/if}
           </span>
-          <span class="w-12 {s.status === 'running' ? 'text-emerald-400' : 'text-red-400'}">{s.status === 'running' ? '运行' : '崩溃'}</span>
-          <span class="w-14 text-right tabular-nums text-qz-muted">{fmtUptime(now - s.startedAt)}</span>
-          <span class="flex w-24 justify-end gap-1">
-            <button class="rounded px-1.5 py-0.5 text-[10px] hover:bg-qz-surface" onclick={() => restartService(s.id)}>重启</button>
-            <button class="rounded px-1.5 py-0.5 text-[10px] text-red-400 hover:bg-qz-surface" onclick={() => stopService(s.id)}>停止</button>
+          <span class="w-12 {color}">{label}</span>
+          <span class="w-14 text-right tabular-nums text-qz-muted">{s.status === 'running' && s.startedAt ? fmtUptime(now - s.startedAt) : '—'}</span>
+          <span class="flex w-28 justify-end gap-1">
+            {#if s.status === 'disabled'}
+              <button class="rounded px-1.5 py-0.5 text-[10px] text-emerald-400 hover:bg-qz-surface" title="启用并启动" onclick={() => { enableService(s.id); startService(s.id); }}>启用</button>
+            {:else}
+              {#if s.status === 'running'}
+                <button class="rounded px-1.5 py-0.5 text-[10px] hover:bg-qz-surface" onclick={() => restartService(s.id)}>重启</button>
+              {:else}
+                <button class="rounded px-1.5 py-0.5 text-[10px] text-emerald-400 hover:bg-qz-surface" onclick={() => startService(s.id)}>启动</button>
+              {/if}
+              <button class="rounded px-1.5 py-0.5 text-[10px] text-amber-400 hover:bg-qz-surface" title="禁用并停止" onclick={() => disableService(s.id)}>禁用</button>
+            {/if}
           </span>
         </div>
       {/each}
-      {#if services.running.length === 0}
-        <div class="px-3 py-3 text-center text-[11px] text-qz-muted">无运行中的服务</div>
+      {#if svcList.length === 0}
+        <div class="px-3 py-3 text-center text-[11px] text-qz-muted">无服务</div>
       {/if}
     </div>
   {:else if tab === 'log'}

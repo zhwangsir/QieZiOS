@@ -27,6 +27,14 @@ import { appList, appMeta } from '../apps/appList';
 import { settings } from '../system/settings.svelte';
 import { isVirtualPath, virtualList, virtualRead, virtualStat, normAbs, VIRTUAL_MOUNTS } from '../system/vfsVirtual';
 import { users, getUser, userExists, addUser, passwdContent } from '../system/users.svelte';
+import {
+  listServices,
+  startService,
+  stopService,
+  restartService,
+  enableService,
+  disableService,
+} from '../kernel/services.svelte';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -217,6 +225,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  chmod chown stat     —— 权限/属主（ls -l 看权限）\n' +
       '  whoami id su sudo useradd users —— 用户/账户\n' +
       '  open apps ps pstree jobs kill[-9/-STOP/-CONT] —— 应用/进程\n' +
+      '  systemctl [list|status|start|stop|enable|disable] —— 后台服务\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  env export unset which source(.) —— 环境/配置\n' +
       '  whoami date theme clear help\n' +
@@ -521,6 +530,59 @@ const COMMANDS: Record<string, CmdFn> = {
     else if (sig === 'CONT') sys.proc.restore(p.id);
     else sys.proc.close(p.id); // TERM/KILL/HUP/INT/...
     return { out: '', code: 0 };
+  },
+
+  // systemctl：管理后台服务（init）。list/status/start/stop/restart/enable/disable
+  systemctl: (args) => {
+    const [sub, id] = args;
+    const list = listServices();
+    if (!sub || sub === 'list' || sub === 'list-units') {
+      const lines = list.map(
+        (s) =>
+          `${s.id.padEnd(10)} ${s.status.padEnd(9)} ${s.name}` +
+          (s.after.length || s.requires.length ? `  (after:${s.after.join(',') || '-'} requires:${s.requires.join(',') || '-'})` : ''),
+      );
+      return { out: 'UNIT       STATUS    NAME\n' + lines.join('\n'), code: 0 };
+    }
+    if (sub === 'status') {
+      if (!id) return { out: '', err: 'systemctl status <服务>', code: 2 };
+      const s = list.find((x) => x.id === id);
+      if (!s) return { out: '', err: `systemctl: 找不到服务 ${id}`, code: 1 };
+      return {
+        out: [
+          `● ${s.id} — ${s.name}`,
+          `   状态: ${s.status}`,
+          `   开机: ${s.status === 'disabled' ? 'disabled' : 'enabled'}`,
+          `   重启: ${s.restarts}`,
+          `   after: ${s.after.join(', ') || '-'}`,
+          `   requires: ${s.requires.join(', ') || '-'}`,
+        ].join('\n'),
+        code: 0,
+      };
+    }
+    if (!id) return { out: '', err: `systemctl ${sub} <服务>`, code: 2 };
+    if (!list.some((x) => x.id === id)) return { out: '', err: `systemctl: 找不到服务 ${id}`, code: 1 };
+    switch (sub) {
+      case 'start':
+        if (list.find((x) => x.id === id)?.status === 'disabled')
+          return { out: '', err: `${id} 已禁用，先 systemctl enable ${id}`, code: 1 };
+        startService(id);
+        return { out: `已启动 ${id}`, code: 0 };
+      case 'stop':
+        stopService(id);
+        return { out: `已停止 ${id}`, code: 0 };
+      case 'restart':
+        restartService(id);
+        return { out: `已重启 ${id}`, code: 0 };
+      case 'enable':
+        enableService(id);
+        return { out: `已设为开机启动 ${id}`, code: 0 };
+      case 'disable':
+        disableService(id);
+        return { out: `已禁用并停止 ${id}`, code: 0 };
+      default:
+        return { out: '', err: `systemctl: 未知子命令 ${sub}（list/status/start/stop/restart/enable/disable）`, code: 2 };
+    }
   },
 
   theme: (args) => {

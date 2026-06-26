@@ -44,6 +44,7 @@ registerService({
 registerService({
   id: 'schedd',
   name: '定时器',
+  after: ['notifyd'], // 定时器到点要经 notifyd 弹通知 → 让 notifyd 先起（演示依赖排序）
   start() {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const fire = (s: Schedule) => emit('notify', { title: s.title || '提醒', body: s.body, level: 'info' });
