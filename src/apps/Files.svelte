@@ -157,7 +157,9 @@ ${JSON.stringify(files)}`;
     renameText = n.name;
   }
   function commitRename() {
-    if (renamingId) rename(renamingId, renameText);
+    if (renamingId && !rename(renamingId, renameText) && renameText.trim()) {
+      sys.notify('重命名失败', { body: '该目录下已有同名项', level: 'warn' });
+    }
     renamingId = null;
   }
   function del(n: VNode, e: Event) {

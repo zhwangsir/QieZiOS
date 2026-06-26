@@ -146,12 +146,17 @@ export function isImage(node: VNode): boolean {
   return IMG_EXT.includes(ext);
 }
 
-export function rename(id: string, name: string): void {
+// 重命名。返回是否成功：目标名为空、或同目录已有同名条目（排除自己）→ 拒绝（返回 false），
+// 避免「同名并存、按路径只命中第一个、另一个不可达」。改名是显式动作，故拒绝而非像 move 那样自动 +2。
+export function rename(id: string, name: string): boolean {
   const n = vfs.nodes[id];
-  if (n && name.trim()) {
-    n.name = name.trim();
-    n.updatedAt = Date.now();
-  }
+  const nm = name.trim();
+  if (!n || !nm) return false;
+  if (nm === n.name) return true; // 没变，视为成功（无操作）
+  if (n.parentId && children(n.parentId).some((c) => c.id !== id && c.name === nm)) return false;
+  n.name = nm;
+  n.updatedAt = Date.now();
+  return true;
 }
 
 // dest 是否是 id 的子孙（移动时防止把文件夹拖进自己里面 → 成环）
@@ -266,6 +271,7 @@ if (import.meta.env.DEV) {
     getNode,
     copyNode,
     children,
+    rename,
   };
 }
 

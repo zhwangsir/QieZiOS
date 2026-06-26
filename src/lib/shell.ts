@@ -522,6 +522,10 @@ const COMMANDS: Record<string, CmdFn> = {
     const base = slash >= 0 ? args[1].slice(slash + 1) : args[1];
     const parentId = resolvePath(ctx.cwd, parentStr);
     if (!parentId || getNode(parentId)?.type !== 'dir') return { out: '', err: `mv: ${parentStr}: 目录不存在`, code: 1 };
+    // 目标已存在同名（排除自己）→ 拒绝，不像 bash 那样覆盖（避免同名并存路径不可达）。先查再动，免半移动。
+    if (children(parentId).some((c) => c.id !== srcId && c.name === base)) {
+      return { out: '', err: `mv: ${args[1]}: 目标已存在`, code: 1 };
+    }
     if (parentId !== getNode(srcId)!.parentId) move(srcId, parentId);
     rename(srcId, base);
     return { out: '', code: 0 };

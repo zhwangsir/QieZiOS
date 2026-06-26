@@ -32,7 +32,9 @@
 - [x] **A7 `vfs.move` 不查目标目录重名 → 同名并存、路径不可达**：`resolvePath` 只命中第一个同名，另一个永久无法按路径访问。修：move 落地前查重名，改名或拒绝。文件：`kernel/vfs.svelte.ts`。
   - ✅ 实现：`move` 在落地前 `n.name = uniqueName(destId, n.name)`——目标已有同名则改唯一名（「x 2.txt」），无冲突原样返回；调用时 n 仍在原父目录故 uniqueName 不把自己算进去。覆盖 GUI 拖拽（Files/DesktopIcons）+ shell `mv 进目录`。
   - ✅ 浏览器实测：根 a.txt(ROOT-A) `mv` 进已有 a.txt(INDIR-A) 的目录 → 得「a 2.txt(ROOT-A)」+原「a.txt(INDIR-A)」两者皆可达、根下不再有 a.txt。supervisor 子 Agent PASS（uniqueName 时机/无冲突不误改/同目录·跨目录 rename 路径不受影响/目录与二进制同样适用全过）。npm check+build 0 错 0 警。
-- [ ] **A9 `rename` 同名不去重（同类，A7 的姊妹项）**：GUI 重命名/`mv a.txt 已存在.txt` 把名字改成目录里已存在的名 → 同样产生同名并存、路径不可达（rename 是「显式改名」语义，去重会让用户输入的名被悄悄改，故倾向：检测冲突时拒绝 + 提示，而非自动 +2）。文件：`kernel/vfs.svelte.ts`、`apps/Files.svelte`、`lib/shell.ts`(mv 改名分支)。
+- [x] **A9 `rename` 同名不去重（同类，A7 的姊妹项）**：GUI 重命名/`mv a.txt 已存在.txt` 把名字改成目录里已存在的名 → 同样产生同名并存、路径不可达（rename 是「显式改名」语义，去重会让用户输入的名被悄悄改，故倾向：检测冲突时拒绝 + 提示，而非自动 +2）。文件：`kernel/vfs.svelte.ts`、`apps/Files.svelte`、`lib/shell.ts`(mv 改名分支)。
+  - ✅ 实现：`vfs.rename` 返回 boolean——空名/同目录已有同名(排除自己)→ false 不改、改成自己当前名→ true(no-op)、否则改名 true。Files commitRename / DesktopIcons commitIconRename 在 false 且名非空时 notify「已有同名项」；shell `mv` 重命名分支先查目标父目录重名(排除 src)→ 有则报错「目标已存在」不覆盖不半移动。顺手给 DesktopIcons commitIconRename 加 `renamingId!==id` 守卫（修一个**既存** bug：Escape 取消/Enter 后的二次 blur 会误提交）。
+  - ✅ 浏览器实测：vfs.rename 改已存在兄弟名→false 名不变、改唯一名→true、改自己名→true；shell `mv` 改已存在名→code1「目标已存在」无重复、a9b 还在；改唯一名→成功。supervisor 子 Agent PASS（三调用方都正确处理 boolean/排除自己/新建流不卡死/mv 先查再动不半移动/A7 move 自动去重策略不受影响/无回归全过）。npm check+build 0 错 0 警。
 - [ ] **A8 `head -n -5` 负数语义错**：`parseCountAndFile` 不挡负数，`slice(0,-5)` 返回「除末 5 行外」。修：count 取 `Math.max(0, …)`。文件：`lib/shell.ts`。
 
 > 注：审计曾报 `vfs.purge` 删多层文件夹产生孤儿节点——实读代码确认是**后序递归（孙→子→父，children 每层重算）正确无孤儿**，已排除（误报）。

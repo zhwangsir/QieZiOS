@@ -10,6 +10,17 @@
   let renamingId = $state<string | null>(null);
   let renameText = $state('');
 
+  // 提交重命名：同目录重名会被 vfs.rename 拒绝（返回 false）→ 提示，避免同名并存路径不可达。
+  // `renamingId !== id` 守卫：Escape 取消(清 renamingId)后输入框卸载触发的 blur、或 Enter 提交后的
+  // 二次 blur，都会被挡掉 → 不误提交、不重复提示。
+  function commitIconRename(id: string) {
+    if (renamingId !== id) return;
+    if (!rename(id, renameText) && renameText.trim()) {
+      sys.notify('重命名失败', { body: '桌面已有同名项', level: 'warn' });
+    }
+    renamingId = null;
+  }
+
   // 拖动状态（普通变量）
   let dragId: string | null = null;
   let moved = false;
@@ -132,16 +143,12 @@
           onkeydown={(e) => {
             e.stopPropagation();
             if (e.key === 'Enter') {
-              rename(n.id, renameText);
-              renamingId = null;
+              commitIconRename(n.id);
             } else if (e.key === 'Escape') {
               renamingId = null;
             }
           }}
-          onblur={() => {
-            rename(n.id, renameText);
-            renamingId = null;
-          }}
+          onblur={() => commitIconRename(n.id)}
         />
       {:else}
         <span
