@@ -16,6 +16,7 @@ import {
   move,
   trash,
   isImage,
+  type VNode,
 } from '../kernel/vfs.svelte';
 import { sys } from '../system/sys';
 import { appList, appMeta } from '../apps/appList';
@@ -110,6 +111,57 @@ function fmtTime(ms: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// ── 文本处理命令（grep/wc/...）的共用小工具 ───────────────────
+// 读一个路径的文本内容（文本文件）
+function readFileText(ctx: ShellCtx, path: string): { text?: string; err?: string } {
+  const id = resolvePath(ctx.cwd, path);
+  const n = id ? getNode(id) : undefined;
+  if (!n) return { err: `${path}: 没有那个文件或目录` };
+  if (n.type === 'dir') return { err: `${path}: 是一个目录` };
+  return { text: n.kind === 'binary' ? '' : n.content };
+}
+// 取输入：有文件参数读文件，否则用 stdin（管道）
+function inputText(ctx: ShellCtx, file: string | null, stdin: string): { text?: string; err?: string } {
+  return file ? readFileText(ctx, file) : { text: stdin };
+}
+// 递归列出某目录下所有后代节点（文件+目录）
+function walk(startId: string): VNode[] {
+  const out: VNode[] = [];
+  const rec = (id: string) => {
+    for (const c of children(id)) {
+      out.push(c);
+      if (c.type === 'dir') rec(c.id);
+    }
+  };
+  rec(startId);
+  return out;
+}
+// 把文本切成「逻辑行」（去掉末尾单个换行，避免多出空行）
+function toLines(text: string): string[] {
+  if (text === '') return [];
+  return text.replace(/\n$/, '').split('\n');
+}
+// glob（* ?）→ 整串匹配的正则
+function globToRe(glob: string): RegExp {
+  const esc = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+  return new RegExp('^' + esc + '$');
+}
+// 解析 head/tail 的 -n N / -nN / -N 与可选文件参数
+function parseCountAndFile(args: string[], def = 10): { count: number; file: string | null } {
+  let count = def;
+  let file: string | null = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '-n') {
+      const v = parseInt(args[++i] ?? '', 10); // 注意：合法的 0 不能被 || 当成 falsy 吞掉
+      count = Number.isNaN(v) ? def : v;
+    } else if (/^-n\d+$/.test(a)) count = parseInt(a.slice(2), 10);
+    else if (/^-\d+$/.test(a)) count = parseInt(a.slice(1), 10);
+    else if (!a.startsWith('-')) file = a;
+  }
+  return { count, file };
+}
+
 // 命令收到上游/重定向来的 stdin（无则空串），返回 stdout/stderr/退出码
 type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult;
 
@@ -120,9 +172,10 @@ const COMMANDS: Record<string, CmdFn> = {
       '  pwd ls cd cat echo  —— 浏览/查看\n' +
       '  mkdir touch rm mv cp —— 文件操作\n' +
       '  open apps ps kill    —— 应用/进程\n' +
+      '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
       '  whoami date env export theme clear help\n' +
       '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>。\n' +
-      '试试：ls -l  /  echo hi > a.txt  /  cat < a.txt  /  ls | cat  /  open calculator',
+      '试试：ls | grep txt  /  cat a.txt | wc -l  /  find / -name "*.txt"',
     code: 0,
   }),
 
@@ -317,6 +370,164 @@ const COMMANDS: Record<string, CmdFn> = {
       return { out: `主色已设为 ${a}`, code: 0 };
     }
     return { out: `当前：${settings.mode} / 主色 ${settings.accent}\n用法：theme dark|light 或 theme #8b5cf6`, code: 0 };
+  },
+
+  // ── 文本处理（配合管道）─────────────────────────────
+  grep: (args, ctx, stdin) => {
+    const { flags, rest } = splitFlags(args); // i=忽略大小写 n=行号 r=递归
+    const pattern = rest[0];
+    if (pattern == null) return { out: '', err: 'grep: 用法 grep [-inr] 模式 [文件...]', code: 2 };
+    const files = rest.slice(1);
+    let re: RegExp | null = null;
+    try {
+      re = new RegExp(pattern, flags.has('i') ? 'i' : '');
+    } catch {
+      re = null; // 非法正则 → 退化为字面量匹配
+    }
+    const test = (line: string) =>
+      re
+        ? re.test(line)
+        : flags.has('i')
+          ? line.toLowerCase().includes(pattern.toLowerCase())
+          : line.includes(pattern);
+    const results: string[] = [];
+    let matched = false;
+    const scan = (text: string, prefix: string) => {
+      toLines(text).forEach((ln, i) => {
+        if (test(ln)) {
+          matched = true;
+          results.push((prefix ? prefix + ':' : '') + (flags.has('n') ? i + 1 + ':' : '') + ln);
+        }
+      });
+    };
+    if (!files.length) {
+      scan(stdin, '');
+    } else {
+      const targets: { path: string; text: string }[] = [];
+      for (const f of files) {
+        const id = resolvePath(ctx.cwd, f);
+        const n = id ? getNode(id) : undefined;
+        if (!id || !n) return { out: results.join('\n'), err: `grep: ${f}: 没有那个文件或目录`, code: 2 };
+        if (n.type === 'dir') {
+          if (flags.has('r')) {
+            for (const d of walk(id)) if (d.type === 'file' && d.kind !== 'binary') targets.push({ path: pathOf(d.id), text: d.content });
+          } else return { out: results.join('\n'), err: `grep: ${f}: 是一个目录`, code: 2 };
+        } else targets.push({ path: f, text: n.kind === 'binary' ? '' : n.content });
+      }
+      const multi = targets.length > 1 || flags.has('r'); // 递归模式总带文件名前缀（同 grep -r）
+      for (const t of targets) scan(t.text, multi ? t.path : '');
+    }
+    return { out: results.join('\n'), code: matched ? 0 : 1 }; // 有匹配 0、无匹配 1（同 grep）
+  },
+
+  find: (args, ctx) => {
+    let startPath = '.';
+    let nameGlob: string | null = null;
+    let typeFilter: string | null = null;
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (a === '-name') nameGlob = args[++i] ?? null;
+      else if (a === '-type') typeFilter = args[++i] ?? null;
+      else if (!a.startsWith('-')) startPath = a;
+    }
+    const startId = resolvePath(ctx.cwd, startPath);
+    const start = startId ? getNode(startId) : undefined;
+    if (!start || !startId) return { out: '', err: `find: ${startPath}: 没有那个文件或目录`, code: 1 };
+    const re = nameGlob ? globToRe(nameGlob) : null;
+    const out: string[] = [];
+    const consider = (n: VNode) => {
+      if (typeFilter === 'f' && n.type !== 'file') return;
+      if (typeFilter === 'd' && n.type !== 'dir') return;
+      if (re && !re.test(n.name)) return;
+      out.push(pathOf(n.id));
+    };
+    consider(start);
+    for (const d of walk(startId)) consider(d);
+    return { out: out.join('\n'), code: 0 };
+  },
+
+  wc: (args, ctx, stdin) => {
+    const { flags, rest } = splitFlags(args); // l=行 w=词 c=字符
+    const r = inputText(ctx, rest[0] ?? null, stdin);
+    if (r.err) return { out: '', err: `wc: ${r.err}`, code: 1 };
+    const text = r.text ?? '';
+    const lines = toLines(text).length;
+    const words = (text.match(/\S+/g) || []).length;
+    const chars = text.length;
+    const showAll = !flags.has('l') && !flags.has('w') && !flags.has('c');
+    const nums: number[] = [];
+    if (showAll || flags.has('l')) nums.push(lines);
+    if (showAll || flags.has('w')) nums.push(words);
+    if (showAll || flags.has('c')) nums.push(chars);
+    return { out: nums.join('\t') + (rest[0] ? ' ' + rest[0] : ''), code: 0 };
+  },
+
+  head: (args, ctx, stdin) => {
+    const { count, file } = parseCountAndFile(args, 10);
+    const r = inputText(ctx, file, stdin);
+    if (r.err) return { out: '', err: `head: ${r.err}`, code: 1 };
+    return { out: toLines(r.text ?? '').slice(0, count).join('\n'), code: 0 };
+  },
+
+  tail: (args, ctx, stdin) => {
+    const { count, file } = parseCountAndFile(args, 10);
+    const r = inputText(ctx, file, stdin);
+    if (r.err) return { out: '', err: `tail: ${r.err}`, code: 1 };
+    const lines = toLines(r.text ?? '');
+    return { out: lines.slice(Math.max(0, lines.length - count)).join('\n'), code: 0 };
+  },
+
+  sort: (args, ctx, stdin) => {
+    const { flags, rest } = splitFlags(args); // r=逆序 n=数值
+    const r = inputText(ctx, rest[0] ?? null, stdin);
+    if (r.err) return { out: '', err: `sort: ${r.err}`, code: 1 };
+    const lines = toLines(r.text ?? '');
+    if (flags.has('n')) lines.sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
+    else lines.sort((a, b) => a.localeCompare(b, 'zh'));
+    if (flags.has('r')) lines.reverse();
+    return { out: lines.join('\n'), code: 0 };
+  },
+
+  uniq: (args, ctx, stdin) => {
+    const { flags, rest } = splitFlags(args); // c=计数前缀
+    const r = inputText(ctx, rest[0] ?? null, stdin);
+    if (r.err) return { out: '', err: `uniq: ${r.err}`, code: 1 };
+    const out: string[] = [];
+    let prev: string | null = null;
+    let count = 0;
+    for (const ln of toLines(r.text ?? '')) {
+      if (ln === prev) count++;
+      else {
+        if (prev !== null) out.push(flags.has('c') ? `${count} ${prev}` : prev);
+        prev = ln;
+        count = 1;
+      }
+    }
+    if (prev !== null) out.push(flags.has('c') ? `${count} ${prev}` : prev);
+    return { out: out.join('\n'), code: 0 };
+  },
+
+  cut: (args, ctx, stdin) => {
+    let delim = '\t';
+    let fieldsSpec: string | null = null;
+    let file: string | null = null;
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (a === '-d') delim = args[++i] ?? '\t';
+      else if (a.startsWith('-d')) delim = a.slice(2);
+      else if (a === '-f') fieldsSpec = args[++i] ?? null;
+      else if (a.startsWith('-f')) fieldsSpec = a.slice(2);
+      else if (!a.startsWith('-')) file = a;
+    }
+    if (!fieldsSpec) return { out: '', err: 'cut: 需要用 -f 指定字段（如 -f1 或 -f1,3）', code: 2 };
+    const fields = fieldsSpec.split(',').map((x) => parseInt(x, 10)).filter((x) => x > 0);
+    const r = inputText(ctx, file, stdin);
+    if (r.err) return { out: '', err: `cut: ${r.err}`, code: 1 };
+    const out = toLines(r.text ?? '').map((ln) => {
+      const parts = ln.split(delim);
+      return fields.map((f) => parts[f - 1] ?? '').join(delim);
+    });
+    return { out: out.join('\n'), code: 0 };
   },
 };
 
