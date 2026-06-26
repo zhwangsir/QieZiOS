@@ -55,7 +55,9 @@
   - ✅ 实现：vfs `copyNode`(递归深拷贝；顶层 uniqueName 去重、子项进新空目录原名、二进制 getBlob+putBlob 复制出独立新 blobId、属主归当前用户、防复制进自己/子孙)；Files `clip`{id,cut} + copyItem/cutItem/paste(cut→move、copy→copyNode 可多次)；右键 复制/剪切/(目录)粘贴到此 + 工具栏粘贴按钮 + 键盘 Ctrl+C/X(item)·Ctrl+V(网格)。
   - ✅ 浏览器实测：copyNode 复制含文本+二进制的文件夹→递归全复制、二进制 blobId 不同但字节相同、改原文副本不变(深拷贝独立)；UI 右键复制→工具栏粘贴→生成「x 2.txt」内容正确。supervisor 子 Agent PASS（递归终止/blob 独立/isInside 防自包含/async pasting 锁/move 复用/键盘冒泡不双处理/无回归全过）。npm check+build 0 错 0 警。
 - [ ] **B15 Files 多选 + 批量操作**（B5 拆出）：网格项 Ctrl/Shift 多选 + 框选 + 批量 删除/移动/复制。需要 selection 状态 + 各操作支持多 id。文件：`apps/Files.svelte`。
-- [ ] **B6 通知中心 / 系统托盘**：顶栏右侧只有时钟、通知弹完即焚无历史。加托盘区（通知历史面板 + 明暗/桌宠快捷开关）。文件：`shell/TopBar.svelte`、`system/notifications.svelte.ts`、新面板组件。
+- [x] **B6 通知中心 / 系统托盘**：顶栏右侧只有时钟、通知弹完即焚无历史。加托盘区（通知历史面板 + 明暗/桌宠快捷开关）。文件：`shell/TopBar.svelte`、`system/notifications.svelte.ts`、新面板组件。
+  - ✅ 实现：`notifications.svelte.ts` 加持久化 `noteHistory`（封顶 40 + `lastSeen`）+ `unreadCount`/`markNotesSeen`/`clearHistory`；`pushNote` 同时进活动 toast 与历史。TopBar 右侧加系统托盘：明暗切换(🌙/☀️ 跟随 mode)、通知铃铛🔔(未读角标>9 显 9+) + 下拉面板(等级竖条/标题/正文/相对时间，倒序，含清空+空态)，点外部关闭、打开即清未读。
+  - ✅ 浏览器实测：3 条通知→历史累积、角标计数、面板倒序、打开清未读、明暗切换(colorScheme+图标跟随)、清空→空态。**supervisor 子 Agent 抓到 1 个真崩溃**：`nid` 刷新后重置为 0 而 `noteHistory` 持久化 → 新通知 id 撞历史旧 id → keyed each 重复 key `each_key_duplicate` 崩溃（单会话测试漏掉）→ 已修：`nid` 从历史最大 id 之上起步。复现验证：刷新后开机通知 id=9（不撞旧 [5,6,7,8]）、历史全唯一、开面板无崩溃无 JS 错误。npm check+build 0 错 0 警。
 - [ ] **B7 窗口四角四分屏 + 键盘平铺**：snap 只有左/右/最大化。加拖到角→1/4 屏 + Super/Ctrl+方向键平铺。文件：`shell/Window.svelte`、`shell/Desktop.svelte`。
 - [ ] **B8 Spotlight 搜文件正文 + 动作命令**：现只搜 App 名/文件名、结果硬截断。加遍历 `vfs.nodes.content` 搜正文 + 常用系统动作（切暗色/清空回收站等）。文件：`shell/Spotlight.svelte`。
 - [ ] **B9 Dock 排序 + pin/unpin**：顺序写死、不能固定/拖排。存 `settings.dockOrder`/`dockPinned`。文件：`shell/Dock.svelte`、`system/settings.svelte.ts`。
