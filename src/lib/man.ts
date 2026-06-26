@@ -49,7 +49,10 @@ export const MAN: Record<string, ManPage> = {
   // 进程 / 服务
   ps: { title: '进程快照', syn: 'ps', desc: '列出窗口进程（PID/PPID/状态/标题）。' },
   pstree: { title: '进程树', syn: 'pstree', desc: '以 init(0) 为根按父子关系画进程树。' },
-  jobs: { title: '作业列表', syn: 'jobs', desc: '把窗口进程当作业列出（运行/停止）。本 shell 无 & 后台作业，为简化视图。' },
+  jobs: { title: '后台作业列表', syn: 'jobs', desc: '列出本 shell 用 & 启动的后台作业及状态（Running/Done/Failed）。' },
+  fg: { title: '前台化作业', syn: 'fg [作业号]', desc: '等某个后台作业完成并显示其输出。无参数取最近一个仍在运行的作业。' },
+  bg: { title: '后台运行作业', syn: 'bg [作业号]', desc: '提示作业在后台运行。本 shell 的 & 作业总是异步执行、无停止态，故 bg 仅作提示。' },
+  wait: { title: '等待作业', syn: 'wait', desc: '阻塞直到所有仍在运行的后台作业完成。' },
   kill: { title: '发信号给进程', syn: 'kill [-9|-STOP|-CONT|-TERM] <pid>', desc: '默认 TERM 终止；-9/KILL 强制关闭；-STOP 挂起(最小化)；-CONT 恢复。' },
   systemctl: { title: '管理后台服务', syn: 'systemctl [list|status|start|stop|restart|enable|disable] [服务]', desc: '查看/控制后台服务（init）。enable/disable 持久化开机启动；start/stop 为运行时操作。' },
   pkg: { title: '远程 App 仓库', syn: 'pkg [list|search 词|install id|repo URL]', desc: '从远程仓库（catalog URL）浏览并安装 App（对标 apt）。list 列出、search 搜索、install 安装到「我的 App」、repo 查看/设置仓库源。也有图形界面「应用商店」。' },

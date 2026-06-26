@@ -40,6 +40,7 @@ import { repoConfig, fetchCatalog, installCatalogApp } from '../system/appRepo.s
 import { currentUser } from '../system/account.svelte';
 import { complete } from '../system/ai';
 import { aliases, setAlias, removeAlias } from '../system/shellPrefs.svelte';
+import { jobs, addJob, finishJob } from '../system/jobs.svelte';
 
 export interface ShellCtx {
   cwd: string; // 当前目录节点 id
@@ -250,7 +251,8 @@ const COMMANDS: Record<string, CmdFn> = {
       '  mkdir touch rm mv cp —— 文件操作\n' +
       '  chmod chown stat     —— 权限/属主（ls -l 看权限）\n' +
       '  whoami id su sudo useradd users —— 用户/账户\n' +
-      '  open apps ps pstree jobs kill[-9/-STOP/-CONT] —— 应用/进程\n' +
+      '  open apps ps pstree kill[-9/-STOP/-CONT] —— 应用/进程\n' +
+      '  cmd & · jobs · fg [n] · bg · wait —— 后台作业\n' +
       '  systemctl [list|status|start|stop|enable|disable] —— 后台服务\n' +
       '  pkg [list|search|install|repo] —— 远程 App 仓库（apt 式）\n' +
       '  curl[-i/-I] fetch hostname —— 网络（受浏览器 CORS 限制）\n' +
@@ -259,7 +261,7 @@ const COMMANDS: Record<string, CmdFn> = {
       '  env export unset alias unalias which source(.) —— 环境/配置\n' +
       '  if/then/fi · for…in…do…done · while · test/[ ] · sh 脚本.sh —— 脚本/控制流\n' +
       '  date theme clear  man <命令>（详细用法）\n' +
-      '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>。\n' +
+      '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>、; && || 序列、末尾 & 后台。\n' +
       '/etc/profile 在每次开终端时执行（改它=持久化你的 export/别名）。\n' +
       '虚拟文件系统（只读）：ls /proc（进程）、cat /proc/<pid>/status、ls /dev、cat /dev/clipboard。\n' +
       '试试：man ls  /  ls /proc  /  cat /dev/clipboard  /  ls | grep txt',
@@ -568,9 +570,32 @@ const COMMANDS: Record<string, CmdFn> = {
   },
 
   // jobs：把窗口进程当作作业列出（运行/停止）。本 shell 无 & 后台作业，这是简化视图。
+  // jobs：列出本 shell 的后台作业（cmd & 启动的）。状态 Running/Done/Failed。
   jobs: () => {
-    const lines = sys.proc.list().map((p, i) => `[${i + 1}]  ${p.minimized ? 'Stopped' : 'Running'}\t${p.appId}(${p.pid})`);
-    return { out: lines.length ? lines.join('\n') : '无作业', code: 0 };
+    if (!jobs.list.length) return { out: '无后台作业', code: 0 };
+    const label = (s: string) => (s === 'running' ? 'Running' : s === 'done' ? 'Done' : 'Failed');
+    return {
+      out: jobs.list.map((j) => `[${j.n}]  ${label(j.status)}\t${j.cmd}`).join('\n'),
+      code: 0,
+    };
+  },
+  // fg [n]：把后台作业「前台化」——等它完成并显示输出。无参取最近一个仍在跑的。
+  fg: async (args) => {
+    const running = jobs.list.filter((j) => j.status === 'running');
+    const n = args[0] ? Number(args[0]) : (running[running.length - 1]?.n ?? jobs.list[jobs.list.length - 1]?.n);
+    if (!n) return { out: '', err: 'fg: 没有作业', code: 1 };
+    const p = bgPromises.get(n);
+    if (!p) return { out: '', err: `fg: 没有作业 [${n}]`, code: 1 };
+    const res = await p; // 阻塞等它跑完
+    return { out: res.out, err: res.err, code: res.code };
+  },
+  // bg：本 shell 的后台作业本就异步在跑，无「停止态」可恢复 → 提示即可。
+  bg: () => ({ out: '后台作业已在运行（本 shell 的 & 作业总是异步执行）', code: 0 }),
+  // wait：等所有仍在跑的后台作业完成。
+  wait: async () => {
+    const ps = jobs.list.filter((j) => j.status === 'running').map((j) => bgPromises.get(j.n)).filter(Boolean);
+    await Promise.all(ps as Promise<CmdResult>[]);
+    return { out: '', code: 0 };
   },
 
   // kill [-信号] <pid>：TERM/KILL/HUP/INT→关闭，STOP→挂起(最小化)，CONT→恢复
@@ -1302,9 +1327,38 @@ function expandWords(text: string, ctx: ShellCtx): string[] {
 const MAX_LOOP = 5000; // while/for 迭代上限（防失控；够交互用，又不至于卡死/堆爆输出）
 const OUT_CAP = 100000; // 单次执行累计输出上限（字符）；超了就截断，防失控循环堆出几 MB
 
+// 后台作业的 promise 表（作业号 → 该作业的执行 promise）。给 fg/wait 等待用。
+const bgPromises = new Map<number, Promise<CmdResult>>();
+
+// 后台执行一条命令（cmd &）：不 await、登记一条作业、立刻返回。
+// 用 ctx 的副本，免得后台作业的 cd/export 串改前台 shell。完成时发通知。
+function backgroundRun(cmd: string, ctx: ShellCtx): CmdResult {
+  const job = addJob(cmd);
+  const bgCtx: ShellCtx = { cwd: ctx.cwd, env: { ...ctx.env }, code: 0, pid: ctx.pid };
+  const p = run(cmd, bgCtx)
+    .catch((e): CmdResult => ({ out: '', err: e instanceof Error ? e.message : String(e), code: 1 }))
+    .then((res) => {
+      finishJob(job.n, res.code);
+      try {
+        sys.notify(`作业 [${job.n}] 结束`, { body: cmd.slice(0, 50), level: res.code === 0 ? 'success' : 'warn' });
+      } catch {
+        /* 通知失败不影响作业 */
+      }
+      return res;
+    });
+  bgPromises.set(job.n, p);
+  return { out: `[${job.n}] ${cmd}`, code: 0 };
+}
+
 // 顶层执行：解析成 AST 后逐节点执行。含 if/for/while；叶子语句走 runLine。
+// 末尾单个 &（非 &&）→ 后台作业：剥掉 & 后台跑、立刻返回提示。
 export async function run(text: string, ctx: ShellCtx): Promise<CmdResult> {
-  if (!text.trim()) return { out: '', code: 0 };
+  const t = text.trim();
+  if (!t) return { out: '', code: 0 };
+  if (t.endsWith('&') && !t.endsWith('&&')) {
+    const body = t.slice(0, -1).trim();
+    if (body) return backgroundRun(body, ctx);
+  }
   let ast: SNode[];
   try {
     ast = parseStatements(splitStatements(text));
