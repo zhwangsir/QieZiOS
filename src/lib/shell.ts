@@ -37,7 +37,11 @@ export interface CmdResult {
 }
 
 export function newCtx(): ShellCtx {
-  return { cwd: 'root', env: { USER: 'qiezi', HOME: '/', SHELL: 'qzsh', HOSTNAME: 'qiezios' }, code: 0 };
+  return {
+    cwd: 'root',
+    env: { USER: 'qiezi', HOME: '/', SHELL: 'qzsh', HOSTNAME: 'qiezios', PATH: '/bin' },
+    code: 0,
+  };
 }
 
 // ── 词法：按空白分词，尊重单/双引号 ─────────────────────────
@@ -165,6 +169,8 @@ function parseCountAndFile(args: string[], def = 10): { count: number; file: str
 // 命令收到上游/重定向来的 stdin（无则空串），返回 stdout/stderr/退出码
 type CmdFn = (args: string[], ctx: ShellCtx, stdin: string) => CmdResult;
 
+let sourceDepth = 0; // source 嵌套深度（防循环 source 把栈打爆）
+
 const COMMANDS: Record<string, CmdFn> = {
   help: () => ({
     out:
@@ -173,9 +179,11 @@ const COMMANDS: Record<string, CmdFn> = {
       '  mkdir touch rm mv cp —— 文件操作\n' +
       '  open apps ps kill    —— 应用/进程\n' +
       '  grep find wc head tail sort uniq cut —— 文本处理（配合管道）\n' +
-      '  whoami date env export theme clear help\n' +
+      '  env export unset which source(.) —— 环境/配置\n' +
+      '  whoami date theme clear help\n' +
       '支持：$VAR 变量、" " 引号、管道 | 、重定向 > >> < 2>。\n' +
-      '试试：ls | grep txt  /  cat a.txt | wc -l  /  find / -name "*.txt"',
+      '/etc/profile 在每次开终端时执行（改它=持久化你的 export/别名）。\n' +
+      '试试：ls | grep txt  /  cat a.txt | wc -l  /  which ls  /  source /etc/profile',
     code: 0,
   }),
 
@@ -198,6 +206,48 @@ const COMMANDS: Record<string, CmdFn> = {
     }
     return { out: '', code: 0 };
   },
+  unset: (args, ctx) => {
+    for (const k of args) delete ctx.env[k];
+    return { out: '', code: 0 };
+  },
+  // which：命令在不在「PATH」里（内置命令一律算在 PATH 第一段下）
+  which: (args, ctx) => {
+    if (!args.length) return { out: '', err: 'which: 用法 which <命令>', code: 2 };
+    const bin = (ctx.env.PATH || '/bin').split(':')[0] || '/bin';
+    const outs: string[] = [];
+    let allFound = true;
+    for (const c of args) {
+      if (COMMAND_NAMES.includes(c)) outs.push(`${bin}/${c}`);
+      else allFound = false;
+    }
+    return { out: outs.join('\n'), code: allFound ? 0 : 1 };
+  },
+  // source / . ：读一个文件并逐行执行（rc/profile 用）。共享同一个 ctx，故 export/cd 会生效。
+  source: (args, ctx) => {
+    const f = args[0];
+    if (!f) return { out: '', err: 'source: 用法 source <文件>', code: 2 };
+    if (sourceDepth >= 25) return { out: '', err: 'source: 嵌套过深（疑似循环 source）', code: 1 };
+    const r = readFileText(ctx, f);
+    if (r.err) return { out: '', err: `source: ${r.err}`, code: 1 };
+    const outs: string[] = [];
+    let code = 0;
+    sourceDepth++;
+    try {
+      for (const raw of (r.text ?? '').split('\n')) {
+        const t = raw.trim();
+        if (!t || t.startsWith('#')) continue; // 跳过空行/注释
+        const res = run(t, ctx);
+        if (res.out) outs.push(res.out);
+        if (res.err) outs.push(res.err);
+        if (res.cd) ctx.cwd = res.cd; // 把 cd 落到共享 ctx
+        code = res.code;
+      }
+    } finally {
+      sourceDepth--;
+    }
+    return { out: outs.join('\n'), code };
+  },
+  '.': (args, ctx, stdin) => COMMANDS.source(args, ctx, stdin), // `.` 是 source 的别名
 
   ls: (args, ctx) => {
     const { flags, rest } = splitFlags(args);
@@ -532,6 +582,22 @@ const COMMANDS: Record<string, CmdFn> = {
 };
 
 export const COMMAND_NAMES = Object.keys(COMMANDS);
+
+// 确保 /etc/profile 存在（首次缺失就建一个带模板的）。返回其节点 id。
+// 像真系统出厂自带 /etc/profile：终端启动会 source 它 → 用户改它即可持久化环境/启动命令。
+const DEFAULT_PROFILE =
+  '# /etc/profile —— 每次打开终端时自动执行（类似 /etc/profile + .bashrc）\n' +
+  '# 在这里写 export 让环境变量对每个新终端生效，或放开机要跑的命令。\n' +
+  '# 例：\n' +
+  '#   export GREETING=你好\n' +
+  '#   echo 欢迎回来，$USER\n';
+export function ensureEtcProfile(): string | null {
+  let etcId = resolvePath('root', '/etc');
+  if (!etcId || getNode(etcId)?.type !== 'dir') etcId = createDir('root', 'etc');
+  let profId = resolvePath('root', '/etc/profile');
+  if (!profId || getNode(profId)?.type !== 'file') profId = createFile(etcId, 'profile', DEFAULT_PROFILE);
+  return profId ?? null;
+}
 
 // 按分隔符切分，但尊重引号（管道 | 不在引号里才算分隔）。保留引号交给 tokenize 去剥。
 function splitTopLevel(line: string, sep: string): string[] {
