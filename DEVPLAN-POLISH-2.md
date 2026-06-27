@@ -35,7 +35,9 @@
 - [x] **E3 计算器键盘输入 + 历史**：`Calculator.svelte` 只有 onclick，无键盘。加键盘（数字/运算符/Enter=`=`/Backspace/c·Delete=清空）+ 计算历史面板。单文件、DOM 可验。
   - ✅ 实现：根 div `tabindex=0`+`role=presentation`+`onkeydown`（不用 svelte:window 避免多窗串扰）、onMount 聚焦、按钮 `tabindex=-1`+点击后 `rootEl.focus()` 收回焦点→点完仍可键盘；`onKey` 映射 0-9/./+ - * /(→×÷−)/Enter·=/Backspace/%/c·C·Delete，命中 preventDefault、**其它键含 Esc return 不拦**→桌面 Esc 关窗仍可用；复用原 inputDigit/setOp/compute 原语。`backspace()`（resetNext 时 no-op、删末位、剩一位/负号/空→'0'）。`history` $state（封顶 30、'错误' 不入史、compute 写 `prev op cur` 在清空前）+ `showHistory` 切换面板（reverse 最新在前、点 recall 填结果、清空）。原计算逻辑（链式/除零/toFixed10）零改。
   - ✅ 浏览器实测：键盘 5*3 Enter→15、c 9 8 Backspace→9；12+8 Enter→20，开🕘历史→[「12 + 8 = 20」「5 × 3 = 15」]最新在前、点「20」→填回 20；鼠标 7+2=→9 后键盘 5→5（焦点收回 root 验证）；0 console error。supervisor 子 Agent PASS（键盘全映射+glyph 翻译+Esc 冒泡关窗/焦点模型多窗不串扰/历史顺序+封顶+错误不入史+reverse+recall/compute·setOp 回归不变/backspace 边界/a11y 0 警/按钮 ±%C= 不回归 七点全过）。npm check+build 0 错 0 警。
-- [ ] **E4 文件管理器排序 + 列表/网格视图**：`Files.svelte` items 用原序、只有网格。加 sortBy(name/type/size/mtime)+sortDir + grid/list 切换（list 显大小/属主权限）。可能需给 VNode 加 mtime。中成本、DOM 可验。
+- [x] **E4 文件管理器排序 + 列表/网格视图**：`Files.svelte` items 用原序、只有网格。加 sortBy(name/type/size/mtime)+sortDir + grid/list 切换（list 显大小/属主权限）。可能需给 VNode 加 mtime。中成本、DOM 可验。
+  - ✅ 实现（无需加 mtime——复用 VNode 既有 `updatedAt`）：`sortBy/sortDir/view` $state（每窗口内存）；`sortItems`（**文件夹恒在前、不乘 dir**；组内 name=localeCompare('zh') / type=扩展名+name 兜底 / size=`sizeOf`(binary n.size·文本 content.length·dir 0) / mtime=updatedAt，× dir）；`items` 非 aiHits 路径过 sortItems（AI 结果保相关性序不排）；排序/视图条（select 四选项 + 升降序按钮 + 网格/列表按钮高亮）；内容区**同一个 item 包裹 div 单一来源所有交互**、`{#if view==='grid'}…{:else}列表行(图标+名+大小+mtime+属主·权限+行尾悬停){/if}`；重命名输入抽 `{#snippet renameBox(cls)}` 两视图复用；list 列 hidden sm:block/md:block 窄窗渐次藏列。默认 name/asc 与 children() 原序字节一致。
+  - ✅ 浏览器实测：默认 name asc=a,b,c；切 size(a=8,b=2,c=1)→asc c,b,a、升降序切→desc a,b,c；切列表视图行显大小列 8B/2B/1B；**list 下点击选中「已选 1 项」、双击打开 textedit**（共享 handler 两视图一致）；0 console error。supervisor 子 Agent PASS（文件夹恒前不受 dir/默认零回归连 locale 对齐/aiHits 不排/视图切换 handler 单一来源两视图一致/snippet 复用 autofocus 单值不冲突/list 响应式藏列+fmtSize·fmtMtime/sortBy·view 响应式/搜索·多选·复制粘贴·拖拽·撤销零回归/分层无环 八点全过）。npm check+build 0 错 0 警。
 - [ ] **E5 终端外观自定义（字号/配色主题）**：`Terminal.svelte` 颜色字号全硬编码。加终端偏好（持久）：字号 + 几套配色（Nord/Dracula/跟随系统）。中成本，与作者「高自由度」对齐。
 - [ ] **E6 系统音效反馈**：全仓库零 Audio。新 `system/sound.ts` 用 WebAudio 合成开关窗/通知/错误短音 + Settings 开关音量（默认可关）。中成本，提升质感，音频本身 DOM 验不了（验 state+触发）。
 - [ ] **E7 任务视图 Exposé（窗口缩略图总览）**：第 1 轮 B13 注明延后。快捷键触发全屏 Exposé：未最小化窗 CSS scale 缩略平铺、点击聚焦。中/高成本，部分可验。
@@ -43,4 +45,4 @@
 
 ---
 
-> 当前循环：**D1、D3、E1、D2、E2、D4、E3、D5 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 A3（correctness，第 1 轮承接的最后一项）+ E4–E8（功能）。下一项按协议：候选 E4 Files 排序+列表视图（可视特性，宜交替）/ A3 过期 at 补发（correctness）/ E5 终端配色。
+> 当前循环：**D1、D3、E1、D2、E2、D4、E3、D5、E4 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 A3（correctness，第 1 轮承接的最后一项）+ E5–E8（功能）。下一项按协议：候选 A3 过期 at 补发（correctness，宜交替）/ E5 终端配色 / E8 Dock 自动隐藏。

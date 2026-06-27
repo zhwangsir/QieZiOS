@@ -54,6 +54,42 @@
   let selected = $state<string[]>([]);
   let lastClicked = $state<string | null>(null);
 
+  // 排序 + 视图（每窗口内存态）
+  let sortBy = $state<'name' | 'type' | 'size' | 'mtime'>('name');
+  let sortDir = $state<'asc' | 'desc'>('asc');
+  let view = $state<'grid' | 'list'>('grid');
+
+  function sizeOf(n: VNode): number {
+    if (n.type === 'dir') return 0;
+    return n.kind === 'binary' ? (n.size ?? 0) : (n.content?.length ?? 0);
+  }
+  // 排序：文件夹永远在前，组内按所选键 × 方向。默认 name/asc 与 children() 原序一致（零视觉变化）。
+  function sortItems(arr: VNode[]): VNode[] {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const ext = (n: VNode) => n.name.slice(n.name.lastIndexOf('.') + 1).toLowerCase();
+    return [...arr].sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+      let c = 0;
+      if (sortBy === 'name') c = a.name.localeCompare(b.name, 'zh');
+      else if (sortBy === 'type') c = ext(a).localeCompare(ext(b)) || a.name.localeCompare(b.name, 'zh');
+      else if (sortBy === 'size') c = sizeOf(a) - sizeOf(b);
+      else c = (a.updatedAt ?? 0) - (b.updatedAt ?? 0); // mtime
+      return c * dir;
+    });
+  }
+  function fmtSize(n: VNode): string {
+    if (n.type === 'dir') return '—';
+    const b = sizeOf(n);
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + 'M';
+    if (b >= 1024) return (b / 1024).toFixed(1) + 'K';
+    return b + 'B';
+  }
+  function fmtMtime(n: VNode): string {
+    const d = new Date(n.updatedAt);
+    const p = (x: number) => String(x).padStart(2, '0');
+    return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
   // 搜索：q 即时按名字过滤当前文件夹；aiHits 非空时改为展示 AI 语义搜索命中的文件（全盘）
   let q = $state('');
   let aiHits = $state<string[] | null>(null);
@@ -73,7 +109,8 @@
     if (aiHits) return aiHits.map((id) => getNode(id)).filter((n): n is VNode => !!n && n.parentId !== 'trash');
     const base = children(cwd);
     const needle = q.trim().toLowerCase();
-    return needle ? base.filter((n) => n.name.toLowerCase().includes(needle)) : base;
+    const filtered = needle ? base.filter((n) => n.name.toLowerCase().includes(needle)) : base;
+    return sortItems(filtered);
   });
   const crumbs = $derived(pathSegments(cwd));
 
@@ -355,6 +392,36 @@ ${JSON.stringify(files)}`;
     {/if}
   </div>
 
+  <!-- 排序 + 视图切换 -->
+  <div class="flex items-center gap-2 border-b border-qz-border px-3 py-1 text-[11px]">
+    <span class="text-qz-muted">排序</span>
+    <select
+      bind:value={sortBy}
+      class="rounded bg-qz-surface px-1.5 py-0.5 text-qz-text outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+    >
+      <option value="name">名称</option>
+      <option value="type">类型</option>
+      <option value="size">大小</option>
+      <option value="mtime">修改时间</option>
+    </select>
+    <button
+      class="rounded px-1.5 py-0.5 text-qz-muted hover:bg-qz-elevated"
+      title={sortDir === 'asc' ? '升序' : '降序'}
+      onclick={() => (sortDir = sortDir === 'asc' ? 'desc' : 'asc')}>{sortDir === 'asc' ? '↑' : '↓'}</button>
+    <div class="ml-auto flex gap-0.5">
+      <button
+        class="rounded px-1.5 py-0.5 hover:bg-qz-elevated"
+        class:bg-qz-elevated={view === 'grid'}
+        title="网格视图"
+        onclick={() => (view = 'grid')}>▦</button>
+      <button
+        class="rounded px-1.5 py-0.5 hover:bg-qz-elevated"
+        class:bg-qz-elevated={view === 'list'}
+        title="列表视图"
+        onclick={() => (view = 'list')}>☰</button>
+    </div>
+  </div>
+
   {#if aiHits}
     <div class="flex items-center gap-2 border-b border-qz-border bg-qz-accent/10 px-3 py-1 text-[11px] text-qz-muted">
       🤖 AI 搜索结果 · {items.length} 个 · 点 ✕ 返回
@@ -372,12 +439,29 @@ ${JSON.stringify(files)}`;
     </div>
   {/if}
 
-  <!-- 内容网格 -->
+  <!-- 重命名输入框（grid/list 复用，只差样式类） -->
+  {#snippet renameBox(cls: string)}
+    <!-- svelte-ignore a11y_autofocus -->
+    <input
+      class="{cls} rounded bg-qz-surface px-1 text-xs text-qz-text outline-none ring-1 ring-qz-accent"
+      bind:value={renameText}
+      autofocus
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => {
+        e.stopPropagation(); // 别让 Enter/Esc 冒泡到外层 item（会误触发打开/导航）
+        if (e.key === 'Enter') commitRename();
+        else if (e.key === 'Escape') renamingId = null;
+      }}
+      onblur={commitRename}
+    />
+  {/snippet}
+
+  <!-- 内容区：网格 / 列表两种视图，共享同一套交互（点击/双击/右键/拖拽/键盘） -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
-    class="grid flex-1 content-start gap-1 overflow-auto p-3"
-    style="grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));"
+    class={view === 'grid' ? 'grid flex-1 content-start gap-1 overflow-auto p-3' : 'flex flex-1 flex-col gap-0.5 overflow-auto p-2'}
+    style={view === 'grid' ? 'grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));' : ''}
     onclick={clearSelection}
     onkeydown={(e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && clip) {
@@ -392,7 +476,9 @@ ${JSON.stringify(files)}`;
     {#each items as n (n.id)}
       {@const readable = permits(n, currentUser(), 4)}
       <div
-        class="group/item relative flex flex-col items-center gap-1 rounded-lg p-2 hover:bg-qz-elevated"
+        class="group/item relative hover:bg-qz-elevated {view === 'grid'
+          ? 'flex flex-col items-center gap-1 rounded-lg p-2'
+          : 'flex items-center gap-2 rounded-md px-2 py-1'}"
         class:ring-2={selected.includes(n.id)}
         class:ring-inset={selected.includes(n.id)}
         class:ring-qz-accent={selected.includes(n.id)}
@@ -420,46 +506,47 @@ ${JSON.stringify(files)}`;
           }
         }}
       >
-        <div class="relative text-3xl">
-          {iconFor(n)}
-          {#if !readable}<span class="absolute bottom-0 right-0 text-[11px]" title="无读权限">🔒</span>{/if}
-        </div>
-
-        {#if renamingId === n.id}
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
-            class="w-full rounded bg-qz-surface px-1 text-center text-xs text-qz-text outline-none ring-1 ring-qz-accent"
-            bind:value={renameText}
-            autofocus
-            onclick={(e) => e.stopPropagation()}
-            onkeydown={(e) => {
-              e.stopPropagation(); // 别让 Enter/Esc 冒泡到外层 item（会误触发打开/导航）
-              if (e.key === 'Enter') commitRename();
-              else if (e.key === 'Escape') renamingId = null;
-            }}
-            onblur={commitRename}
-          />
+        {#if view === 'grid'}
+          <div class="relative text-3xl">
+            {iconFor(n)}
+            {#if !readable}<span class="absolute bottom-0 right-0 text-[11px]" title="无读权限">🔒</span>{/if}
+          </div>
+          {#if renamingId === n.id}
+            {@render renameBox('w-full text-center')}
+          {:else}
+            <span class="line-clamp-2 w-full text-center text-xs leading-tight">{n.name}</span>
+            <span class="w-full truncate text-center text-[9px] text-qz-muted">{n.owner ?? DEFAULT_OWNER} · {accessStr(n, currentUser())}</span>
+          {/if}
+          <!-- 悬停操作 -->
+          <div class="absolute right-1 top-1 hidden gap-0.5 group-hover/item:flex">
+            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="重命名" onclick={(e) => startRename(n, e)}>✏️</button>
+            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="删除" onclick={(e) => del(n, e)}>🗑️</button>
+          </div>
         {:else}
-          <span class="line-clamp-2 w-full text-center text-xs leading-tight">{n.name}</span>
-          <span class="w-full truncate text-center text-[9px] text-qz-muted">{n.owner ?? DEFAULT_OWNER} · {accessStr(n, currentUser())}</span>
+          <!-- 列表行：图标 + 名字 + 大小 + 修改时间 + 属主·权限 -->
+          <span class="relative shrink-0 text-xl">
+            {iconFor(n)}
+            {#if !readable}<span class="absolute -bottom-1 -right-1 text-[10px]" title="无读权限">🔒</span>{/if}
+          </span>
+          {#if renamingId === n.id}
+            {@render renameBox('min-w-0 flex-1')}
+          {:else}
+            <span class="min-w-0 flex-1 truncate text-sm">{n.name}</span>
+            <span class="hidden shrink-0 tabular-nums text-[11px] text-qz-muted sm:block" style="width:3.5rem;text-align:right">{fmtSize(n)}</span>
+            <span class="hidden shrink-0 tabular-nums text-[11px] text-qz-muted sm:block" style="width:6rem;text-align:right">{fmtMtime(n)}</span>
+            <span class="hidden shrink-0 truncate text-[11px] text-qz-muted md:block" style="width:6rem;text-align:right">{n.owner ?? DEFAULT_OWNER} {accessStr(n, currentUser())}</span>
+          {/if}
+          <!-- 悬停操作（行尾内联） -->
+          <span class="hidden shrink-0 gap-0.5 group-hover/item:flex">
+            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="重命名" onclick={(e) => startRename(n, e)}>✏️</button>
+            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="删除" onclick={(e) => del(n, e)}>🗑️</button>
+          </span>
         {/if}
-
-        <!-- 悬停操作 -->
-        <div class="absolute right-1 top-1 hidden gap-0.5 group-hover/item:flex">
-          <button
-            class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface"
-            title="重命名"
-            onclick={(e) => startRename(n, e)}>✏️</button>
-          <button
-            class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface"
-            title="删除"
-            onclick={(e) => del(n, e)}>🗑️</button>
-        </div>
       </div>
     {/each}
 
     {#if items.length === 0}
-      <div class="col-span-full grid place-items-center py-12 text-sm text-qz-muted">
+      <div class="grid place-items-center py-12 text-center text-sm text-qz-muted {view === 'grid' ? 'col-span-full' : ''}">
         {aiHits ? '没有命中' : q.trim() ? '没有匹配的文件' : '空文件夹'}
       </div>
     {/if}
