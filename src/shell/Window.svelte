@@ -194,8 +194,13 @@
     <span class="flex-1 truncate text-[13px] font-medium text-qz-muted">{proc.title}</span>
   </div>
 
-  <!-- 内容：渲染 App 组件 -->
-  <div class="flex-1 overflow-auto text-qz-text">
+  <!-- 内容：渲染 App 组件。最小化时 content-visibility:hidden → 浏览器跳过其布局/绘制
+       （窗口仍挂载以保持还原动画，但不可见内容不再耗渲染；只作用于内容区、不碰标题栏/边框
+       动画；flex-1 决定盒子尺寸故不塌陷；还原时移除→重新渲染）。配合 windowVisible() 暂停定时器。 -->
+  <div
+    class="flex-1 overflow-auto text-qz-text"
+    style:content-visibility={proc.minimized ? 'hidden' : 'visible'}
+  >
     {@render children()}
   </div>
 

@@ -22,7 +22,9 @@
   - ✅ 浏览器实测：终端输出行 computed `content-visibility:auto`+`contain-intrinsic-size:auto 20px`、echo 命令输出正常；SysMonitor 日志行/事件行 computed `content-visibility:auto`；0 console error。supervisor 子 Agent PASS（行级裁剪安全/输入行不带类+intrinsic 占位故 scrollToEnd 仍到底/可访问性非 display:none/回卷 slice(-5000) 逻辑+调用位置对/index-key+trim 收敛不错位不崩/清屏·Ctrl+L·Tab·profile push 零回归/intrinsic auto 标准用法/纯 CSS 无环 六点全过）。npm check+build 0 错 0 警。
   - ⏳ 回卷上限（5000）需 ~2500 条命令才触发、无头难造 → 逻辑+supervisor 确认。Files 网格因 grid 轨道与 content-visibility intrinsic-size 交互更微妙，留待专门一轮。
 - [ ] **P5 信号/重渲染热点审计**：`vfs.children()` 每次 `Object.values+filter+sort`（O(n log n) 每调用、面包屑/resolvePath 高频调）等；高频 $derived 缓存；大对象 snapshot 成本。
-- [ ] **P6 不可见窗口 content-visibility**：最小化已暂停定时器，进一步对被遮挡/最小化窗口跳过布局/绘制（content-visibility:auto / 条件渲染）。
+- [x] **P6 最小化窗口 content-visibility**：最小化已暂停定时器（windowVisible），进一步对最小化窗口**跳过内容布局/绘制**。
+  - ✅ 实现：发现最小化窗口**保持挂载**（opacity:0+scale 做平滑动画、非 display:none）→ 内容仍被布局/绘制白耗渲染。给内容区 div 加 `style:content-visibility={proc.minimized ? 'hidden' : 'visible'}`——浏览器跳过最小化窗内容的布局/绘制；仅作用内容区、不碰窗口根的 opacity/scale 最小化动画；内容区是 fixed-height flex 列里的 `flex-1` → 盒子由 flex 撑开不受 `contain:size` 塌陷。用 `hidden` 而非 `auto`（auto 对仍在视口内的最小化窗不跳过、且丢渲染状态；hidden 无条件跳过 + 保留滚动/渲染状态、还原便宜）。与 windowVisible() 暂停定时器正交叠加。
+  - ✅ 浏览器实测（清干净 ghost 窗口后单窗）：计算器内容区 content-visibility 开=visible、最小化=hidden、还原=visible、procMinimized 还原后 false；0 console error。supervisor 子 Agent PASS（响应式 proc.minimized/不破坏最小化动画/**flex-1 防盒子塌陷**/最小化不可 tab 还原恢复（a11y 微改善）/与 windowVisible 正交/非最小化字节级零回归/hidden vs auto 取舍正确保滚动状态/纯 CSS 无环 八点全过）。npm check+build 0 错 0 警。⚠️ 无头预览 out:pop 过渡冻结致关窗 DOM 不卸载是环境限制、与本改动无关。
 
 ## 三、可观测
 
@@ -33,4 +35,4 @@
 
 ---
 
-> 当前循环：**P1、P7、P4、P2 已完成**（VFS 迁 IDB + 存储仪表盘 + 长列表 content-visibility + chat 迁 IDB 且附图持久化）。下一项候选：P5（vfs.children() 信号热点，需专注、高 blast radius）/ P6（不可见窗 content-visibility）/ P3（OPFS+SQLite-WASM，远期）。
+> 当前循环：**P1、P2、P4、P6、P7 已完成**（VFS+chat 迁 IDB + 存储仪表盘 + 长列表 + 最小化窗 content-visibility）。剩 **P5（vfs.children() 信号热点，高 blast radius、需专注全验）** + P3（OPFS+SQLite-WASM，远期）。下一项：P5（最后一个有价值的性能项）。
