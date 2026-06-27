@@ -4,7 +4,7 @@
 // ⚠️ /auth、/sync 由 server/index.mjs 提供：dev 经 vite 代理转发本地 node 服务，生产同源。
 // ───────────────────────────────────────────────────────────
 import { account } from './account.svelte';
-import { ASYNC_KEYS } from '../kernel/persist.svelte';
+import { ASYNC_KEYS, flushPersisted } from '../kernel/persist.svelte';
 import { idbEntries, idbSet } from '../kernel/idbStore';
 
 // 不上云：会话/凭据（qz.account）、AI 配置含 key（qz.ai）、旧 token（qz.syncToken）
@@ -30,6 +30,7 @@ export async function gatherState(): Promise<Record<string, string>> {
 
 export async function pushSync(): Promise<number> {
   if (!account.token) throw new Error('请先登录账号');
+  await flushPersisted(); // 先把挂起的防抖写盘刷干净，避免上传陈旧状态（改完立刻上传会漏最新改动）
   const state = await gatherState();
   const res = await fetch('/sync', {
     method: 'PUT',
@@ -61,5 +62,5 @@ export async function pullSync(): Promise<number> {
 }
 
 if (import.meta.env.DEV) {
-  (globalThis as unknown as { __qzSync: unknown }).__qzSync = { gatherState, pushSync, pullSync };
+  (globalThis as unknown as { __qzSync: unknown }).__qzSync = { gatherState, pushSync, pullSync, flushPersisted };
 }

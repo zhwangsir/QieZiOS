@@ -27,6 +27,11 @@ const localBackend: KVStorage = {
 // 当前后端（导出成 let，将来一行就能换实现）
 export let storage: KVStorage = localBackend;
 
+// 所有 persisted/persistedAsync store 登记一个「立即刷盘」函数：若有挂起的防抖写，
+// 取消计时器并马上写一次。给 flushPersisted() 用 —— 云同步上传前先把挂起写盘刷干净，
+// 避免「改完立刻上传 → 改动还在防抖计时器里没落盘 → 上传陈旧状态、悄悄漏数据」（D2）。
+const flushers: Array<() => void | Promise<void>> = [];
+
 // persisted(key, initial, debounceMs) —— 返回一个「会自己存盘」的响应式对象：
 //  · 谁在模板/effect 里读它的字段，字段变就自动更新（这是 $state 的能力）
 //  · 任何字段一变，就（防抖后）自动序列化写回 storage
@@ -53,10 +58,13 @@ export function persisted<T extends object>(
 
   const state = $state<T>(start);
 
+  // timer/pending 提到函数作用域 → effect 与 flusher 都能闭包到它们。
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: (() => void) | null = null; // 最近一次「待写盘」动作（捕获最新 snapshot）
+
   // $effect.root：在「组件之外」（.svelte.ts 模块里）开一个长期存在的 effect 作用域。
   // 普通 $effect 只能在组件里用；想在模块级别跑副作用，就得包一层 $effect.root。
   $effect.root(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
     $effect(() => {
       // $state.snapshot：把响应式代理「拍平」成普通对象（深读 → 订阅每个字段，含键增删）。
       // snapshot 必须留在 effect 体内以维持订阅；但更重的 serialize + JSON.stringify 推迟到
@@ -65,8 +73,14 @@ export function persisted<T extends object>(
       const snap = $state.snapshot(state) as T;
       // 防抖写盘：序列化也一并推迟，只有最后一次（防抖窗口内）真正写入。
       clearTimeout(timer);
-      timer = setTimeout(() => storage.set(key, JSON.stringify(serialize ? serialize(snap) : snap)), debounceMs);
+      pending = () => storage.set(key, JSON.stringify(serialize ? serialize(snap) : snap));
+      timer = setTimeout(() => { pending?.(); pending = null; }, debounceMs);
     });
+  });
+
+  // 立即刷盘：取消防抖、马上写当前挂起值（供 flushPersisted）。
+  flushers.push(() => {
+    if (pending) { clearTimeout(timer); pending(); pending = null; }
   });
 
   return state;
@@ -129,14 +143,26 @@ export function persistedAsync<T extends object>(
     hydrated = true; // 之后才允许写盘
   });
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: (() => Promise<void>) | null = null; // 最近一次「待写 IDB」动作
+
   $effect.root(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
     $effect(() => {
       const snap = $state.snapshot(state) as T; // 留在 effect 体内维持订阅（含键增删）
       if (!hydrated) return; // hydrate 完成前不写，避免默认值覆盖真数据
       clearTimeout(timer);
-      timer = setTimeout(() => idbSet(key, JSON.stringify(serialize ? serialize(snap) : snap)), debounceMs);
+      pending = () => idbSet(key, JSON.stringify(serialize ? serialize(snap) : snap));
+      timer = setTimeout(() => { void pending?.(); pending = null; }, debounceMs);
     });
+  });
+
+  // 立即刷盘：取消防抖、马上写并返回其 Promise（idbSet 异步，flushPersisted 会 await）。
+  flushers.push(() => {
+    if (!pending) return;
+    clearTimeout(timer);
+    const p = pending();
+    pending = null;
+    return p;
   });
 
   return state;
@@ -145,4 +171,10 @@ export function persistedAsync<T extends object>(
 // 启动门：挂载 UI 前 await 这个，让所有 IDB store 把真数据读回来（首屏不闪默认值）。
 export async function hydrateAll(): Promise<void> {
   await Promise.all(hydrators.map((h) => h()));
+}
+
+// 把所有 store 挂起的防抖写盘立刻落地（同步后端立即返回、IDB 后端返回 Promise）。
+// 云同步上传前调用 → 收集状态时不会漏掉「还在防抖窗口里」的最新改动。
+export async function flushPersisted(): Promise<void> {
+  await Promise.all(flushers.map((f) => f()));
 }
