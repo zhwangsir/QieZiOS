@@ -19,7 +19,10 @@
 
 ## 二、功能 / 体验（价值/成本比排序）
 
-- [ ] **G1 时钟 App 加 计时器/秒表/世界时钟**（审计推荐第一）：`Clock.svelte` 现仅模拟表盘。加分段切换 秒表(`performance.now`+圈速)/倒计时(到点 `sys.notify`+`playSound`)/世界时钟(`Intl.DateTimeFormat` 多时区)。单文件、复用 windowVisible 暂停定时器、DOM 可验。
+- [x] **G1 时钟 App 加 计时器/秒表/世界时钟**（审计推荐第一）：`Clock.svelte` 现仅模拟表盘。加分段切换 秒表(`performance.now`+圈速)/倒计时(到点 `sys.notify`+`playSound`)/世界时钟(`Intl.DateTimeFormat` 多时区)。单文件、复用 windowVisible 暂停定时器、DOM 可验。
+  - ✅ 实现：tab 分段（时钟[原表盘]/秒表/计时器/世界时钟）；保留原每秒 `now` effect（表盘+世界时钟）；新增 50ms `nowPerf` tick effect（仅 visible && (swRunning||timerRunning) 时跑）。秒表：swBase 累计+swStart perf 基准、swElapsed 派生、开始/暂停/计圈/复位、fmtSW(mm:ss.cs)。计时器：min/sec 输入→timerEnd perf 绝对目标、remaining 派生、开始/暂停/继续/复位、到点在 tick 回调收口(timerRunning 守卫防重)→`sys.notify`+`playSound`。世界时钟：7 区 `Intl.DateTimeFormat(timeZone)`、void now 每秒刷、try/catch。
+  - ✅ 浏览器实测：4 tab；秒表 开始→~1.6s 后 00:02.00、计圈记录、暂停冻结 00:03.01；计时器 0:30→1.6s 后 00:27 递减、0:01 到点→noteHistory 出现「⏲ 计时结束」+回 idle；世界时钟 7 区时间各不同(distinct=7)；0 console error。supervisor 子 Agent PASS（计时器 tick 回调收口非自引用 effect 只触发一次/秒表落定累计+派生/tick 生命周期不空转/状态机 idle·暂停·续/世界时钟 Intl+try-catch/响应式性能/原表盘零回归分层无环/边界 八点全过）。npm check+build 0 错 0 警。
+  - 📌 后续观察（supervisor，非阻塞）：计时器用绝对 perf 目标 + tick 最小化暂停 → 若 deadline 在窗口最小化期间越过，通知/音效延到还原后第一个 tick 才补发（剩余值正确、通知仍到只是延迟）。要「最小化也准点响铃」需改走 sys.schedule(schedd 后台、不受窗口可见性约束)。当前与全系统 windowVisible 暂停一致、可接受。
 - [ ] **G2 文件管理器详情/信息面板**：选中项看不到完整路径/精确字节/创建·修改时间/mime/属主权限明细（VNode 数据已齐，只差展示）。右侧可折叠详情侧栏或右键「显示简介」+ 图片缩略。文件：`apps/Files.svelte`。
 - [ ] **G5 字体族自定义（主题新维度）**：`Settings` 无 fontFamily、`theme` 无 `--qz-font`。加 fontFamily 字段（系统/无衬线/衬线/等宽/圆体）+ token + Settings select。⭐ 对齐作者第一优先级（美观/自由度），机制已就绪成本低。文件：`settings.svelte.ts`/`theme.svelte.ts`/`app.css`/`Settings.svelte`。
 - [ ] **G7 记事本导出/另存下载**：TextEdit 只能存进 VFS、无法导出到本机。工具栏加「⬇ 导出」（Blob+`<a download>`，.md 可选导出 HTML 复用 renderMarkdown）。单文件。打通「VFS→本机」出口。
@@ -29,4 +32,4 @@
 
 ---
 
-> 当前循环：第 3 轮审计建立本 backlog；**F1、F2 已完成**（sync/persist 健壮性：拉取陈旧覆盖 freeze + 上传同 tick 漏写 tick）。剩 F4/F5（P2）+ G1-G7（功能）。下一项按协议交替到功能：G1（时钟计时器/秒表，审计推荐第一、高价值可视）或 G5（字体族，作者第一优先级、低成本）。
+> 当前循环：第 3 轮审计；**F1、F2、G1 已完成**。剩 F4/F5（P2 polish）+ G2/G3/G4/G5/G6/G7（功能）。下一项：G5（字体族，作者第一优先级、低成本）或 F4/F5（P2 收尾）或 G2（Files 详情面板）。
