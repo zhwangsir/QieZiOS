@@ -29,6 +29,8 @@
   import DesktopIcons from './DesktopIcons.svelte';
   import StickyNotes from './StickyNotes.svelte';
   import { addNote } from './notes.svelte';
+  import Expose from './Expose.svelte';
+  import { expose, openExpose, closeExpose } from './exposeState.svelte';
   import { snapState } from './snapState.svelte';
 
   // 当前活动窗 id（派生）：传给每个 Window 决定是否高亮
@@ -82,6 +84,7 @@
         separator: true,
         onClick: () => (pet.enabled = !pet.enabled),
       },
+      { label: '任务视图 (F3)', icon: '🪟', onClick: openExpose },
       { label: '平铺窗口', icon: '🔲', onClick: tileGrid },
       { label: '层叠窗口', icon: '🗂️', onClick: cascade },
       { label: '关闭所有窗口', icon: '✕', danger: true, onClick: closeAll },
@@ -104,6 +107,17 @@
     // Launchpad 开着时，Esc 关掉（搜索输入照常用 input 事件，键盘其它快捷键吞掉）
     if (launchpad.open) {
       if (e.key === 'Escape') closeLaunchpad();
+      return;
+    }
+    // 任务视图（Exposé）开着时，Esc 或 F3 关掉，吞掉其它键
+    if (expose.open) {
+      if (e.key === 'Escape' || e.key === 'F3') { closeExpose(); e.preventDefault(); }
+      return;
+    }
+    // F3 打开任务视图（Exposé 约定键；preventDefault 防浏览器「查找下一个」）
+    if (e.key === 'F3') {
+      openExpose();
+      e.preventDefault();
       return;
     }
     // Ctrl/Cmd+K 打开命令面板（即使焦点在输入框也响应）
@@ -203,6 +217,9 @@
 
   <!-- 右键菜单（全局单例，谁右键就显示谁的菜单） -->
   <ContextMenu />
+
+  <!-- 任务视图 Exposé（F3 唤起） -->
+  <Expose />
 
   <!-- 命令面板（Ctrl/Cmd+K） -->
   <Spotlight />

@@ -48,7 +48,10 @@
   - ✅ 实现：`system/sound.ts`——`soundPrefs` persisted(`qz.sound`:{enabled:false,volume:0.3})；惰性 AudioContext(try/catch 返 null)；`SOUNDS`(open/close/notify/error/trash 各一串音符)；`playSound(kind)` **首行 `if(!soundPrefs.enabled) return`**（关时零开销不建上下文）+ 未知 kind return + 振荡器+增益包络(快起/指数衰减到 0.0001 防报错、volume clamp×0.25 防过响)+整体 try/catch。新 `soundd` 服务订阅总线 proc.launch→open/proc.exit→close/fs.trash→trash/app.denied→error/notify→(warn·error?error:notify)（事件驱动、不碰内核/各 App，与 notifyd/clipd 同模式）。Settings 加「🔊 声音」区（启用 checkbox + 音量 range，试听 playSound，未启用灰显）。
   - ✅ 浏览器实测（spy createOscillator）：soundd 已注册；disabled→0、enabled playSound('open')→2(两音符)、bus emit proc.launch→2(soundd→open)、未知 kind→0；Settings 声音区渲染(toggle+滑块)、开启持久化 {enabled:true,volume:0.3}；0 console error。supervisor 子 Agent PASS（enabled 门控零开销/AudioContext+playSound 双 try-catch+suspended resume+非零 exp ramp/合成包络防爆音/五事件映射且均真实 emit 已核/卸载清订阅/Settings bind+试听/qz.sound 独立不进主题白名单+随账号同步+分层无环/纯新增零回归 八点全过）。npm check+build 0 错 0 警。
   - ⏳ 音频可听性 + 爆音/叠音听感 + resume 在真实手势链恢复 → 无头验不了，**待真机听感验证**（合成+触发管线已跑通无报错）。
-- [ ] **E7 任务视图 Exposé（窗口缩略图总览）**：第 1 轮 B13 注明延后。快捷键触发全屏 Exposé：未最小化窗 CSS scale 缩略平铺、点击聚焦。中/高成本，部分可验。
+- [x] **E7 任务视图 Exposé（窗口总览）**：第 1 轮 B13 注明延后。快捷键触发全屏总览、点击聚焦。中/高成本，部分可验。
+  - ✅ 实现（卡片式任务视图，非破坏性，与 B13 tileGrid 重排真窗口互补）：考虑「实时像素缩略 + 缩放真窗口(Mission Control)」对 Window.svelte 侵入大且无头验不了几何，改用**卡片网格**——`exposeState.svelte.ts`(expose $state 开关，仿 launchpadState) + `Expose.svelte`(全屏 backdrop-blur 浮层、遍历 processes 含最小化每窗一卡[图标+标题+最小化 badge]、点卡 `restore(id)`[取消最小化+聚焦]+关、点遮罩/Esc/F3 关、空状态)。Desktop：F3 开/关(input 聚焦也响应、preventDefault 防浏览器查找)、右键菜单「任务视图」、Shortcuts 加 F3 条。z-[10000]（盖窗口/Dock、低于通知）。
+  - ✅ 浏览器实测：F3 开浮层、14 窗 14 卡、终端最小化卡有「最小化」badge；点最小化终端卡→restore 取消最小化+浮层关；点遮罩关；F3 重开、Esc 关；0 console error。supervisor 子 Agent PASS（pick=restore 聚焦+最小化可点回/遮罩 vs 卡片 stopPropagation 不冲突/onKey 顺序+F3 全局响应+preventDefault/z 层级（已按建议降 10000 让通知在其上）/纯新增零回归/processes 响应式实时增减/分层无环 Expose→desktopApps 不回指 shell/标题回退链 八点全过）。npm check+build 0 错 0 警。
+  - 备注：非实时像素缩略（设计取舍，多窗同 App 卡片靠标题区分）；真 Mission Control 实时缩放留作未来增强。
 - [x] **E8 Dock 自动隐藏**（桌面便签拆 E8b）：Dock 常驻。加自动隐藏开关（平时滑出屏幕底、鼠标移到底边热区或 Dock 才滑回）。
   - ✅ 实现：`dockPrefs` 加 `autohide` 字段（持久 `qz.dock`、不进 settings 主题白名单、随账号同步，与 B9 一致）；Dock 右键菜单加「自动隐藏 Dock」开关（✓ 表状态）；`autohide=$derived(dockPrefs.autohide && !viewport.isMobile)`（移动端不启用——Dock 是移动端主导航/横滚）、`hidden=$derived(autohide && !revealed && !dragId)`（拖拽重排时不收起）；Dock 条 inline `transform: translateX(-50%) translateY(hidden?calc(100%+1.5rem):0)`（**inline 含 -50% 保居中**，替原 `-translate-x-1/2` 类）+ transition；`{#if autohide}` 渲染底边 8px 热区（pointerenter→revealed）+ Dock onpointerenter/leave 切 revealed。
   - ✅ 浏览器实测：菜单有「自动隐藏 Dock」开关、点击翻转并持久化 `qz.dock.autohide=true`；headless(innerWidth=0→isMobile=true) 下守卫正确保持 Dock 可见（mobile 不隐藏）；0 console error。supervisor 子 Agent PASS（hidden 真值表/热区→Dock 衔接无闪烁震荡/**transform 合并保居中**+图标 scale 独立/isMobile 守卫/拖拽 `!dragId` 不中途滑走/持久化默认 false 旧数据不崩/热区仅 autohide 时渲染+pointerenter-only 不吞点击/autohide 关字节级零回归/响应式分层 八点全过）。
@@ -59,4 +62,4 @@
 
 ---
 
-> 当前循环：**D1–D5 + A3 正确性全清 + E1–E6 + E8 + E8b 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E7 Exposé（最后一项功能）**。下一项：E7 任务视图 Exposé（macOS 招牌、中/高成本、纯 CSS transform 缩略平铺）。之后回性能阶段 P5/P6。
+> 🎉 **DEVPLAN-POLISH-2 全部完成（2026-06-27）**：正确性 D1–D5 + A3 全清、功能 E1–E8 + E8b 全做完。两轮完善 backlog（POLISH + POLISH-2）清空。剩余仅 **性能阶段 DEVPLAN-PERF 的 P5（vfs.children 信号热点，高 blast radius 需专注）/ P6（不可见窗 content-visibility）/ P3（OPFS+SQLite，远期）**。下一项回性能阶段。
