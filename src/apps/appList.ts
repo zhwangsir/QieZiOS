@@ -28,6 +28,7 @@ export const appList: AppMeta[] = [
   { id: 'settings', title: '设置', icon: '⚙️', width: 540, height: 580 },
   { id: 'textedit', title: '记事本', icon: '📝', width: 480, height: 380, hidden: true },
   { id: 'imageviewer', title: '图片', icon: '🖼️', width: 540, height: 440, hidden: true },
+  { id: 'mediaviewer', title: '媒体', icon: '🎬', width: 560, height: 420, hidden: true },
   { id: 'webview', title: '网页', icon: '🌐', width: 900, height: 600, hidden: true },
   { id: 'userapp', title: 'App', icon: '🧩', width: 460, height: 380, hidden: true },
 ];

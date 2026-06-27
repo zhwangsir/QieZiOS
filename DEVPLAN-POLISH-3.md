@@ -39,9 +39,11 @@
 - [x] **G3 计算器科学模式**：加 标准/科学 切换（√/x²/1/x/π/括号/sin·cos·log/内存键），受控 parser 非 eval。单文件。
   - ✅ 实现：新 `lib/calc.ts` —— 安全递归下降求值 `evalExpr`（**非 eval**）：+ - * / ^(右结合) / 一元正负 / 括号 / 阶乘 ! / 函数 sin·cos·tan·asin·acos·atan·ln·log·sqrt·exp·abs / 常量 π·e；显示符号 ×÷−π√ 归一化；优先级 加减→乘除→一元→幂→阶乘→基元（一元在幂之上 → -2^2=-4）；阶乘 n>170→Infinity 防 DoS、负/非整→NaN；解析器每步消费 token 或抛错→无死循环。`Calculator.svelte` 加 标准/科学 分段切换：标准沿用原状态机（零回归，仅抽出 pushHistory），科学是表达式录入（按钮 append 进 expr、`=` 调 evalExpr、sciResetNext 续算/起新、sciErr→「错误」、内存 MC/MR/M+/M-）；5 列科学键盘；onKey 按模式分发；appList 计算器尺寸 260×380→300×470 容纳科学键盘。
   - ✅ 浏览器实测：parser 22 例全过（含 -2^2=-4、2^-3、5!、sqrt/√/sin/cos/ln/log、π/e、(1+2)*3、错误/缺括号/多余符号）；科学 UI 经按钮：√(16)=4、(2+3)×4=20、2^10=1024、5!=120、不完整 sin(→错误、错误后输入恢复、内存 7 M+→C→MR=7；标准 7+8=15、9×9=81、双向切换状态独立。0 console error。supervisor 子 Agent **抓到 1 真 bug**：续算正则 `/^[+\-×÷*/^!]/` 含 ascii `-` 但漏 U+2212「−」（按钮/键盘实际插入的减号）→ `5 = − 3 =` 丢结果得 -3 而非 2；**已修**（正则补 `−`），复测 `5=−3==2`、`+→8`、`×→12`、结果后数字起新=9。其余 5 点（parser 正确安全无死循环无 eval、标准零回归、科学状态机其余正确、display/render/keyed each、键盘 modifier 守卫/Esc 冒泡）全 PASS。npm check+build 0 错 0 警。
-- [ ] **G4 媒体（音视频）查看器**：上传二进制已支持但只能看图。新 `apps/MediaViewer.svelte`（`<audio>`/`<video>` + readBlob objectURL）+ Files 双击按 mime 分流 + appList 登记。
+- [x] **G4 媒体（音视频）查看器**：上传二进制已支持但只能看图。新 `apps/MediaViewer.svelte`（`<audio>`/`<video>` + readBlob objectURL）+ Files 双击按 mime 分流 + appList 登记。
+  - ✅ 实现：vfs 加 `isAudio`/`isVideo`/`isMedia`（mime 前缀或扩展名，扩展名表与 IMG_EXT 互不重叠）。新 `MediaViewer.svelte`（隐藏 app）：读 blob→objectURL→视频用 `<video controls autoplay>`、音频用 `<audio controls autoplay>`+🎵 占位，loading/ok/error 三态 + 信息条（图标/名/大小），`$effect` cleanup `active` 守卫 + revoke 防泄漏/竞态（克隆 ImageViewer 验证过的范式）。appList+registry 登记 mediaviewer(560×420,hidden)。**四处打开入口统一按类型分流**（图片→imageviewer / 音视频→mediaviewer / 其余→textedit）：Files 双击、DesktopIcons 双击、shell `open` 命令、**Spotlight**（supervisor 抓到这处原本漏分流——连图片都进记事本的潜伏 bug，一并修，补 isImage/isMedia import）。Files 上传 accept 加 `audio/*,video/*`。
+  - ✅ 浏览器实测：种合成 audio/mpeg + video/mp4 二进制 → MediaViewer 音频渲染 `<audio>`(blob src,信息条「🎵 …8 B」)、视频渲染 `<video>`(blob src,「🎬 …」)；Files 双击音/视频 → 各开 mediaviewer 且 data=对应 id；Spotlight 搜到媒体文件点击 → 开 mediaviewer(data 匹配,修复后不再进记事本)。0 console error。supervisor 子 Agent **抓到 Spotlight 漏分流**（已修），其余 5 点（objectURL 无泄漏/竞态、isAudio/isVideo/isMedia 与 IMG_EXT 无重叠、三处路由优先级正确、注册隐藏不进 Dock、Svelte5/a11y[video caption ignore+空 track、audio 无需]、build/无环）全 PASS。npm check+build 0 错 0 警。
 - [ ] **G6 截图工具**：`getDisplayMedia`→canvas→存 VFS+下载。中成本、画面无头难验。
 
 ---
 
-> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G2、G3、G5、G7 已完成**（正确性 F 全清）。剩 G4/G6（功能）。下一项：G4（媒体音视频查看器，新 MediaViewer + Files 按 mime 分流）/ G6（截图工具，getDisplayMedia，画面无头难验）。
+> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G2、G3、G4、G5、G7 已完成**（正确性 F 全清）。仅剩 G6（截图工具，getDisplayMedia→canvas→存 VFS+下载，画面无头难验、需真机）。G6 完成后本轮 backlog 清空。

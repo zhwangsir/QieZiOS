@@ -14,6 +14,7 @@ import AppGallery from './AppGallery.svelte';
 import AppStore from './AppStore.svelte';
 import UserApp from './UserApp.svelte';
 import ImageViewer from './ImageViewer.svelte';
+import MediaViewer from './MediaViewer.svelte';
 import Companion from './Companion.svelte';
 import SysMonitor from './SysMonitor.svelte';
 import Clipboard from './Clipboard.svelte';
@@ -48,6 +49,7 @@ const components: Record<string, Component> = {
   settings: Settings,
   textedit: TextEdit,
   imageviewer: ImageViewer,
+  mediaviewer: MediaViewer,
   webview: WebView,
   userapp: UserApp,
 };

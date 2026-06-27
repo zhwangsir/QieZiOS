@@ -148,6 +148,23 @@ export function isImage(node: VNode): boolean {
   return IMG_EXT.includes(ext);
 }
 
+// 是否音频 / 视频（按 MIME 或扩展名）—— 给媒体查看器与 Files 双击分流用
+const AUDIO_EXT = ['mp3', 'wav', 'ogg', 'oga', 'flac', 'aac', 'm4a', 'opus', 'weba'];
+const VIDEO_EXT = ['mp4', 'webm', 'mov', 'mkv', 'm4v', 'ogv', 'avi'];
+export function isAudio(node: VNode): boolean {
+  if (node.mime?.startsWith('audio/')) return true;
+  const ext = node.name.slice(node.name.lastIndexOf('.') + 1).toLowerCase();
+  return AUDIO_EXT.includes(ext);
+}
+export function isVideo(node: VNode): boolean {
+  if (node.mime?.startsWith('video/')) return true;
+  const ext = node.name.slice(node.name.lastIndexOf('.') + 1).toLowerCase();
+  return VIDEO_EXT.includes(ext);
+}
+export function isMedia(node: VNode): boolean {
+  return isAudio(node) || isVideo(node);
+}
+
 // 重命名。返回是否成功：目标名为空、或同目录已有同名条目（排除自己）→ 拒绝（返回 false），
 // 避免「同名并存、按路径只命中第一个、另一个不可达」。改名是显式动作，故拒绝而非像 move 那样自动 +2。
 export function rename(id: string, name: string): boolean {

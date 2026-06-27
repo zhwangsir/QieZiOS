@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { vfs, children, rename, trash, move, isImage, type VNode } from '../kernel/vfs.svelte';
+  import { vfs, children, rename, trash, move, isImage, isMedia, type VNode } from '../kernel/vfs.svelte';
   import { sys } from '../system/sys';
   import { openMenu } from './menu.svelte';
   import { iconPos } from './iconLayout.svelte';
@@ -55,6 +55,7 @@
   function open(n: VNode) {
     if (n.type === 'dir') sys.openApp('files', { title: n.name, data: n.id });
     else if (isImage(n)) sys.openApp('imageviewer', { title: n.name, data: n.id });
+    else if (isMedia(n)) sys.openApp('mediaviewer', { title: n.name, data: n.id });
     else sys.openApp('textedit', { title: n.name, data: n.id });
   }
 

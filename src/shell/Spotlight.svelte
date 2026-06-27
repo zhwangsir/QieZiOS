@@ -3,7 +3,7 @@
   import { appRegistry } from '../apps/registry';
   import { userApps, type UserApp } from '../apps/userApps.svelte';
   import { launchUserApp } from '../apps/desktopApps.svelte';
-  import { vfs, emptyTrash, type VNode } from '../kernel/vfs.svelte';
+  import { vfs, emptyTrash, isImage, isMedia, type VNode } from '../kernel/vfs.svelte';
   import { processes, minimize, close } from '../kernel/processes.svelte';
   import { settings } from '../system/settings.svelte';
   import { sys } from '../system/sys';
@@ -102,7 +102,9 @@
     } else if (r.node.type === 'dir') {
       sys.openApp('files', { title: r.node.name, data: r.node.id });
     } else {
-      sys.openApp('textedit', { title: r.node.name, data: r.node.id });
+      // 按类型分流（与 Files/桌面/shell open 一致）：图片→图片查看器，音视频→媒体查看器，其余→记事本
+      const viewer = isImage(r.node) ? 'imageviewer' : isMedia(r.node) ? 'mediaviewer' : 'textedit';
+      sys.openApp(viewer, { title: r.node.name, data: r.node.id });
     }
     closeSpotlight();
   }

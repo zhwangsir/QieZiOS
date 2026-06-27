@@ -6,6 +6,7 @@
     createFile,
     createBinaryFile,
     isImage,
+    isMedia,
     readBlob,
     rename,
     trash,
@@ -228,7 +229,9 @@ ${JSON.stringify(files)}`;
       sys.notify('权限不够', { body: `${n.name}：当前用户无读权限`, level: 'warn' });
       return;
     }
-    sys.openApp(isImage(n) ? 'imageviewer' : 'textedit', { title: n.name, data: n.id });
+    // 按类型分流：图片→图片查看器，音/视频→媒体查看器，其余→记事本
+    const viewer = isImage(n) ? 'imageviewer' : isMedia(n) ? 'mediaviewer' : 'textedit';
+    sys.openApp(viewer, { title: n.name, data: n.id });
   }
 
   // 改权限/属主（右键菜单用）。modeFile/modeDir 按类型取
@@ -417,7 +420,7 @@ ${JSON.stringify(files)}`;
       class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110 disabled:opacity-50"
       disabled={uploading}
       onclick={() => fileInput?.click()}>{uploading ? '上传中…' : '⬆上传'}</button>
-    <input bind:this={fileInput} type="file" accept="image/*" multiple class="hidden" onchange={onUpload} />
+    <input bind:this={fileInput} type="file" accept="image/*,audio/*,video/*" multiple class="hidden" onchange={onUpload} />
     {#if clip}
       <button
         class="rounded-md bg-qz-accent/80 px-2 py-1 text-xs text-qz-accent-contrast hover:brightness-110 disabled:opacity-50"

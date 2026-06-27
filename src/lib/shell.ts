@@ -16,6 +16,7 @@ import {
   move,
   trash,
   isImage,
+  isMedia,
   setMode,
   setOwner,
   DEFAULT_OWNER,
@@ -575,7 +576,8 @@ const COMMANDS: Record<string, CmdFn> = {
       sys.openApp('files', { data: n.id, ppid });
       return { out: `已在文件管理器打开 ${n.name}`, code: 0 };
     }
-    sys.openApp(isImage(n) ? 'imageviewer' : 'textedit', { title: n.name, data: n.id, ppid });
+    const viewer = isImage(n) ? 'imageviewer' : isMedia(n) ? 'mediaviewer' : 'textedit';
+    sys.openApp(viewer, { title: n.name, data: n.id, ppid });
     return { out: `已打开 ${n.name}`, code: 0 };
   },
 
