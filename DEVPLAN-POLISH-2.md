@@ -30,7 +30,9 @@
 - [x] **E2 图片查看器缩放/旋转/适应窗口**：`ImageViewer.svelte` 只有 object-contain，无缩放旋转。加 scale/rotate $state + 工具栏 + 滚轮缩放 + 拖拽平移（纯 CSS transform 走 GPU）。单文件、DOM 可验、契合丝滑。
   - ✅ 实现：`scale/rot/tx/ty` $state 驱动单条 `transform: translate() scale() rotate()`（GPU 合成）；`zoom`(clamp 0.1–8)/`rotate`(归一化 0–359)/`reset`；工具条（缩小/百分比[点=适应]/放大/逆时针/顺时针/适应+文件名，status==='ok' 才显）；查看区 overflow-hidden 当平移画布——滚轮缩放(preventDefault)、指针拖拽平移(setPointerCapture+dragging 关 transition 跟手)、键盘(+/-/0/r，tabindex)；换图 $effect→reset；保留原 blob→objectURL 加载+revoke 清理。
   - ✅ 浏览器实测（真 dev 服务 + 合成 PNG）：开图工具条全在、初始 `scale(1) rotate(0) translate(0,0)`；放大×2→144%、顺时针×2→rotate(180deg)、滚轮上→110%、拖拽 (100,100)→(140,120)→`translate(40px,20px)`、适应→复位 100%；0 console error。supervisor 子 Agent PASS（objectURL 生命周期不回归+两 effect 写不相交无竞争/transform 顺序+origin+clamp+归一化对/平移 capture 可选链+try-catch 安全/滚轮 preventDefault/键盘不挡 Esc 关窗+Shift 反向/inline style 只 patch 不重建 img/边界 status≠ok 无害/分层无环+a11y ignore 合理 八点全过；中心缩放无 cursor 锚点、无平移夹紧均属可接受设计取舍）。npm check+build 0 错 0 警。
-- [ ] **E3 计算器键盘输入 + 历史**：`Calculator.svelte` 只有 onclick，无键盘。加 `<svelte:window>` keydown（数字/运算符/Enter=`=`/Esc=C/Backspace）+ 计算历史侧栏。单文件、DOM 可验。
+- [x] **E3 计算器键盘输入 + 历史**：`Calculator.svelte` 只有 onclick，无键盘。加键盘（数字/运算符/Enter=`=`/Backspace/c·Delete=清空）+ 计算历史面板。单文件、DOM 可验。
+  - ✅ 实现：根 div `tabindex=0`+`role=presentation`+`onkeydown`（不用 svelte:window 避免多窗串扰）、onMount 聚焦、按钮 `tabindex=-1`+点击后 `rootEl.focus()` 收回焦点→点完仍可键盘；`onKey` 映射 0-9/./+ - * /(→×÷−)/Enter·=/Backspace/%/c·C·Delete，命中 preventDefault、**其它键含 Esc return 不拦**→桌面 Esc 关窗仍可用；复用原 inputDigit/setOp/compute 原语。`backspace()`（resetNext 时 no-op、删末位、剩一位/负号/空→'0'）。`history` $state（封顶 30、'错误' 不入史、compute 写 `prev op cur` 在清空前）+ `showHistory` 切换面板（reverse 最新在前、点 recall 填结果、清空）。原计算逻辑（链式/除零/toFixed10）零改。
+  - ✅ 浏览器实测：键盘 5*3 Enter→15、c 9 8 Backspace→9；12+8 Enter→20，开🕘历史→[「12 + 8 = 20」「5 × 3 = 15」]最新在前、点「20」→填回 20；鼠标 7+2=→9 后键盘 5→5（焦点收回 root 验证）；0 console error。supervisor 子 Agent PASS（键盘全映射+glyph 翻译+Esc 冒泡关窗/焦点模型多窗不串扰/历史顺序+封顶+错误不入史+reverse+recall/compute·setOp 回归不变/backspace 边界/a11y 0 警/按钮 ±%C= 不回归 七点全过）。npm check+build 0 错 0 警。
 - [ ] **E4 文件管理器排序 + 列表/网格视图**：`Files.svelte` items 用原序、只有网格。加 sortBy(name/type/size/mtime)+sortDir + grid/list 切换（list 显大小/属主权限）。可能需给 VNode 加 mtime。中成本、DOM 可验。
 - [ ] **E5 终端外观自定义（字号/配色主题）**：`Terminal.svelte` 颜色字号全硬编码。加终端偏好（持久）：字号 + 几套配色（Nord/Dracula/跟随系统）。中成本，与作者「高自由度」对齐。
 - [ ] **E6 系统音效反馈**：全仓库零 Audio。新 `system/sound.ts` 用 WebAudio 合成开关窗/通知/错误短音 + Settings 开关音量（默认可关）。中成本，提升质感，音频本身 DOM 验不了（验 state+触发）。
@@ -39,4 +41,4 @@
 
 ---
 
-> 当前循环：**D1、D3、E1、D2、E2、D4 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 D5/A3（correctness）+ E3–E8（功能）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 E3 计算器键盘+历史（可视特性，宜交替）/ D5 持久化映射裁剪 / A3 过期 at 补发。
+> 当前循环：**D1、D3、E1、D2、E2、D4、E3 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 D5/A3（correctness）+ E4–E8（功能）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 D5 持久化映射裁剪（correctness，宜交替）/ A3 过期 at 补发 / E4 Files 排序视图。
