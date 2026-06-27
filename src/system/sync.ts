@@ -4,7 +4,7 @@
 // ⚠️ /auth、/sync 由 server/index.mjs 提供：dev 经 vite 代理转发本地 node 服务，生产同源。
 // ───────────────────────────────────────────────────────────
 import { account } from './account.svelte';
-import { ASYNC_KEYS, flushPersisted } from '../kernel/persist.svelte';
+import { ASYNC_KEYS, flushPersisted, freezePersistence, unfreezePersistence } from '../kernel/persist.svelte';
 import { idbEntries, idbSet } from '../kernel/idbStore';
 
 // 不上云：会话/凭据（qz.account）、AI 配置含 key（qz.ai）、旧 token（qz.syncToken）
@@ -49,18 +49,27 @@ export async function pullSync(): Promise<number> {
   if (!res.ok) throw new Error('下载失败（HTTP ' + res.status + '）');
   const body = await res.json();
   const data = (body && body.data) || {};
-  let n = 0;
-  for (const [k, v] of Object.entries(data)) {
-    if (k.startsWith('qz.') && !EXCLUDE.has(k) && typeof v === 'string') {
-      // 按键所属后端写回：IDB 键（如 qz.vfs）写 IndexedDB，其余写 localStorage。
-      if (ASYNC_KEYS.has(k)) await idbSet(k, v);
-      else localStorage.setItem(k, v);
-      n++;
+  // 冻结持久化：写回云数据前先停掉所有 store 的内存→盘写盘（F1）——否则 reload 前的窗口里，
+  // 任何对 store 的响应式写会把「旧内存」序列化盖回刚拉下来的云数据，静默丢失正要恢复的数据。
+  // 成功后调用方 reload（模块重载、frozen 复位）；写回中途失败则解冻、让正常保存恢复。
+  freezePersistence();
+  try {
+    let n = 0;
+    for (const [k, v] of Object.entries(data)) {
+      if (k.startsWith('qz.') && !EXCLUDE.has(k) && typeof v === 'string') {
+        // 按键所属后端写回：IDB 键（如 qz.vfs）写 IndexedDB，其余写 localStorage。
+        if (ASYNC_KEYS.has(k)) await idbSet(k, v);
+        else localStorage.setItem(k, v);
+        n++;
+      }
     }
+    return n;
+  } catch (e) {
+    unfreezePersistence(); // 写回失败、不会 reload → 恢复正常保存，避免本会话永久冻结
+    throw e;
   }
-  return n;
 }
 
 if (import.meta.env.DEV) {
-  (globalThis as unknown as { __qzSync: unknown }).__qzSync = { gatherState, pushSync, pullSync, flushPersisted };
+  (globalThis as unknown as { __qzSync: unknown }).__qzSync = { gatherState, pushSync, pullSync, flushPersisted, freezePersistence, unfreezePersistence };
 }

@@ -32,6 +32,19 @@ export let storage: KVStorage = localBackend;
 // 避免「改完立刻上传 → 改动还在防抖计时器里没落盘 → 上传陈旧状态、悄悄漏数据」（D2）。
 const flushers: Array<() => void | Promise<void>> = [];
 
+// 冻结开关：为真时所有 store 的防抖写盘 effect 都跳过写入。
+// 云同步「拉取」时用：pullSync 把云端数据写进后端(IDB/localStorage)后、reload 前有个窗口，
+// 此时内存里的 $state 还是旧值且 hydrated=true，任何对 store 的响应式写都会把旧内存序列化
+// 盖回刚拉下来的云数据（F1，静默丢失正要恢复的数据）。冻结期间内存→盘的写一律不发生，
+// 盘上的已拉取数据安然等到 reload 重新 hydrate。reload 后模块重载，frozen 自然复位。
+let frozen = false;
+export function freezePersistence(): void {
+  frozen = true;
+}
+export function unfreezePersistence(): void {
+  frozen = false;
+}
+
 // persisted(key, initial, debounceMs) —— 返回一个「会自己存盘」的响应式对象：
 //  · 谁在模板/effect 里读它的字段，字段变就自动更新（这是 $state 的能力）
 //  · 任何字段一变，就（防抖后）自动序列化写回 storage
@@ -71,16 +84,17 @@ export function persisted<T extends object>(
       // 防抖回调里——高频变更（如 TextEdit 逐字输入）每次只做一次轻量 snapshot，停手后才序列化
       // 一次整棵树，而不是每个键程都全量序列化（大文件/多文件时这是主要开销）。
       const snap = $state.snapshot(state) as T;
+      if (frozen) return; // 冻结（同步拉取期间）：不安排写盘，防旧内存覆盖已拉取数据
       // 防抖写盘：序列化也一并推迟，只有最后一次（防抖窗口内）真正写入。
       clearTimeout(timer);
       pending = () => storage.set(key, JSON.stringify(serialize ? serialize(snap) : snap));
-      timer = setTimeout(() => { pending?.(); pending = null; }, debounceMs);
+      timer = setTimeout(() => { if (!frozen) pending?.(); pending = null; }, debounceMs);
     });
   });
 
-  // 立即刷盘：取消防抖、马上写当前挂起值（供 flushPersisted）。
+  // 立即刷盘：取消防抖、马上写当前挂起值（供 flushPersisted）。冻结期间不写。
   flushers.push(() => {
-    if (pending) { clearTimeout(timer); pending(); pending = null; }
+    if (pending && !frozen) { clearTimeout(timer); pending(); pending = null; }
   });
 
   return state;
@@ -150,15 +164,16 @@ export function persistedAsync<T extends object>(
     $effect(() => {
       const snap = $state.snapshot(state) as T; // 留在 effect 体内维持订阅（含键增删）
       if (!hydrated) return; // hydrate 完成前不写，避免默认值覆盖真数据
+      if (frozen) return; // 冻结（拉取期间）：不安排写盘，防旧内存覆盖已拉取数据
       clearTimeout(timer);
       pending = () => idbSet(key, JSON.stringify(serialize ? serialize(snap) : snap));
-      timer = setTimeout(() => { void pending?.(); pending = null; }, debounceMs);
+      timer = setTimeout(() => { if (!frozen) void pending?.(); pending = null; }, debounceMs);
     });
   });
 
-  // 立即刷盘：取消防抖、马上写并返回其 Promise（idbSet 异步，flushPersisted 会 await）。
+  // 立即刷盘：取消防抖、马上写并返回其 Promise（idbSet 异步，flushPersisted 会 await）。冻结期间不写。
   flushers.push(() => {
-    if (!pending) return;
+    if (!pending || frozen) return;
     clearTimeout(timer);
     const p = pending();
     pending = null;
