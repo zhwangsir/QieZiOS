@@ -2,6 +2,7 @@
 // 持久化 · 让一份 $state 自动存进浏览器、刷新还原
 // ───────────────────────────────────────────────────────────
 
+import { tick } from 'svelte';
 import { idbGet, idbSet } from './idbStore';
 
 // storage 抽象接口：现在用 localStorage 实现；
@@ -190,6 +191,10 @@ export async function hydrateAll(): Promise<void> {
 
 // 把所有 store 挂起的防抖写盘立刻落地（同步后端立即返回、IDB 后端返回 Promise）。
 // 云同步上传前调用 → 收集状态时不会漏掉「还在防抖窗口里」的最新改动。
+// 先 await tick()：写盘 effect 是异步排程的，pending 在 effect 体内才被赋值。若「改完状态
+// 同一 tick 内立即上传」，effect 还没跑、pending 仍为 null、flusher 会 no-op 漏掉这次改动（F2）。
+// tick() 把挂起的 effect 都跑完（pending 赋上），再刷 flusher 才不漏。
 export async function flushPersisted(): Promise<void> {
+  await tick();
   await Promise.all(flushers.map((f) => f()));
 }

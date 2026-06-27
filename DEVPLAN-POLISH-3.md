@@ -10,7 +10,9 @@
 - [x] **F1（P0 数据丢失）云同步「拉取」窗口陈旧覆盖**：`pullSync` 把云数据写进 IDB/localStorage 后、reload 前（Settings 等 800ms）有窗口，内存里 $state 还是旧值且 hydrated=true，任何对 store 的响应式写（DesktopIcons GC、schedd 跑命令写文件、用户操作）会经防抖把**旧内存**序列化盖回刚拉的云数据 → 静默丢失正要恢复的数据。
   - ✅ 实现：persist 加 `frozen` 开关 + `freezePersistence()`/`unfreezePersistence()`；同步版 + 异步版的写盘 effect 与防抖回调与 flusher 全加 `frozen` 守卫（冻结时不安排/不执行写盘）。`pullSync` 写回云数据前 `freezePersistence()`，try/catch 写回失败则 `unfreezePersistence()`（不会 reload 故须解冻避免本会话永久冻结）；成功后调用方 reload、模块重载 frozen 自然复位。
   - ✅ 浏览器实测（__qzSync 钩子）：种 CLOUD 进 IDB→freeze→createFile 旧内存→等过防抖 600ms→**IDB 仍是 CLOUD（未被旧内存覆盖）、不含 stale 文件**；unfreeze 后新建文件**正常写盘**（写恢复、无永久冻结）；0 console error。supervisor 子 Agent PASS（待评）。npm check+build 0 错 0 警。
-- [ ] **F2（P1 上传漏最新改动）flushPersisted 漏未排程的写**：`flushPersisted` 只刷 `pending` 已被赋值的 store，而 `pending` 在 `$effect` 里赋值、effect 异步排程。若改完状态**同一 tick 内**立即 `pushSync()`，effect 未跑→pending=null→flusher no-op→gatherState 读旧值。D2 的初衷对「比一次 effect-flush 更新」的改动失效。修：flushPersisted 先 `await tick()` 再刷；或 flusher 内即时重新 snapshot+serialize 当前 state。文件：`kernel/persist.svelte.ts`。
+- [x] **F2（P1 上传漏最新改动）flushPersisted 漏未排程的写**：`flushPersisted` 只刷 `pending` 已被赋值的 store，而 `pending` 在 `$effect` 里赋值、effect 异步排程。若改完状态**同一 tick 内**立即 `pushSync()`，effect 未跑→pending=null→flusher no-op→gatherState 读旧值。D2 的初衷对「比一次 effect-flush 更新」的改动失效。修：flushPersisted 先 `await tick()` 再刷。文件：`kernel/persist.svelte.ts`。
+  - ✅ 实现：`flushPersisted` 开头 `await tick()`（import from 'svelte'）——把挂起的 `$effect.root` 写盘 effect 先跑完、pending 赋上，再 `Promise.all(flushers)`。tick 只多等一个微任务刷新、不改写盘语义；freeze 守卫仍在 effect 体与 flusher 内、tick 不绕过；只被非冻结的 pushSync 用。
+  - ✅ 浏览器实测：reload 后同 tick `createFile('f2-probe.txt')`+`await flushPersisted()`→**IDB qz.vfs 含该文件**（sameTickFlushCaptured=true）、`gatherState()` 也见到（pushSync 全路径）；0 console error。supervisor 子 Agent PASS（tick 刷模块级 effect 令 pending 赋值/与 F1 freeze 协同 tick 不绕过/无组件上下文 tick 安全必 resolve/D2·A2·F1·P1 正常路径零回归/多 store 同 tick 全刷+不双写/分层 import svelte 合规无环 六点全过）。npm check+build 0 错 0 警。
 - [ ] **F4（P2）Calculator/ImageViewer onKey 吞掉带修饰键的组合**：`Calculator.onKey` 无 `ctrlKey/metaKey/altKey` 守卫 → 焦点在计算器时 Cmd/Ctrl+C 触发 clearAll+preventDefault（没法复制结果）、Ctrl/Cmd+0/-/+ 等被吃。修：onKey 开头 `if (e.ctrlKey||e.metaKey||e.altKey) return`。ImageViewer 同理（Cmd+0/-）。文件：`apps/Calculator.svelte`、`apps/ImageViewer.svelte`。
 - [ ] **F5（P2）resetDock 不重置 autohide**：「重置 Dock 布局」只清 order/hidden，不复位 autohide → 开了自动隐藏后重置，Dock 仍隐藏、找回入口（右键菜单）在 Dock 上、不直观。修：`resetDock` 也 `autohide=false`。文件：`system/dockPrefs.svelte.ts`。
 - [ ] **F3（P2 潜伏，低优先）restore 二进制节点 blob 已被独立删除**：当前无「删 blob 不删 node」的触发路径，属健壮性记录，暂不处理。
@@ -27,4 +29,4 @@
 
 ---
 
-> 当前循环：第 3 轮审计建立本 backlog；**F1（P0 云同步拉取陈旧覆盖）已完成**。下一项：F2（上传漏最新改动，与 F1 同属 sync/persist 健壮性）或交替到 G1（时钟计时器，高价值可视）/ G5（字体族，作者第一优先级）。
+> 当前循环：第 3 轮审计建立本 backlog；**F1、F2 已完成**（sync/persist 健壮性：拉取陈旧覆盖 freeze + 上传同 tick 漏写 tick）。剩 F4/F5（P2）+ G1-G7（功能）。下一项按协议交替到功能：G1（时钟计时器/秒表，审计推荐第一、高价值可视）或 G5（字体族，作者第一优先级、低成本）。
