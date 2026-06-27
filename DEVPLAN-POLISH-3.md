@@ -36,10 +36,12 @@
 - [x] **G7 记事本导出/另存下载**：TextEdit 只能存进 VFS、无法导出到本机。工具栏加「⬇ 导出」（Blob+`<a download>`，.md 可选导出 HTML 复用 renderMarkdown）。单文件。打通「VFS→本机」出口。
   - ✅ 实现：常驻顶部工具条（把原 Markdown 编辑/预览切换并入，非 md 显文件名）右侧加「⬇ 导出」(始终) + 「HTML」(仅 md)。`exportFile(asHtml)`：原始导出 = Blob(node.content，.md→text/markdown 其余→text/plain)、文件名=节点名；HTML 导出 = `renderMarkdown` 渲染包进 `<!doctype html>` 完整文档（内联 `<style>` 映射 renderMarkdown 用的 Tailwind 类 .font-semibold/.pl-3/.underline + pre/code 标签样式 → 脱离 app 独立打开也排版正常）、文件名=去 md 后缀+`.html`、`<title>` 经 `esc()` 转义。`downloadBlob` 标准 `<a download>` 点击 + 1000ms 后 revoke 防泄漏。导出不门控 writable（只读文件也能导出）。
   - ✅ 浏览器实测（patch `URL.createObjectURL`+anchor.click 捕获、不真下载）：md 文件导出 → 原始 blob 名 `g7-export-test.md`、mime text/markdown、内容**逐字相等**；HTML blob 名 `.html`、mime text/html、`<!doctype html>` 开头、`<title>` 转义、正文含渲染的 `<strong>bold</strong>`、`&` 转义成 `&amp;`、链接带 target/rel。0 console error。supervisor 子 Agent PASS（工具条重构 md 切换零回归+非 md 显名+导出两态都在、XSS 安全[renderMarkdown 先转义+title esc+download 属性赋值非解析]、download 无泄漏/双free、空文件/无扩展名/二进制/只读边界、内联 style 类映射正确、a11y/无环、check+build 0/0 六点全过）。npm check+build 0 错 0 警。
-- [ ] **G3 计算器科学模式**：加 标准/科学 切换（√/x²/1/x/π/括号/sin·cos·log/内存键），受控 parser 非 eval。单文件。
+- [x] **G3 计算器科学模式**：加 标准/科学 切换（√/x²/1/x/π/括号/sin·cos·log/内存键），受控 parser 非 eval。单文件。
+  - ✅ 实现：新 `lib/calc.ts` —— 安全递归下降求值 `evalExpr`（**非 eval**）：+ - * / ^(右结合) / 一元正负 / 括号 / 阶乘 ! / 函数 sin·cos·tan·asin·acos·atan·ln·log·sqrt·exp·abs / 常量 π·e；显示符号 ×÷−π√ 归一化；优先级 加减→乘除→一元→幂→阶乘→基元（一元在幂之上 → -2^2=-4）；阶乘 n>170→Infinity 防 DoS、负/非整→NaN；解析器每步消费 token 或抛错→无死循环。`Calculator.svelte` 加 标准/科学 分段切换：标准沿用原状态机（零回归，仅抽出 pushHistory），科学是表达式录入（按钮 append 进 expr、`=` 调 evalExpr、sciResetNext 续算/起新、sciErr→「错误」、内存 MC/MR/M+/M-）；5 列科学键盘；onKey 按模式分发；appList 计算器尺寸 260×380→300×470 容纳科学键盘。
+  - ✅ 浏览器实测：parser 22 例全过（含 -2^2=-4、2^-3、5!、sqrt/√/sin/cos/ln/log、π/e、(1+2)*3、错误/缺括号/多余符号）；科学 UI 经按钮：√(16)=4、(2+3)×4=20、2^10=1024、5!=120、不完整 sin(→错误、错误后输入恢复、内存 7 M+→C→MR=7；标准 7+8=15、9×9=81、双向切换状态独立。0 console error。supervisor 子 Agent **抓到 1 真 bug**：续算正则 `/^[+\-×÷*/^!]/` 含 ascii `-` 但漏 U+2212「−」（按钮/键盘实际插入的减号）→ `5 = − 3 =` 丢结果得 -3 而非 2；**已修**（正则补 `−`），复测 `5=−3==2`、`+→8`、`×→12`、结果后数字起新=9。其余 5 点（parser 正确安全无死循环无 eval、标准零回归、科学状态机其余正确、display/render/keyed each、键盘 modifier 守卫/Esc 冒泡）全 PASS。npm check+build 0 错 0 警。
 - [ ] **G4 媒体（音视频）查看器**：上传二进制已支持但只能看图。新 `apps/MediaViewer.svelte`（`<audio>`/`<video>` + readBlob objectURL）+ Files 双击按 mime 分流 + appList 登记。
 - [ ] **G6 截图工具**：`getDisplayMedia`→canvas→存 VFS+下载。中成本、画面无头难验。
 
 ---
 
-> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G2、G5、G7 已完成**（正确性 F 全清）。剩 G3/G4/G6（功能）。下一项：G3（计算器科学模式，单文件，受控 parser）/ G4（媒体音视频查看器）/ G6（截图工具，画面无头难验）。
+> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G2、G3、G5、G7 已完成**（正确性 F 全清）。剩 G4/G6（功能）。下一项：G4（媒体音视频查看器，新 MediaViewer + Files 按 mime 分流）/ G6（截图工具，getDisplayMedia，画面无头难验）。
