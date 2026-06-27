@@ -1,4 +1,5 @@
 import { persisted } from '../kernel/persist.svelte';
+import { forgetDockApp } from '../system/dockPrefs.svelte';
 
 // 用户在「开发者」里写好、保存下来的命名 App（持久化 → 装上后反复可用）。
 export interface UserApp {
@@ -55,4 +56,5 @@ export function saveUserApp(input: {
 export function removeUserApp(id: string): void {
   const i = userApps.list.findIndex((a) => a.id === id);
   if (i !== -1) userApps.list.splice(i, 1);
+  forgetDockApp(id); // 顺手清掉 Dock 偏好里这个 App 的死引用（order/hidden）
 }

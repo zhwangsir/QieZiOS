@@ -1,11 +1,28 @@
 <script lang="ts">
-  import { children, rename, trash, move, isImage, type VNode } from '../kernel/vfs.svelte';
+  import { untrack } from 'svelte';
+  import { vfs, children, rename, trash, move, isImage, type VNode } from '../kernel/vfs.svelte';
   import { sys } from '../system/sys';
   import { openMenu } from './menu.svelte';
   import { iconPos } from './iconLayout.svelte';
 
   // 桌面上显示 VFS 根目录的项
   const items = $derived(children('root'));
+
+  // GC：节点被彻底删除后清掉它残留的图标位置，否则 qz.desktopIcons 只增不减（还随账号同步上云）。
+  // 放组件里（而非 iconLayout 模块）→ 本组件在 main.ts `await hydrateAll()` 之后才挂载，vfs 已水合，
+  // 不会在 IDB 异步水合前把「节点还没读回来」的有效图标误判为孤儿删掉。untrack 读 iconPos.pos →
+  // 本 effect 只在节点增删时跑、不被自己的写回重新触发。
+  $effect(() => {
+    const valid = new Set(Object.keys(vfs.nodes)); // 订阅节点键增删
+    untrack(() => {
+      const stale = Object.keys(iconPos.pos).filter((id) => !valid.has(id));
+      if (stale.length) {
+        const next = { ...iconPos.pos };
+        for (const id of stale) delete next[id];
+        iconPos.pos = next;
+      }
+    });
+  });
 
   let renamingId = $state<string | null>(null);
   let renameText = $state('');

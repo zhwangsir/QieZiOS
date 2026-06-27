@@ -65,3 +65,9 @@ export function resetDock(): void {
   dockPrefs.order = [];
   dockPrefs.hidden = [];
 }
+
+// 卸载用户 App 时把它从 Dock 偏好里抹掉，否则 order/hidden 里留下死 appId（只增不减、还随账号同步上云）。
+export function forgetDockApp(id: string): void {
+  if (dockPrefs.order.includes(id)) dockPrefs.order = dockPrefs.order.filter((x) => x !== id);
+  if (dockPrefs.hidden.includes(id)) dockPrefs.hidden = dockPrefs.hidden.filter((x) => x !== id);
+}

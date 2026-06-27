@@ -19,7 +19,9 @@
 - [x] **D4 VFS 父链遍历遇环死循环（无 visited/深度上限）**：`isInside`/`pathSegments`/`resolvePath` 的 `..` 走 `while(cur)` 跟 parentId，若持久化树/外部 sync blob 含父环（A↦B↦A）→ 无限循环挂死标签页、无恢复。修：三处遍历加深度上限或 visited 集。P2，需损坏态触发但 sync 使其可达，逻辑可验。
   - ✅ 实现：`isInside`（while 跟 parentId）+ `pathSegments`（while 跟 parentId）各加 `visited Set`（遇重复节点 break/停，正常无环时行为字节级等价、仅环时兜底）；顺带 `purge` 也加 `seen`（children 递归删，A↔B 环会无限递归栈溢出崩溃 → 可选参数默认 new Set、顶层每调用一份、递归传同一份，第二次遇 A 被挡）。`resolvePath` 的 `..` 实查为**本就有界**（for over `p.split('/')` 有限、每个 `..` 只上跳一步、不 while-follow）→ 无环风险、未改。
   - ✅ 浏览器实测（注入父环 A↔B）：`pathOf(A)` 返回 `/cycA` **0.00ms 终止不挂**；`purge(A)` 'ok' **0.10ms 不栈溢出**、A/B 都删；正常树 `pathOf(/d4dir/sub)`=`/d4dir/sub`、leaf 全路径正确、`purge(d4dir)` 递归删整子树（dir/sub/leaf 全 gone）；0 console error。supervisor 子 Agent PASS（isInside 正常字节等价+return 判断仍最先+环 break 返 false 保守不挂/pathSegments 无环顺序不变+环停部分/purge 可选参数不破坏 emptyTrash·Trash·DEV 三调用方+后序删除语义不变+正常树每节点访问一次不漏删/blob 清理不漏不重/resolvePath 有界不需守/move·copyNode 真环拦截仍有效/分层无环 visited 开销可忽略 七点全过）。npm check+build 0 错 0 警。
-- [ ] **D5 `iconPos`/`dockPrefs` 持久化映射只增不删（陈旧+泄漏）**：`purge` 删 VFS 节点不删 `qz.desktopIcons` 里它的 {x,y}；`removeUserApp` 不删 `dockPrefs.order/hidden` 里该 App id。长期堆积孤儿项（且随账号同步上云）。修：purge 内裁 iconPos、removeUserApp 内裁 dockPrefs。P2，浏览器可验。
+- [x] **D5 `iconPos`/`dockPrefs` 持久化映射只增不删（陈旧+泄漏）**：`purge` 删 VFS 节点不删 `qz.desktopIcons` 里它的 {x,y}；`removeUserApp` 不删 `dockPrefs.order/hidden` 里该 App id。长期堆积孤儿项（且随账号同步上云）。修：iconPos GC + removeUserApp 裁 dockPrefs。P2，浏览器可验。
+  - ✅ 实现：(a) `dockPrefs.forgetDockApp(id)`（order/hidden 各 filter 掉 id，含 includes 守卫避免无谓写）+ `removeUserApp` 末尾调它（卸载用户 App 清 Dock 死引用）。(b) iconPos GC 放 **DesktopIcons 组件**（关键：iconPos 同步 localStorage 启动即有真值、vfs 是 persistedAsync 异步水合 → GC 必须等 vfs 水合后跑，否则把「IDB 还没读回」的有效图标误删；组件在 main.ts `await hydrateAll()` 之后才挂载 → 天然 post-hydrate）：`$effect` 读 `Object.keys(vfs.nodes)` 订阅节点增删、`untrack` 包住读写 iconPos.pos（不自触发、只在节点增删时跑）、删 `!valid.has(id)` 的孤儿 pos（节点真不存在才删，移进文件夹/回收站的节点 id 仍在 vfs.nodes 故保留）。
+  - ✅ 浏览器实测：localStorage 种入 `{realId:{x,y}, 'd5-orphan-xyz':{x,y}}` → reload（post-hydrate GC）→ **orphan 被删、realId 保留**；0 console error（userApps→dockPrefs 新 import 无 TDZ/环）。dockPrefs.forgetDockApp 为纯 filter+守卫、逻辑平凡，按逻辑+supervisor 确认（removeUserApp 不在测试钩子上）。supervisor 子 Agent PASS（GC 时机推理成立+放模块级会 pre-hydrate 误删/untrack 无限循环规避+写回仍通知 persist 与模板/只删真不存在的不误删移动项/forgetDockApp 守卫/removeUserApp 接入不回归/apps→system·shell→kernel 无环/同步上传瘦身干净 八点全过）。npm check+build 0 错 0 警。
 - [ ] **A3（承接第 1 轮唯一未做项）过期一次性 `at` 命令开机补发执行**：schedd 重新武装时过期任务 `delay=0` 立即 fire，命令型经 shell 跑（可能 rm/mkdir 等副作用），与真 `at`（过期不补）相反。修：重新武装时过期的**命令型**一次性任务只移除不执行；提醒型可保留补发通知或也丢弃。文件：`system/services.ts`。P1，浏览器可验。
 
 ## 二、P1 · 功能 / 体验完善（价值/成本比排序）
@@ -41,4 +43,4 @@
 
 ---
 
-> 当前循环：**D1、D3、E1、D2、E2、D4、E3 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 D5/A3（correctness）+ E4–E8（功能）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 D5 持久化映射裁剪（correctness，宜交替）/ A3 过期 at 补发 / E4 Files 排序视图。
+> 当前循环：**D1、D3、E1、D2、E2、D4、E3、D5 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 A3（correctness，第 1 轮承接的最后一项）+ E4–E8（功能）。下一项按协议：候选 E4 Files 排序+列表视图（可视特性，宜交替）/ A3 过期 at 补发（correctness）/ E5 终端配色。
