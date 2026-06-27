@@ -53,8 +53,10 @@
   - ✅ 实现：`dockPrefs` 加 `autohide` 字段（持久 `qz.dock`、不进 settings 主题白名单、随账号同步，与 B9 一致）；Dock 右键菜单加「自动隐藏 Dock」开关（✓ 表状态）；`autohide=$derived(dockPrefs.autohide && !viewport.isMobile)`（移动端不启用——Dock 是移动端主导航/横滚）、`hidden=$derived(autohide && !revealed && !dragId)`（拖拽重排时不收起）；Dock 条 inline `transform: translateX(-50%) translateY(hidden?calc(100%+1.5rem):0)`（**inline 含 -50% 保居中**，替原 `-translate-x-1/2` 类）+ transition；`{#if autohide}` 渲染底边 8px 热区（pointerenter→revealed）+ Dock onpointerenter/leave 切 revealed。
   - ✅ 浏览器实测：菜单有「自动隐藏 Dock」开关、点击翻转并持久化 `qz.dock.autohide=true`；headless(innerWidth=0→isMobile=true) 下守卫正确保持 Dock 可见（mobile 不隐藏）；0 console error。supervisor 子 Agent PASS（hidden 真值表/热区→Dock 衔接无闪烁震荡/**transform 合并保居中**+图标 scale 独立/isMobile 守卫/拖拽 `!dragId` 不中途滑走/持久化默认 false 旧数据不崩/热区仅 autohide 时渲染+pointerenter-only 不吞点击/autohide 关字节级零回归/响应式分层 八点全过）。
   - ⏳ 桌面端滑出/唤出的视觉因无头预览 0 宽=mobile（autohide 被守卫关）无法验 → **待真机验证**（逻辑已 supervisor 核过、无振荡不动点）。npm check+build 0 错 0 警。
-- [ ] **E8b 桌面便签小组件**（从 E8 拆出）：桌面可放持久化便签 widget（可拖、可编辑）。中成本、DOM 可验。
+- [x] **E8b 桌面便签小组件**（从 E8 拆出）：桌面可放持久化便签 widget（可拖、可编辑）。中成本、DOM 可验。
+  - ✅ 实现：新 `shell/notes.svelte.ts`（`StickyNote{id,text,x,y,color}` + `stickyNotes` persisted `qz.notes` + `NOTE_COLORS` 6 色 + `addNote`(错开堆叠位+轮换色)/`removeNote`/`cycleColor`）+ `shell/StickyNotes.svelte`（便签层 pointer-events-none 穿透、单张 auto；顶栏手柄 cursor-move 拖动 setPointerCapture、move 改 n.x/n.y 夹视口内、🎨 换色 / ✕ 删除；textarea bind n.text）。Desktop 在 DesktopIcons 后、窗口层前渲染 + 右键菜单加「新建便签」。
+  - ✅ 浏览器实测：新建→渲染；输入「买菜 🍆」绑定+持久化(qz.notes)；拖手柄 (200,200)→(260,240)→x+60 y+40；🎨 换色 #fde68a→#fca5a5；**reload 后便签存活(text/x/y/color 全保留)**；✕ 删除→list 0+DOM 消失；0 console error。supervisor 子 Agent PASS（addNote/removeNote/cycleColor 正确+安全/仅手柄拖 textarea 不触发/层级 便签在图标上窗口下+穿透不挡桌面菜单/qz.notes 独立随账号同步不进主题白名单/keyed by id/纯新增分层无环/空 list 与删编辑中便签安全/a11y 八点全过）；并采纳建议给拖动加视口右/下边界夹紧（防拖出屏幕丢失）。npm check+build 0 错 0 警。
 
 ---
 
-> 当前循环：**D1–D5 + A3 正确性全清 + E1–E6 + E8(Dock 自动隐藏) 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E7 Exposé / E8b 桌面便签**。下一项：E8b 便签（DOM 可验）/ E7 Exposé（macOS 招牌、中/高成本）。
+> 当前循环：**D1–D5 + A3 正确性全清 + E1–E6 + E8 + E8b 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E7 Exposé（最后一项功能）**。下一项：E7 任务视图 Exposé（macOS 招牌、中/高成本、纯 CSS transform 缩略平铺）。之后回性能阶段 P5/P6。

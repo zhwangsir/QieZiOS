@@ -27,6 +27,8 @@
   import { pet } from '../system/pet.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import DesktopIcons from './DesktopIcons.svelte';
+  import StickyNotes from './StickyNotes.svelte';
+  import { addNote } from './notes.svelte';
   import { snapState } from './snapState.svelte';
 
   // 当前活动窗 id（派生）：传给每个 Window 决定是否高亮
@@ -72,6 +74,7 @@
     openMenu(e, [
       { label: '新建文件夹', icon: '📁', onClick: () => createDir('root') },
       { label: '新建文本文件', icon: '📄', onClick: () => createFile('root') },
+      { label: '新建便签', icon: '📝', onClick: () => addNote() },
       { label: '打开设置', icon: '⚙️', separator: true, onClick: () => sys.openApp('settings') },
       {
         label: pet.enabled ? '隐藏桌宠' : '显示桌宠',
@@ -163,6 +166,9 @@
 
   <!-- 桌面图标（VFS 根目录的项；在窗口层之下） -->
   <DesktopIcons />
+
+  <!-- 桌面便签小组件（在窗口层之下、随桌面） -->
+  <StickyNotes />
 
   <TopBar />
 
