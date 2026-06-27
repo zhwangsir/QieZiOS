@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { settings, accentPresets, SETTINGS_KEYS, type Settings } from '../system/settings.svelte';
+  import { settings, accentPresets, SETTINGS_KEYS, FONT_FAMILIES, type Settings } from '../system/settings.svelte';
   import { wallpapers } from '../system/wallpaper';
   import { putBlob, deleteBlob } from '../kernel/blobStore';
   import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
@@ -348,6 +348,21 @@
       bind:value={settings.fontScale}
       class="w-full accent-qz-accent"
     />
+  </section>
+
+  <!-- 界面字体（G5）：换全局字体族；终端等 font-mono 元素不受影响 -->
+  <section class="flex flex-col gap-1.5">
+    <div class="flex items-center justify-between text-xs text-qz-muted">
+      <span>界面字体</span>
+      <select
+        class="rounded bg-qz-surface px-2 py-1 text-xs text-qz-text outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+        bind:value={settings.fontFamily}
+      >
+        {#each FONT_FAMILIES as f (f.id)}
+          <option value={f.id}>{f.name}</option>
+        {/each}
+      </select>
+    </div>
   </section>
 
   <!-- 壁纸 -->

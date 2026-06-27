@@ -24,7 +24,9 @@
   - ✅ 浏览器实测：4 tab；秒表 开始→~1.6s 后 00:02.00、计圈记录、暂停冻结 00:03.01；计时器 0:30→1.6s 后 00:27 递减、0:01 到点→noteHistory 出现「⏲ 计时结束」+回 idle；世界时钟 7 区时间各不同(distinct=7)；0 console error。supervisor 子 Agent PASS（计时器 tick 回调收口非自引用 effect 只触发一次/秒表落定累计+派生/tick 生命周期不空转/状态机 idle·暂停·续/世界时钟 Intl+try-catch/响应式性能/原表盘零回归分层无环/边界 八点全过）。npm check+build 0 错 0 警。
   - 📌 后续观察（supervisor，非阻塞）：计时器用绝对 perf 目标 + tick 最小化暂停 → 若 deadline 在窗口最小化期间越过，通知/音效延到还原后第一个 tick 才补发（剩余值正确、通知仍到只是延迟）。要「最小化也准点响铃」需改走 sys.schedule(schedd 后台、不受窗口可见性约束)。当前与全系统 windowVisible 暂停一致、可接受。
 - [ ] **G2 文件管理器详情/信息面板**：选中项看不到完整路径/精确字节/创建·修改时间/mime/属主权限明细（VNode 数据已齐，只差展示）。右侧可折叠详情侧栏或右键「显示简介」+ 图片缩略。文件：`apps/Files.svelte`。
-- [ ] **G5 字体族自定义（主题新维度）**：`Settings` 无 fontFamily、`theme` 无 `--qz-font`。加 fontFamily 字段（系统/无衬线/衬线/等宽/圆体）+ token + Settings select。⭐ 对齐作者第一优先级（美观/自由度），机制已就绪成本低。文件：`settings.svelte.ts`/`theme.svelte.ts`/`app.css`/`Settings.svelte`。
+- [x] **G5 字体族自定义（主题新维度）**：`Settings` 无 fontFamily、`theme` 无 `--qz-font`。加 fontFamily 字段（系统/无衬线/衬线/等宽/圆体）+ token + Settings select。⭐ 对齐作者第一优先级（美观/自由度），机制已就绪成本低。
+  - ✅ 实现：`settings` 加 `fontFamily`（默认 'system'，自动进 SETTINGS_KEYS 随主题导出/同步）+ `FONT_FAMILIES`（5 个，栈锚定通用族 sans/serif/monospace + 中文回退 PingFang/雅黑/宋体）+ `fontStack(id)`（回退[0]）；`theme.activeTokens()` 加 `--qz-font`；`app.css` body `font-family: var(--qz-font, 原栈兜底)`；Settings 界面缩放下加字体 select。换字体走 token 0 组件重渲染。
+  - ✅ 浏览器实测：默认 --qz-font 含 system-ui、body 解析自 token；select 选 serif→Georgia/serif、mono→monospace；持久化 qz.settings.fontFamily='mono'；5 项渲染；0 console error。supervisor 子 Agent PASS（select→token→body 链/font-mono 终端等显式字体不受影响/token 机制一致 0 重渲染+var 兜底/白名单随预设·同步+旧数据合并默认/字体栈通用族结尾有可见差异/radius·blur 等零回归/分层无环/未知值回退+fontScale 正交 八点全过）。npm check+build 0 错 0 警。
 - [ ] **G7 记事本导出/另存下载**：TextEdit 只能存进 VFS、无法导出到本机。工具栏加「⬇ 导出」（Blob+`<a download>`，.md 可选导出 HTML 复用 renderMarkdown）。单文件。打通「VFS→本机」出口。
 - [ ] **G3 计算器科学模式**：加 标准/科学 切换（√/x²/1/x/π/括号/sin·cos·log/内存键），受控 parser 非 eval。单文件。
 - [ ] **G4 媒体（音视频）查看器**：上传二进制已支持但只能看图。新 `apps/MediaViewer.svelte`（`<audio>`/`<video>` + readBlob objectURL）+ Files 双击按 mime 分流 + appList 登记。
@@ -32,4 +34,4 @@
 
 ---
 
-> 当前循环：第 3 轮审计；**F1、F2、G1 已完成**。剩 F4/F5（P2 polish）+ G2/G3/G4/G5/G6/G7（功能）。下一项：G5（字体族，作者第一优先级、低成本）或 F4/F5（P2 收尾）或 G2（Files 详情面板）。
+> 当前循环：第 3 轮审计；**F1、F2、G1、G5 已完成**。剩 F4/F5（P2 polish）+ G2/G3/G4/G6/G7（功能）。下一项：F4/F5（P2 小修收尾，可一并）或 G2（Files 详情面板）/ G7（记事本导出）/ G3（科学计算器）。

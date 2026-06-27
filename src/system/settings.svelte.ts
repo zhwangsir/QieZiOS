@@ -19,6 +19,7 @@ export interface Settings {
   blur: number;             // 磨砂模糊（px）
   surfaceOpacity: number;   // 面板半透明度（0~1）
   fontScale: number;        // 界面缩放（根字号倍率，0.85~1.2）
+  fontFamily: string;       // 界面字体族 id（见 FONT_FAMILIES）
   wallpaperId: string;      // 当前内置壁纸 id（customWallpaper 为 null 时生效）
   customWallpaper: CustomWallpaper; // 自定义壁纸（图片/纯色），优先于内置预设
   customCss: string;        // 全局自定义 CSS（深度换肤，注入 <style>）
@@ -31,10 +32,24 @@ const defaults: Settings = {
   blur: 18,
   surfaceOpacity: 0.66,
   fontScale: 1,
+  fontFamily: 'system',
   wallpaperId: 'aurora',
   customWallpaper: null,
   customCss: '',
 };
+
+// 界面字体族选项（id → 字体栈）。栈都锚定到通用族（sans/serif/monospace）→ 即便没装具体
+// 字体也能看出区别。等宽用 font-mono 工具类的元素（终端等）不受全局字体影响。
+export const FONT_FAMILIES: { id: string; name: string; stack: string }[] = [
+  { id: 'system', name: '系统默认', stack: 'system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif' },
+  { id: 'sans', name: '无衬线', stack: '"Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif' },
+  { id: 'serif', name: '衬线', stack: 'Georgia, "Times New Roman", "Songti SC", "SimSun", serif' },
+  { id: 'mono', name: '等宽', stack: 'ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace' },
+  { id: 'rounded', name: '圆体', stack: 'ui-rounded, "Hiragino Maru Gothic ProN", "Quicksand", "PingFang SC", sans-serif' },
+];
+export function fontStack(id: string): string {
+  return (FONT_FAMILIES.find((f) => f.id === id) ?? FONT_FAMILIES[0]).stack;
+}
 
 // 可被「应用主题预设 / 导入」覆盖的字段（白名单，避免塞进奇怪的键）
 export const SETTINGS_KEYS = Object.keys(defaults) as (keyof Settings)[];

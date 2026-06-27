@@ -1,4 +1,4 @@
-import { settings } from './settings.svelte';
+import { settings, fontStack } from './settings.svelte';
 import { wallpapers } from './wallpaper';
 import { customWallpaperUrl } from './wallpaperBlob.svelte';
 
@@ -40,6 +40,7 @@ export function activeTokens(): Tokens {
     '--radius-qz': `${settings.radius}px`,
     '--qz-blur': `${settings.blur}px`,
     '--qz-surface-opacity': String(settings.surfaceOpacity),
+    '--qz-font': fontStack(settings.fontFamily),
     '--qz-wallpaper': wallpaperCss(),
   };
 }
