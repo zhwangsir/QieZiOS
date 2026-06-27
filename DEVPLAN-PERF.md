@@ -10,7 +10,9 @@
 - [x] **P1 VFS 迁 IndexedDB**（本轮）：新 `kernel/idbStore.ts`（async 字符串 KV，镜像 blobStore）+ persist 加 `persistedAsync`（异步 hydrate + `hydrated` 守卫防默认值覆盖真数据 + 启动门 `hydrateAll()` + localStorage→IDB 一次性迁移并清旧键释放配额）；`vfs` 改用 `persistedAsync`；`main.ts` 挂载前 `await hydrateAll()`（避免默认值闪烁）；**sync.ts 与 SysMonitor 改后端感知**（IDB 里的 qz.vfs 仍纳入云同步与存储用量统计）。
   - ✅ 实现：`kernel/idbStore.ts`（库 `qz-kv`/store `kv`，idbGet/Set/Remove/Keys/Entries，全 try/catch best-effort 降级）；`persistedAsync<T>` = 先以 initial 启动 + 登记 hydrator + `$state.snapshot` 后 `if(!hydrated) return` 守卫（hydrate 前绝不写盘）+ `replaceInPlace`（就地替换 $state 内容保持代理引用 → 既有订阅继续有效）+ 一次性迁移（IDB 空但 localStorage 有→搬进 IDB+删旧键释放配额）；导出 `ASYNC_KEYS`/`hydrateAll`；旧同步 `persisted`（19 处）原样不动。`vfs` 改 `persistedAsync('qz.vfs',…)`；`main.ts` 顶层 `await hydrateAll()` 后才 mount；`sync.gatherState` 改 async 合并 localStorage+IDB 两后端、`pullSync` 按 ASYNC_KEYS 路由；SysMonitor 存储统计加 IDB 字节（节流 5s）标签「存储(LS+IDB)」。
   - ✅ 浏览器实测（真 dev 服务）：启动正常无 console error；新建文件→debounce 后 IDB qz.vfs 含该文件、**localStorage 不再有 qz.vfs**、reload 从 IDB 恢复；一次性迁移（种 localStorage qz.vfs+清 IDB→reload→节点可见+localStorage 旧键被删+IDB 有了）；**破天花板：写 6MB 文件→IDB qz.vfs ~6.3MB、localStorage 仅 2.7KB、reload 后 6MB 完整**（旧 localStorage 必抛 QuotaExceeded）；sync.gatherState 含 qz.vfs（来自 IDB）+ 全部 localStorage qz.* 键。supervisor 子 Agent PASS（异步 hydrate/写盘守卫无 clobber 窗口/replaceInPlace 保引用响应式/迁移幂等/IDB 事务同任务/sync 双后端无重无漏/分层无环/TLA 构建通过不会 reject 卡死/19 处同步 persisted 零回归/两 IDB 库独立 九点全过；仅 DEV 钩子 nodes 陈旧引用已改 getter 修掉）。npm check+build 0 错 0 警。
-- [ ] **P2 其余大 store 评估/迁移**：chat（即便剥图，文本也会涨）等迁 IDB；settings/dock/windows 等小而需首屏同步的可留 localStorage。按收益定。
+- [x] **P2 chat 迁 IDB + 不再剥附图**：chat 从 `persisted`(localStorage+剥图) 改 `persistedAsync`(IDB，去掉 serialize)。P1 把存储迁 IDB（GB 级）后 A1「localStorage 配额满→静默丢整段对话」的根因消失 → 附图（已缩放 ~4KB/张）随对话持久化、刷新原样还原（A1 当年被迫剥成占位的能力补回来了）。imageCount 字段保留兼容旧数据。settings/dock/windows 等小 store 留 localStorage（首屏同步、无配额压力）。
+  - ✅ 浏览器实测：推带图消息→IDB qz.chat 含图字节+文本、localStorage 无 qz.chat；**reload 后 images 还原（imagesSurvived=1、字节完整）**（A1 旧行为此处会是占位）；旧 localStorage chat（imageCount=3 无 images）迁移→可见+占位+旧键删+IDB 有；清空→msgs=0；0 console error。supervisor 子 Agent PASS（hydrateAll await chat/渲染分支新旧都对/A1 失效模式消除/迁移幂等/A2 推迟序列化在 async 版成立流式不每 token stringify/sync·统计自动一致/分层无环/D1 守卫等零回归 八点全过）。npm check+build 0 错 0 警。
+  - 📌 后续观察项（非阻塞，supervisor 建议）：图随对话存 IDB 容量无压力（百张才 ~0.5MB vs ~37GB 配额），边际成本是序列化/解析性能；若日后超长多图对话卡顿，可选 (a) `addFiles`/`send` 加单条软上限（≤6 张/条，兼顾视觉模型 token 预算）(b) 附图改存 blobStore 按 blobId 引用（与 VFS 二进制同构）。现做属过度设计。
 - [ ] **P3（远期）OPFS + SQLite-WASM**：真·大容量 + SQL 查询/索引/事务。重型，延后到需要复杂查询时。
 
 ## 二、渲染 / 丝滑
@@ -31,4 +33,4 @@
 
 ---
 
-> 当前循环：**P1、P7、P4 已完成**（VFS 迁 IndexedDB + 存储仪表盘 + 长列表 content-visibility）。下一项候选：P5（vfs.children() 信号热点，需专注、高 blast radius）/ P2（chat 迁 IDB）/ P6（不可见窗 content-visibility）。
+> 当前循环：**P1、P7、P4、P2 已完成**（VFS 迁 IDB + 存储仪表盘 + 长列表 content-visibility + chat 迁 IDB 且附图持久化）。下一项候选：P5（vfs.children() 信号热点，需专注、高 blast radius）/ P6（不可见窗 content-visibility）/ P3（OPFS+SQLite-WASM，远期）。
