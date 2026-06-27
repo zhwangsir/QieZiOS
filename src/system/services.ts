@@ -3,6 +3,7 @@ import { on, emit } from '../kernel/bus.svelte';
 import { pushNote, type NoteLevel } from './notifications.svelte';
 import { pushClip } from './clipboard.svelte';
 import { schedules, removeSchedule, runScheduled, type Schedule } from './schedules.svelte';
+import { playSound } from './sound';
 
 // ───────────────────────────────────────────────────────────
 // 系统自带服务的注册处（import 本模块即登记；App 在开机时 startServices()）。
@@ -36,6 +37,26 @@ registerService({
   name: '剪贴板',
   start() {
     return on('clip.copy', (p) => pushClip((p as { text?: string })?.text ?? ''));
+  },
+});
+
+// 音效：常驻服务，订阅总线事件 → 合成短音（playSound 内部按 soundPrefs.enabled 门控，默认静音）。
+// 完全事件驱动、不碰内核/各 App —— 关掉时 playSound 立即 return、零开销。
+registerService({
+  id: 'soundd',
+  name: '音效',
+  start() {
+    const offs = [
+      on('proc.launch', () => playSound('open')),
+      on('proc.exit', () => playSound('close')),
+      on('fs.trash', () => playSound('trash')),
+      on('app.denied', () => playSound('error')),
+      on('notify', (p) => {
+        const lvl = (p as { level?: NoteLevel })?.level;
+        playSound(lvl === 'error' || lvl === 'warn' ? 'error' : 'notify');
+      }),
+    ];
+    return () => offs.forEach((off) => off());
   },
 });
 

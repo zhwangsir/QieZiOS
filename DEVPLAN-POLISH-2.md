@@ -44,7 +44,10 @@
 - [x] **E5 终端外观自定义（字号/配色主题）**：`Terminal.svelte` 颜色字号全硬编码。加终端偏好（持久）：字号 + 几套配色（Nord/Dracula/跟随系统）。中成本，与作者「高自由度」对齐。
   - ✅ 实现：`shellPrefs` 加 `TERM_SCHEMES`（default/nord/dracula/solarized/light/**system**，各 bg/fg/in/err/caret，可填 hex 或 CSS var）+ `termPrefs` persisted(`qz.term`:{scheme,fontSize}) + `termScheme()`(回退[0])；system 方案用 `var(--color-qz-surface)` 等 → 换肤时终端跟着变。Terminal 去硬编码 class、改 `sc=$derived(termScheme())` 驱动 inline style（根 bg/fg/font-size、输出行 lineColor、prompt sc.in、input sc.fg+caret）；齿轮按钮 + 弹层（配色 select bind + 字号 −/＋ clamp 10–20，均 stopPropagation 不穿透聚焦）。多终端共享同一偏好（与 aliases/history 一致）。
   - ✅ 浏览器实测：默认 bg #0c0d12/13px；齿轮开弹层；选 nord→bg rgb(46,52,64)、字号 ＋＋→15px；持久化 {nord,15} 且 reload 后仍 nord+15px；切 system→bg rgb(27,27,39)（var 解析自主题 surface，跟随换肤）；0 console error。supervisor 子 Agent PASS（sc 响应式/lineColor 三类/持久化+clamp/system var 解析跟随主题/齿轮·弹层 stopPropagation/命令·历史·Tab·Ctrl+L·qz-cv-row 等零回归/多终端共享/分层无环+回退不崩/light 可读 八点全过；仅 popover 无点外部关 + fontSize 读未夹紧属可接受 nicety）。npm check+build 0 错 0 警。
-- [ ] **E6 系统音效反馈**：全仓库零 Audio。新 `system/sound.ts` 用 WebAudio 合成开关窗/通知/错误短音 + Settings 开关音量（默认可关）。中成本，提升质感，音频本身 DOM 验不了（验 state+触发）。
+- [x] **E6 系统音效反馈**：全仓库零 Audio。新 `system/sound.ts` 用 WebAudio 合成开关窗/通知/错误短音 + Settings 开关音量（默认可关）。中成本，提升质感，音频本身 DOM 验不了（验 state+触发）。
+  - ✅ 实现：`system/sound.ts`——`soundPrefs` persisted(`qz.sound`:{enabled:false,volume:0.3})；惰性 AudioContext(try/catch 返 null)；`SOUNDS`(open/close/notify/error/trash 各一串音符)；`playSound(kind)` **首行 `if(!soundPrefs.enabled) return`**（关时零开销不建上下文）+ 未知 kind return + 振荡器+增益包络(快起/指数衰减到 0.0001 防报错、volume clamp×0.25 防过响)+整体 try/catch。新 `soundd` 服务订阅总线 proc.launch→open/proc.exit→close/fs.trash→trash/app.denied→error/notify→(warn·error?error:notify)（事件驱动、不碰内核/各 App，与 notifyd/clipd 同模式）。Settings 加「🔊 声音」区（启用 checkbox + 音量 range，试听 playSound，未启用灰显）。
+  - ✅ 浏览器实测（spy createOscillator）：soundd 已注册；disabled→0、enabled playSound('open')→2(两音符)、bus emit proc.launch→2(soundd→open)、未知 kind→0；Settings 声音区渲染(toggle+滑块)、开启持久化 {enabled:true,volume:0.3}；0 console error。supervisor 子 Agent PASS（enabled 门控零开销/AudioContext+playSound 双 try-catch+suspended resume+非零 exp ramp/合成包络防爆音/五事件映射且均真实 emit 已核/卸载清订阅/Settings bind+试听/qz.sound 独立不进主题白名单+随账号同步+分层无环/纯新增零回归 八点全过）。npm check+build 0 错 0 警。
+  - ⏳ 音频可听性 + 爆音/叠音听感 + resume 在真实手势链恢复 → 无头验不了，**待真机听感验证**（合成+触发管线已跑通无报错）。
 - [ ] **E7 任务视图 Exposé（窗口缩略图总览）**：第 1 轮 B13 注明延后。快捷键触发全屏 Exposé：未最小化窗 CSS scale 缩略平铺、点击聚焦。中/高成本，部分可验。
 - [x] **E8 Dock 自动隐藏**（桌面便签拆 E8b）：Dock 常驻。加自动隐藏开关（平时滑出屏幕底、鼠标移到底边热区或 Dock 才滑回）。
   - ✅ 实现：`dockPrefs` 加 `autohide` 字段（持久 `qz.dock`、不进 settings 主题白名单、随账号同步，与 B9 一致）；Dock 右键菜单加「自动隐藏 Dock」开关（✓ 表状态）；`autohide=$derived(dockPrefs.autohide && !viewport.isMobile)`（移动端不启用——Dock 是移动端主导航/横滚）、`hidden=$derived(autohide && !revealed && !dragId)`（拖拽重排时不收起）；Dock 条 inline `transform: translateX(-50%) translateY(hidden?calc(100%+1.5rem):0)`（**inline 含 -50% 保居中**，替原 `-translate-x-1/2` 类）+ transition；`{#if autohide}` 渲染底边 8px 热区（pointerenter→revealed）+ Dock onpointerenter/leave 切 revealed。
@@ -54,4 +57,4 @@
 
 ---
 
-> 当前循环：**D1–D5 + A3 正确性全清 + E1–E5 + E8(Dock 自动隐藏) 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E6 音效 / E7 Exposé / E8b 桌面便签**。下一项：E6 系统音效（质感）/ E8b 便签 / E7 Exposé（按价值/成本）。
+> 当前循环：**D1–D5 + A3 正确性全清 + E1–E6 + E8(Dock 自动隐藏) 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E7 Exposé / E8b 桌面便签**。下一项：E8b 便签（DOM 可验）/ E7 Exposé（macOS 招牌、中/高成本）。

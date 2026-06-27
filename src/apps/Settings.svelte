@@ -7,6 +7,7 @@
   import { runAgent } from '../system/ai';
   import { pushSync, pullSync } from '../system/sync';
   import { account, loggedIn, register, login, logout } from '../system/account.svelte';
+  import { soundPrefs, playSound } from '../system/sound';
   import { sys } from '../system/sys';
 
   const modes: Array<['dark' | 'light', string]> = [
@@ -508,5 +509,28 @@
       placeholder={'/* 例如 */\n.qz-glass { border-radius: 20px; }\nbody { letter-spacing: .3px; }'}
       bind:value={settings.customCss}
     ></textarea>
+  </section>
+
+  <!-- 系统音效：WebAudio 合成，默认关；开/关窗、通知、删除等事件由 soundd 触发 -->
+  <section class="flex flex-col gap-2">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">🔊 声音</h2>
+    <label class="flex items-center justify-between gap-3 text-sm">
+      <span>系统音效 <span class="text-[11px] text-qz-muted">（开/关窗、通知、删除…）</span></span>
+      <input type="checkbox" class="h-4 w-4 accent-qz-accent" bind:checked={soundPrefs.enabled} onchange={() => soundPrefs.enabled && playSound('open')} />
+    </label>
+    <label class="flex items-center gap-3 text-sm" class:opacity-40={!soundPrefs.enabled}>
+      <span class="shrink-0">音量</span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.05"
+        class="flex-1 accent-qz-accent"
+        disabled={!soundPrefs.enabled}
+        bind:value={soundPrefs.volume}
+        onchange={() => playSound('notify')}
+      />
+      <span class="w-8 shrink-0 text-right text-[11px] tabular-nums text-qz-muted">{Math.round(soundPrefs.volume * 100)}</span>
+    </label>
   </section>
 </div>
