@@ -3,9 +3,10 @@
   import { appRegistry } from '../apps/registry';
   import { userApps, type UserApp } from '../apps/userApps.svelte';
   import { launchUserApp } from '../apps/desktopApps.svelte';
-  import { vfs, emptyTrash, isImage, isMedia, type VNode } from '../kernel/vfs.svelte';
+  import { vfs, emptyTrash, getNode, isImage, isMedia, type VNode } from '../kernel/vfs.svelte';
   import { processes, minimize, close } from '../kernel/processes.svelte';
   import { settings } from '../system/settings.svelte';
+  import { recents } from '../system/recents.svelte';
   import { sys } from '../system/sys';
 
   // 系统动作命令（命令面板）：label/keywords 参与匹配，run 真执行
@@ -65,6 +66,19 @@
       .filter(([, a]) => !a.hidden)
       .filter(([, a]) => !q || a.title.toLowerCase().includes(q))
       .map(([id, a]) => ({ kind: 'app', id, title: a.title, icon: a.icon }));
+    // 空查询：最近用过的 App 浮到前面（最近度排序，未用过的保持原序在后）
+    if (!q) {
+      const rank = (id: string) => { const i = recents.apps.indexOf(id); return i < 0 ? 9999 : i; };
+      apps.sort((a, b) => rank((a as { id: string }).id) - rank((b as { id: string }).id));
+    }
+    // 空查询：最近打开的文件置顶成「最近」区（解析 id、跳过已删/回收站项）
+    const recentFiles: Result[] = !q
+      ? recents.files
+          .map((id) => getNode(id))
+          .filter((n): n is VNode => !!n && n.parentId !== 'trash' && n.id !== 'root')
+          .slice(0, 5)
+          .map((n) => ({ kind: 'file', node: n, icon: n.type === 'dir' ? '📁' : '📄' }))
+      : [];
     const installed: Result[] = userApps.list
       .filter((a) => !q || a.name.toLowerCase().includes(q))
       .map((a) => ({ kind: 'userapp', app: a }));
@@ -87,7 +101,7 @@
       : [];
     // 有输入就在末尾挂一个「问 AI」入口（放最后，不抢 App 的默认 Enter）
     const ai: Result[] = query.trim() ? [{ kind: 'ai', query: query.trim() }] : [];
-    return [...apps, ...installed, ...actions, ...files].slice(0, 10).concat(ai);
+    return [...recentFiles, ...apps, ...installed, ...actions, ...files].slice(0, 12).concat(ai);
   });
 
   function activate(r: Result) {

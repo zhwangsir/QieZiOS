@@ -7,6 +7,10 @@ import { wallpapers } from './wallpaper';
 import { clipboard, currentClip } from './clipboard.svelte';
 import { schedules, addSchedule, removeSchedule } from './schedules.svelte';
 import { appMeta } from '../apps/appList';
+import { pushRecentFile, pushRecentApp } from './recents.svelte';
+
+// 文件查看器 App：经它们打开 = 打开了一个文件（data 为文件 id）→ 记入「最近文件」而非「最近 App」
+const FILE_VIEWERS = new Set(['textedit', 'imageviewer', 'mediaviewer']);
 
 // ───────────────────────────────────────────────────────────
 // 系统调用门面 · 把内核/系统的能力收成「一张系统调用表」。
@@ -30,6 +34,9 @@ export const sys = {
     const a = appMeta[appId];
     if (!a) return;
     launch(appId, opts.title ?? a.title, { width: a.width, height: a.height, data: opts.data, ppid: opts.ppid });
+    // 记最近：文件查看器带文件 id → 最近文件；其余可见 App → 最近 App（隐藏宿主 webview/userapp 不记）
+    if (FILE_VIEWERS.has(appId) && typeof opts.data === 'string') pushRecentFile(opts.data);
+    else if (!a.hidden) pushRecentApp(appId);
   },
   fs: { list: children, read: getNode, mkdir: createDir, create: createFile, write: writeFile },
   ui: {
