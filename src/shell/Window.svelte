@@ -33,6 +33,19 @@
   let sx = 0, sy = 0, ox = 0, oy = 0, ow = 0, oh = 0;
   // rAF 批处理：pointermove 触发极密，每帧只写一次几何，稳住帧率
   let raf = 0, nx = 0, ny = 0, nw = 0, nh = 0;
+  let resizeDir = ''; // 当前缩放方向（n/s/e/w 的组合，如 'se'/'w'/'ne'）
+
+  // 缩放手柄：四边 + 四角。边缘细条在前、四角小块在后（DOM 顺序靠后 → 重叠处四角胜出，角落双轴缩放）。
+  const RESIZE_HANDLES = [
+    { dir: 'n', cls: 'inset-x-0 top-0 h-1.5 cursor-ns-resize', label: '向上缩放' },
+    { dir: 's', cls: 'inset-x-0 bottom-0 h-1.5 cursor-ns-resize', label: '向下缩放' },
+    { dir: 'w', cls: 'inset-y-0 left-0 w-1.5 cursor-ew-resize', label: '向左缩放' },
+    { dir: 'e', cls: 'inset-y-0 right-0 w-1.5 cursor-ew-resize', label: '向右缩放' },
+    { dir: 'nw', cls: 'left-0 top-0 h-3 w-3 cursor-nwse-resize', label: '左上角缩放' },
+    { dir: 'ne', cls: 'right-0 top-0 h-3 w-3 cursor-nesw-resize', label: '右上角缩放' },
+    { dir: 'sw', cls: 'bottom-0 left-0 h-3 w-3 cursor-nesw-resize', label: '左下角缩放' },
+    { dir: 'se', cls: 'bottom-0 right-0 h-3 w-3 cursor-nwse-resize', label: '右下角缩放' },
+  ];
 
   // 边缘吸附：当前拖到了哪个吸附区（null = 没吸附）。tl/tr/bl/br = 四角四分之一屏
   let snapZone: 'left' | 'right' | 'max' | 'tl' | 'tr' | 'bl' | 'br' | null = null;
@@ -42,7 +55,7 @@
   function flush() {
     raf = 0;
     if (dragging) setBounds(proc.id, { x: nx, y: ny });
-    else if (resizing) setBounds(proc.id, { width: nw, height: nh });
+    else if (resizing) setBounds(proc.id, { x: nx, y: ny, width: nw, height: nh });
   }
 
   function startDrag(e: PointerEvent) {
@@ -52,11 +65,13 @@
     sx = e.clientX; sy = e.clientY; ox = proc.x; oy = proc.y;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
-  function startResize(e: PointerEvent) {
+  function startResize(e: PointerEvent, dir: string) {
     e.stopPropagation();
     focus(proc.id);
     resizing = true;
-    sx = e.clientX; sy = e.clientY; ow = proc.width; oh = proc.height;
+    resizeDir = dir;
+    sx = e.clientX; sy = e.clientY;
+    ow = proc.width; oh = proc.height; ox = proc.x; oy = proc.y; // 左/上边缩放要同时调 x/y，故也快照位置
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
   function onMove(e: PointerEvent) {
@@ -65,8 +80,21 @@
       ny = Math.max(0, oy + (e.clientY - sy)); // 不让标题栏被拖出屏幕顶
       updateSnap(e); // 顺带判断是否进入了边缘吸附区
     } else if (resizing) {
-      nw = Math.max(280, ow + (e.clientX - sx));
-      nh = Math.max(180, oh + (e.clientY - sy));
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      const MINW = 280, MINH = 180;
+      nx = ox; ny = oy; nw = ow; nh = oh; // 默认不动；按方向各边调整
+      if (resizeDir.includes('e')) nw = Math.max(MINW, ow + dx);
+      if (resizeDir.includes('s')) nh = Math.max(MINH, oh + dy);
+      if (resizeDir.includes('w')) {
+        const right = ox + ow; // 右边固定
+        nx = Math.min(ox + dx, right - MINW); // 左边不越过「右边-最小宽」
+        nw = right - nx;
+      }
+      if (resizeDir.includes('n')) {
+        const bottom = oy + oh; // 底边固定
+        ny = Math.max(0, Math.min(oy + dy, bottom - MINH)); // 顶不出屏 + 不越过「底-最小高」
+        nh = bottom - ny;
+      }
     } else {
       return;
     }
@@ -204,15 +232,17 @@
     {@render children()}
   </div>
 
-  <!-- 右下角缩放手柄（最大化 / 移动模式隐藏） -->
+  <!-- 缩放手柄：四边 + 四角（最大化 / 移动模式隐藏）。左/上边缩放同时调 x/y。 -->
   {#if !fullscreen}
-    <div
-      class="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
-      role="separator"
-      aria-label="缩放窗口"
-      onpointerdown={startResize}
-      onpointermove={onMove}
-      onpointerup={onUp}
-    ></div>
+    {#each RESIZE_HANDLES as h (h.dir)}
+      <div
+        class="absolute {h.cls}"
+        role="separator"
+        aria-label={h.label}
+        onpointerdown={(e) => startResize(e, h.dir)}
+        onpointermove={onMove}
+        onpointerup={onUp}
+      ></div>
+    {/each}
   {/if}
 </div>

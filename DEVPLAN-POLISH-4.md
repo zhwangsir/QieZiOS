@@ -16,7 +16,9 @@
 
 ## 二、功能 / 体验（价值/成本比排序）
 
-- [ ] **R4-F1 窗口四边/四角缩放（仅右下角→全向）** [S, 价值极高]：`Window.svelte` 现仅右下一个缩放手柄。加 N/E/S/W 四边 + NW/NE/SW 三角共 7 个细手柄，参数化 `startResize(e,dir)`，左/上边同时调 x/y（min 夹同现 280×180）；复用现有 rAF flush + setBounds。可选双击边→单轴最大化。无头可验（合成指针事件 + 断言 setBounds）。
+- [x] **R4-F1 窗口四边/四角缩放（仅右下角→全向）** [S, 价值极高]：`Window.svelte` 现仅右下一个缩放手柄。加 N/E/S/W 四边 + NW/NE/SW 三角共 7 个细手柄，参数化 `startResize(e,dir)`，左/上边同时调 x/y（min 夹同现 280×180）；复用现有 rAF flush + setBounds。
+  - ✅ 实现：`RESIZE_HANDLES`（8 项：n/s/e/w 边 + 四角，各带定位/光标 Tailwind 类 + aria-label，边缘细条在前、四角在后→重叠处四角胜出）`{#each}` 渲染。`startResize(e,dir)` 加方向参数 + 快照 ox/oy（左/上边要调位置）。`onMove` resize 分支方向化：每帧先 `nx=ox;ny=oy;nw=ow;nh=oh`（防上次拖拽的陈旧值漏入）再按 dir：e→宽+dx、s→高+dy、w→右边固定 `nx=min(ox+dx,right-MINW);nw=right-nx`、n→底固定 `ny=max(0,min(oy+dy,bottom-MINH));nh=bottom-ny`。`flush` resize 改写 `{x,y,width,height}`。stopPropagation 不触发标题拖拽/吸附；resize 全程不碰 snapState。
+  - ✅ 浏览器实测（视口拉到 1280 破 isMobile=true 隐藏手柄的无头限制，stub 同步 rAF + no-op setPointerCapture[合成事件无活动指针]）：8 手柄齐全（matchMobile=false）；east dW+50、south dH+40、west dW+30/dX-30、north dH+20/dY-20、nw dW+15/dX-15/dH+15/dY-15（各方向只动该动的边）；west 缩到最小 → width 夹 280、右边固定 880、x→600。0 console error。supervisor 子 Agent PASS（几何含 min 夹对边不漂、flush 重置防陈旧、不误触吸附、onDestroy 不漏、移动/最大化不渲染无残留旧手柄、Tailwind 动态类已生成+a11y+build 六点全过；仅记非阻塞：边缘手柄盖住内容滚动条 6px 槽，属常见取舍）。npm check+build 0 错 0 警。
 - [ ] **R4-F2 最近文件 / 最近 App（+ Spotlight 最近区）** [S/M, 价值极高]：全系统无 recents。新 `system/recents.svelte.ts`（`persisted('qz.recents')` 环形封顶 ~20 + pushRecentFile/App），挂 `sys.openApp` 与 Files `open()` 两个 chokepoint；Spotlight 空查询时置顶「最近」区。无头可验。
 - [ ] **R4-F3 主题：主色微调表面色（accent tint）** [S, 价值高]：`theme.svelte.ts` 表面色是固定中性、不吸主色。加 `settings.accentTint`(0~0.15)，`activeTokens` 用 `color-mix(accent X%, surface)` 算 `--color-qz-surface`/`--color-qz-elevated` → 全 UI 更统一。对齐作者#1 美观/#2 自定义。无头可验（断言 :root token）。
 - [ ] **R4-F4 Spotlight 内联计算器** [S, 价值高]：Spotlight 不算数学。query 能被 `lib/calc.ts`（已存在）解析时置顶 `{kind:'calc'}` 结果、Enter 复制结果到剪贴板。近零成本复用 calc.ts。无头可验。
@@ -29,4 +31,4 @@
 
 ---
 
-> 当前循环：第 4 轮审计已 seed；**R4-C1（shell 二进制重定向损坏）已完成 ✅**。剩 C2/C3/C4（正确性）+ F1-F10（功能）。下一项建议：R4-F1（全向缩放，价值极高单文件）/ R4-F2（recents）/ R4-F4（Spotlight 计算器）/ R4-C2（OpenAI reader 泄漏）。
+> 当前循环：第 4 轮；**R4-C1（shell 二进制重定向损坏）+ R4-F1（窗口全向缩放）已完成 ✅**。剩 C2/C3/C4（正确性）+ F2-F10（功能）。下一项建议：R4-C2（OpenAI reader 泄漏，正确性轮换）/ R4-F2（recents）/ R4-F4（Spotlight 计算器，单文件复用 calc.ts）/ R4-F3（accent tint）。
