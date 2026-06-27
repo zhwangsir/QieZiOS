@@ -351,6 +351,7 @@ async function streamOpenAI(
   let emittedLen = 0; // 已通过 onEvent 输出的「清洗后」字符数
   const toolCalls: OAToolCall[] = [];
 
+  try {
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -404,6 +405,15 @@ async function streamOpenAI(
   }
   flushCleanText(content, emittedLen, onEvent, true); // 流自然结束也收尾
   return { content: stripBoxTokens(content), toolCalls: finalizeToolCalls(toolCalls) };
+  } finally {
+    // [DONE] / 流自然结束 / 中断 都在此释放 reader：取消底层流（关连接）+ 释放锁，
+    // 否则 reader 与连接悬挂到 GC（agent loop 每问至多 8 轮，长会话累积泄漏）。
+    try {
+      await reader.cancel();
+    } catch {
+      /* 已中断/已结束的流取消可能抛，忽略 */
+    }
+  }
 }
 
 // 去掉数组空洞、补 id 兜底（个别网关流式不回 id → 用下标合成，保证回灌时 tool_call_id 对得上）
