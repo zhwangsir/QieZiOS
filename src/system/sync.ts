@@ -4,12 +4,15 @@
 // ⚠️ /auth、/sync 由 server/index.mjs 提供：dev 经 vite 代理转发本地 node 服务，生产同源。
 // ───────────────────────────────────────────────────────────
 import { account } from './account.svelte';
+import { ASYNC_KEYS } from '../kernel/persist.svelte';
+import { idbEntries, idbSet } from '../kernel/idbStore';
 
 // 不上云：会话/凭据（qz.account）、AI 配置含 key（qz.ai）、旧 token（qz.syncToken）
 const EXCLUDE = new Set(['qz.account', 'qz.ai', 'qz.syncToken']);
 
-// 收集要同步的本地状态（所有 qz.* 键，排除敏感/本机项）
-export function gatherState(): Record<string, string> {
+// 收集要同步的本地状态（所有 qz.* 键，排除敏感/本机项）。
+// 大块状态（VFS 等）已迁 IndexedDB → 同时从 localStorage 与 IDB 两个后端收集，否则会漏掉文件系统。
+export async function gatherState(): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
@@ -18,12 +21,16 @@ export function gatherState(): Record<string, string> {
       if (v != null) out[k] = v;
     }
   }
+  // IDB 里的 qz.*（如 qz.vfs）一并纳入
+  for (const [k, v] of Object.entries(await idbEntries())) {
+    if (k.startsWith('qz.') && !EXCLUDE.has(k)) out[k] = v;
+  }
   return out;
 }
 
 export async function pushSync(): Promise<number> {
   if (!account.token) throw new Error('请先登录账号');
-  const state = gatherState();
+  const state = await gatherState();
   const res = await fetch('/sync', {
     method: 'PUT',
     headers: { 'content-type': 'application/json', authorization: 'Bearer ' + account.token },
@@ -44,7 +51,9 @@ export async function pullSync(): Promise<number> {
   let n = 0;
   for (const [k, v] of Object.entries(data)) {
     if (k.startsWith('qz.') && !EXCLUDE.has(k) && typeof v === 'string') {
-      localStorage.setItem(k, v);
+      // 按键所属后端写回：IDB 键（如 qz.vfs）写 IndexedDB，其余写 localStorage。
+      if (ASYNC_KEYS.has(k)) await idbSet(k, v);
+      else localStorage.setItem(k, v);
       n++;
     }
   }

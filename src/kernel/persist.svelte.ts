@@ -2,6 +2,8 @@
 // 持久化 · 让一份 $state 自动存进浏览器、刷新还原
 // ───────────────────────────────────────────────────────────
 
+import { idbGet, idbSet } from './idbStore';
+
 // storage 抽象接口：现在用 localStorage 实现；
 // 以后整套换成 IndexedDB / OPFS+SQLite-WASM，只要换这一层，上面全不动。
 export interface KVStorage {
@@ -68,4 +70,79 @@ export function persisted<T extends object>(
   });
 
   return state;
+}
+
+// ───────────────────────────────────────────────────────────
+// persistedAsync · 同样的「自动存盘响应式对象」，但后端是 IndexedDB（异步、容量大）。
+// 给大块状态用（如整棵 VFS 树）—— 破掉 localStorage ~5–10MB 配额天花板。
+// 与同步版的两点关键差异：
+//  1) 异步 hydrate：IDB 读是异步的 → store 先以 initial（默认值）启动，登记一个 hydrator，
+//     由启动期 hydrateAll() 统一 await 后再挂载 UI（main.ts 门控，避免默认值闪烁）。
+//  2) hydrated 守卫：hydrate 完成前绝不写盘 —— 否则启动早期 effect 会把「默认值」写进 IDB、
+//     覆盖掉还没读回来的真数据（这是异步化最危险的坑）。
+// 一次性迁移：IDB 无此键但 localStorage 有（老用户）→ 搬进 IDB 并删 localStorage 旧键释放配额。
+// ───────────────────────────────────────────────────────────
+
+// 哪些键存在 IDB（而非 localStorage）—— sync / 存储统计据此路由到正确后端。
+export const ASYNC_KEYS = new Set<string>();
+const hydrators: Array<() => Promise<void>> = [];
+
+// 把响应式 state 的内容「就地替换」成 next（保持同一个代理引用 → 既有订阅全部继续有效）。
+function replaceInPlace<T extends object>(state: T, next: T): void {
+  if (Array.isArray(state) && Array.isArray(next)) {
+    (state as unknown[]).splice(0, (state as unknown[]).length, ...(next as unknown[]));
+  } else {
+    for (const k of Object.keys(state)) if (!(k in (next as object))) delete (state as Record<string, unknown>)[k];
+    Object.assign(state, next);
+  }
+}
+
+export function persistedAsync<T extends object>(
+  key: string,
+  initial: T,
+  debounceMs = 150,
+  serialize?: (snapshot: T) => unknown,
+): T {
+  ASYNC_KEYS.add(key);
+  const state = $state<T>(initial); // 先以默认值启动；hydrateAll 后填真数据
+  let hydrated = false;
+
+  hydrators.push(async () => {
+    let raw = await idbGet(key);
+    if (raw == null) {
+      // 一次性迁移：老用户的数据还在 localStorage → 搬进 IDB、删旧键释放配额
+      const ls = localBackend.get(key);
+      if (ls != null) {
+        raw = ls;
+        await idbSet(key, ls);
+        localBackend.remove(key);
+      }
+    }
+    if (raw != null) {
+      try {
+        const parsed = JSON.parse(raw);
+        replaceInPlace(state, (Array.isArray(initial) ? parsed : { ...initial, ...parsed }) as T);
+      } catch {
+        /* 存档损坏：保留默认值 */
+      }
+    }
+    hydrated = true; // 之后才允许写盘
+  });
+
+  $effect.root(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    $effect(() => {
+      const snap = $state.snapshot(state) as T; // 留在 effect 体内维持订阅（含键增删）
+      if (!hydrated) return; // hydrate 完成前不写，避免默认值覆盖真数据
+      clearTimeout(timer);
+      timer = setTimeout(() => idbSet(key, JSON.stringify(serialize ? serialize(snap) : snap)), debounceMs);
+    });
+  });
+
+  return state;
+}
+
+// 启动门：挂载 UI 前 await 这个，让所有 IDB store 把真数据读回来（首屏不闪默认值）。
+export async function hydrateAll(): Promise<void> {
+  await Promise.all(hydrators.map((h) => h()));
 }

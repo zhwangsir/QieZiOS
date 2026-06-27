@@ -4,6 +4,7 @@
   import { eventLog } from '../kernel/bus.svelte';
   import { services, restartService, startService, enableService, disableService, listServices } from '../kernel/services.svelte';
   import { vfs, TRASH } from '../kernel/vfs.svelte';
+  import { idbEntries } from '../kernel/idbStore';
   import { windowVisible } from '../lib/winctx';
   import { appMeta } from './appList';
   import { userApps, getUserApp } from './userApps.svelte';
@@ -87,9 +88,23 @@
       logs: klog.entries.length,
     };
   });
+  // IDB 里 qz.*（如 qz.vfs）的字节数：每秒重算整棵树太浪费，节流到 ~5s 刷一次。
+  let idbBytes = $state(0);
+  let lastIdbAt = 0;
+  $effect(() => {
+    void now;
+    const t = Date.now();
+    if (t - lastIdbAt < 5000) return;
+    lastIdbAt = t;
+    idbEntries().then((e) => {
+      let b = 0;
+      for (const [k, v] of Object.entries(e)) if (k.startsWith('qz.')) b += k.length + v.length;
+      idbBytes = b;
+    });
+  });
   function storageKB(): string {
     void now; // 每秒重算
-    let bytes = 0;
+    let bytes = idbBytes; // 含 IDB 后端（VFS 等已迁 IndexedDB）
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && k.startsWith('qz.')) bytes += k.length + (localStorage.getItem(k)?.length ?? 0);
@@ -235,7 +250,7 @@
   {:else}
     <div class="min-h-0 flex-1 overflow-auto p-3">
       <div class="grid grid-cols-2 gap-2 text-sm">
-        {#each [['进程', `${stats.proc}（${stats.running} 运行 / ${stats.suspended} 挂起）`], ['后台服务', `${services.running.length}`], ['文件', `${stats.files}`], ['文件夹', `${stats.dirs}`], ['回收站', `${stats.trashed}`], ['已装 App', `${stats.apps}`], ['日志条数', `${stats.logs}`], ['localStorage', `${storageKB()} KB`]] as [k, v] (k)}
+        {#each [['进程', `${stats.proc}（${stats.running} 运行 / ${stats.suspended} 挂起）`], ['后台服务', `${services.running.length}`], ['文件', `${stats.files}`], ['文件夹', `${stats.dirs}`], ['回收站', `${stats.trashed}`], ['已装 App', `${stats.apps}`], ['日志条数', `${stats.logs}`], ['存储 (LS+IDB)', `${storageKB()} KB`]] as [k, v] (k)}
           <div class="rounded-qz bg-qz-surface px-3 py-2">
             <div class="text-[11px] text-qz-muted">{k}</div>
             <div class="mt-0.5 tabular-nums">{v}</div>

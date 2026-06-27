@@ -1,4 +1,4 @@
-import { persisted } from './persist.svelte';
+import { persistedAsync } from './persist.svelte';
 import { putBlob, getBlob, deleteBlob } from './blobStore';
 import { emit } from './bus.svelte';
 
@@ -7,7 +7,7 @@ import { emit } from './bus.svelte';
 // 跟进程表同一个思路：把文件/文件夹拍平成一张 inode 风格的节点表，
 // 用 parentId 串成树。这样查子项 = 按 parentId 过滤，移动 = 改 parentId，
 // 重命名 = 改 name —— 全是对一张表的简单操作。
-// 整棵树用 persisted 存进 localStorage（以后可换 IndexedDB / OPFS+SQLite-WASM）。
+// 整棵树用 persistedAsync 存进 IndexedDB（破 localStorage ~5–10MB 配额；以后可换 OPFS+SQLite-WASM）。
 // ───────────────────────────────────────────────────────────
 export interface VNode {
   id: string;
@@ -61,8 +61,10 @@ const seed: Record<string, VNode> = {
   },
 };
 
-// 一份全局共享、自动存盘的响应式文件树
-export const vfs = persisted<{ nodes: Record<string, VNode> }>('qz.vfs', { nodes: seed }, 300);
+// 一份全局共享、自动存盘的响应式文件树。
+// 用 persistedAsync → 整棵树存 IndexedDB（破 localStorage ~5–10MB 配额天花板）。
+// 启动期由 main.ts 的 hydrateAll() 在挂载 UI 前把真数据读回来（首屏不闪种子数据）。
+export const vfs = persistedAsync<{ nodes: Record<string, VNode> }>('qz.vfs', { nodes: seed }, 300);
 
 export function getNode(id: string): VNode | undefined {
   return vfs.nodes[id];
@@ -284,7 +286,10 @@ if (import.meta.env.DEV) {
     purge,
     resolvePath,
     pathOf,
-    nodes: vfs.nodes,
+    // getter：hydrate 后 vfs.nodes 会被就地替换成新对象，用 getter 始终返回当前引用（非陈旧 seed）
+    get nodes() {
+      return vfs.nodes;
+    },
   };
 }
 
