@@ -88,8 +88,10 @@
       logs: klog.entries.length,
     };
   });
-  // IDB 里 qz.*（如 qz.vfs）的字节数：每秒重算整棵树太浪费，节流到 ~5s 刷一次。
+  // 存储用量：IDB qz.* 字节 + 浏览器配额估算。每秒重算整棵树太浪费 → 节流 ~5s 刷一次。
   let idbBytes = $state(0);
+  let estUsage = $state(0); // navigator.storage.estimate().usage（含 IDB/blob/localStorage 全部源）
+  let estQuota = $state(0); // 浏览器给本源的配额上限
   let lastIdbAt = 0;
   $effect(() => {
     void now;
@@ -101,15 +103,28 @@
       for (const [k, v] of Object.entries(e)) if (k.startsWith('qz.')) b += k.length + v.length;
       idbBytes = b;
     });
+    // 真实配额估算（异步、可能不支持 → 优雅降级为 0）
+    navigator.storage?.estimate?.().then((q) => {
+      estUsage = q.usage ?? 0;
+      estQuota = q.quota ?? 0;
+    }).catch(() => {});
   });
-  function storageKB(): string {
-    void now; // 每秒重算
-    let bytes = idbBytes; // 含 IDB 后端（VFS 等已迁 IndexedDB）
+  // 本应用自己的 qz.* 字节（localStorage 同步 + IDB 节流值）
+  const qzBytes = $derived.by(() => {
+    void now;
+    let bytes = idbBytes;
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && k.startsWith('qz.')) bytes += k.length + (localStorage.getItem(k)?.length ?? 0);
     }
-    return (bytes / 1024).toFixed(1);
+    return bytes;
+  });
+  const usedPct = $derived(estQuota > 0 ? Math.min(100, (estUsage / estQuota) * 100) : 0);
+  function fmtBytes(n: number): string {
+    if (n >= 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+    if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+    return n + ' B';
   }
 
   // 日志自动滚到底
@@ -249,8 +264,27 @@
     </div>
   {:else}
     <div class="min-h-0 flex-1 overflow-auto p-3">
+      <!-- 存储用量仪表盘：浏览器配额估算（含 IDB/blob/localStorage 全部源）+ 本应用 qz.* 占用 -->
+      <div class="mb-3 rounded-qz bg-qz-surface px-3 py-2.5">
+        <div class="flex items-baseline justify-between text-[11px] text-qz-muted">
+          <span>存储用量{estQuota > 0 ? '' : '（浏览器未提供配额估算）'}</span>
+          <span class="tabular-nums">
+            {#if estQuota > 0}{fmtBytes(estUsage)} / {fmtBytes(estQuota)}（{usedPct.toFixed(1)}%）{:else}{fmtBytes(estUsage)}{/if}
+          </span>
+        </div>
+        <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-qz-elevated">
+          <div
+            class="h-full rounded-full transition-[width] duration-500"
+            style="width: {usedPct}%; background: {usedPct > 90 ? '#ef4444' : usedPct > 70 ? '#f59e0b' : 'var(--color-qz-accent)'};"
+          ></div>
+        </div>
+        <div class="mt-1.5 text-[11px] text-qz-muted">
+          QieZiOS 数据（qz.*，含 VFS 已迁 IndexedDB）：<span class="tabular-nums text-qz-text">{fmtBytes(qzBytes)}</span>
+        </div>
+      </div>
+
       <div class="grid grid-cols-2 gap-2 text-sm">
-        {#each [['进程', `${stats.proc}（${stats.running} 运行 / ${stats.suspended} 挂起）`], ['后台服务', `${services.running.length}`], ['文件', `${stats.files}`], ['文件夹', `${stats.dirs}`], ['回收站', `${stats.trashed}`], ['已装 App', `${stats.apps}`], ['日志条数', `${stats.logs}`], ['存储 (LS+IDB)', `${storageKB()} KB`]] as [k, v] (k)}
+        {#each [['进程', `${stats.proc}（${stats.running} 运行 / ${stats.suspended} 挂起）`], ['后台服务', `${services.running.length}`], ['文件', `${stats.files}`], ['文件夹', `${stats.dirs}`], ['回收站', `${stats.trashed}`], ['已装 App', `${stats.apps}`], ['日志条数', `${stats.logs}`], ['QieZiOS 数据', fmtBytes(qzBytes)]] as [k, v] (k)}
           <div class="rounded-qz bg-qz-surface px-3 py-2">
             <div class="text-[11px] text-qz-muted">{k}</div>
             <div class="mt-0.5 tabular-nums">{v}</div>

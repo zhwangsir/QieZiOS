@@ -203,7 +203,8 @@ docker compose up -d   # 构建镜像 + 跑在 :8787；AI 网关/key 在 docker-
   - 🎉 **Phase H 全部完成（H1–H5 全 ✅）**——至此 G1–G7 + 融合三件套 + Phase H 整个「对标 Linux / Shell 自动化」backlog 清空，自治心跳已撤销。
 - 🚧 **性能 / 存储硬化阶段**（作者拍板「进入下一阶段」选定 · 详见 [[DEVPLAN-PERF]]）：对齐「性能最强 + 最丝滑」+ 解 localStorage 配额迫近天花板的结构性风险。
   - ✅ **P1 VFS 迁 IndexedDB**：新 `kernel/idbStore.ts`（async KV 库 `qz-kv`）+ persist 加 `persistedAsync`（异步 hydrate + `hydrated` 守卫防默认值覆盖 + `hydrateAll()` 启动门 + localStorage→IDB 一次性迁移）；`vfs` 改用它、`main.ts` 挂载前 `await hydrateAll()`；sync/SysMonitor 改后端感知。**破 localStorage ~5–10MB 天花板**——实测 6MB 文件持久化+reload 完整、localStorage 不再存 VFS。19 处同步 `persisted` 零回归。
-  - **待办**：P2 chat 等大 store 迁 IDB / P3 OPFS+SQLite-WASM（远期）/ P4 大列表虚拟化 / P5 信号热点审计 / P6 不可见窗 content-visibility / P7 存储用量面板。
+  - ✅ **P7 存储用量仪表盘**：SysMonitor 概况页显 `navigator.storage.estimate()` 真实用量/配额/百分比（含 IDB/blob/localStorage）+ 进度条（>90%红/>70%橙）+ qz.* 数据字节。配额实测 ~37GB，直观印证 P1 破天花板。
+  - **待办**：P4 大列表虚拟化 / P5 vfs.children() 信号热点 / P2 chat 迁 IDB / P3 OPFS+SQLite-WASM（远期）/ P6 不可见窗 content-visibility。
 - 🚧 **完善与查漏阶段**（作者 `/loop` 自驱：完善功能 + 查漏 + 继续 · 详见 [[DEVPLAN-POLISH]]，第 2 轮见 [[DEVPLAN-POLISH-2]]）：两路子 Agent 审计出的正确性 bug(P0) + 功能/体验缺口(P1) + 一致性打磨(P2) backlog，每轮挑价值最高项推进。**第 1 轮（DEVPLAN-POLISH）全 ✅；第 2 轮（DEVPLAN-POLISH-2）进行中**：重新审计扩大后代码库得 D1-D5+A3 正确性 + E1-E8 功能缺口。
   - ✅ **D1 清空对话 mid-stream 崩溃修复**：Assistant 流式回调写 `chat.msgs[i]`（i 在 ask 时捕获），「清空」按钮原无 `disabled={busy}` → 流式中点清空 splice 数组 → undefined 解引用 `TypeError` + busy 卡死。修：回调改 `const m=chat.msgs[i]; if(!m) return;`（四事件全改 m，响应式不变）+ 清空按钮 busy 时禁用。实测：splice mid-stream 无 error、迟到事件被丢弃、busy 恢复不卡死。
   - ✅ **D3 回收站还原重名去重**：`vfs.restoreFromTrash` 还原时不查目标目录重名 → 删 a.txt→新建同名→还原 = 同名并存、resolvePath 只命中第一个、另一个永久不可达（静默数据丢失）。修：还原落地前 `n.name = uniqueName(target, n.name)`（n 仍在 'trash' 故不误改自己，镜像 move 的 A7）。**补齐 A7(move)/A9(rename)/D3(restore) 数据完整性三件套**。实测：还原项→「d3 2.txt」、两者路径各自可达；无冲突不误改；文件夹还原子项按 id 仍 linked。

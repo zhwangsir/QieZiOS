@@ -21,8 +21,11 @@
 
 ## 三、可观测
 
-- [ ] **P7 存储/性能面板**：SysMonitor 显 IDB+localStorage 真实用量（`navigator.storage.estimate()`）、帧率/长任务提示，给后续优化一把尺。
+- [x] **P7 存储/性能面板**：SysMonitor 显 IDB+localStorage 真实用量（`navigator.storage.estimate()`）、帧率/长任务提示，给后续优化一把尺。
+  - ✅ 实现（存储用量仪表盘）：SysMonitor 概况页加用量行 `fmtBytes(usage)/fmtBytes(quota)（pct%）`（`navigator.storage.estimate()` 真实配额，含 IDB/blob/localStorage 全部源；可选链 + .catch 优雅降级，不支持则显「未提供配额估算」）+ 进度条（width=usedPct%，>90% 红 / >70% 橙 / 否则主色，Math.min 夹 0–100、estQuota=0 不 NaN）+ qz.* 数据行 `fmtBytes(qzBytes)`（localStorage qz.* + 节流 5s 的 IDB qz.* 字节）。复用既有 `now` 每秒心跳触发节流刷新。删掉旧 `storageKB()`。
+  - ✅ 浏览器实测：概况页渲染真值 `592.8 KB / 37.26 GB（0.0%）`（**配额 ~37GB 直观印证 P1 破 localStorage ~5–10MB 天花板**）+ qz.* 3.8 KB + 进度条按比例；数据源正确（写 2MB 文件后 `idbEntries()` 直接读到 2.00 MB）。0 console error。supervisor 子 Agent PASS（estimate 可选链/catch 安全降级/节流心跳/qzBytes·usedPct 响应式/颜色阈值互斥/除零守卫/storageKB 0 残留引用/fmtBytes 边界/分层无环 八点全过）。npm check+build 0 错 0 警。
+  - ⏳ 自动刷新（5s）实时性因无头预览 `visibilityState=hidden` 冻结每秒心跳（实测 uptime 2.5s 不变）验不了 → **待真机验证**（复用 clock/uptime 同一套已上线心跳，真机会刷）。帧率/长任务提示延后到需要时。
 
 ---
 
-> 当前循环：**P1 已完成**（VFS 迁 IndexedDB，破 localStorage 配额天花板、实测 6MB 文件可持久化）。下一项候选：P2（chat 等迁 IDB）/ P4（大列表虚拟化）/ P7（存储用量面板）。
+> 当前循环：**P1、P7 已完成**（VFS 迁 IndexedDB 破天花板 + 存储用量仪表盘做尺子）。下一项候选：P4（大列表虚拟化，性能正餐）/ P5（vfs.children() 信号热点）/ P2（chat 迁 IDB）。
