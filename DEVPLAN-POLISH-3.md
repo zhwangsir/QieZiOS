@@ -13,8 +13,12 @@
 - [x] **F2（P1 上传漏最新改动）flushPersisted 漏未排程的写**：`flushPersisted` 只刷 `pending` 已被赋值的 store，而 `pending` 在 `$effect` 里赋值、effect 异步排程。若改完状态**同一 tick 内**立即 `pushSync()`，effect 未跑→pending=null→flusher no-op→gatherState 读旧值。D2 的初衷对「比一次 effect-flush 更新」的改动失效。修：flushPersisted 先 `await tick()` 再刷。文件：`kernel/persist.svelte.ts`。
   - ✅ 实现：`flushPersisted` 开头 `await tick()`（import from 'svelte'）——把挂起的 `$effect.root` 写盘 effect 先跑完、pending 赋上，再 `Promise.all(flushers)`。tick 只多等一个微任务刷新、不改写盘语义；freeze 守卫仍在 effect 体与 flusher 内、tick 不绕过；只被非冻结的 pushSync 用。
   - ✅ 浏览器实测：reload 后同 tick `createFile('f2-probe.txt')`+`await flushPersisted()`→**IDB qz.vfs 含该文件**（sameTickFlushCaptured=true）、`gatherState()` 也见到（pushSync 全路径）；0 console error。supervisor 子 Agent PASS（tick 刷模块级 effect 令 pending 赋值/与 F1 freeze 协同 tick 不绕过/无组件上下文 tick 安全必 resolve/D2·A2·F1·P1 正常路径零回归/多 store 同 tick 全刷+不双写/分层 import svelte 合规无环 六点全过）。npm check+build 0 错 0 警。
-- [ ] **F4（P2）Calculator/ImageViewer onKey 吞掉带修饰键的组合**：`Calculator.onKey` 无 `ctrlKey/metaKey/altKey` 守卫 → 焦点在计算器时 Cmd/Ctrl+C 触发 clearAll+preventDefault（没法复制结果）、Ctrl/Cmd+0/-/+ 等被吃。修：onKey 开头 `if (e.ctrlKey||e.metaKey||e.altKey) return`。ImageViewer 同理（Cmd+0/-）。文件：`apps/Calculator.svelte`、`apps/ImageViewer.svelte`。
-- [ ] **F5（P2）resetDock 不重置 autohide**：「重置 Dock 布局」只清 order/hidden，不复位 autohide → 开了自动隐藏后重置，Dock 仍隐藏、找回入口（右键菜单）在 Dock 上、不直观。修：`resetDock` 也 `autohide=false`。文件：`system/dockPrefs.svelte.ts`。
+- [x] **F4（P2）Calculator/ImageViewer onKey 吞掉带修饰键的组合**：`Calculator.onKey` 无 `ctrlKey/metaKey/altKey` 守卫 → 焦点在计算器时 Cmd/Ctrl+C 触发 clearAll+preventDefault（没法复制结果）、Ctrl/Cmd+0/-/+ 等被吃。修：onKey 开头 `if (e.ctrlKey||e.metaKey||e.altKey) return`。ImageViewer 同理（Cmd+0/-）。文件：`apps/Calculator.svelte`、`apps/ImageViewer.svelte`。
+  - ✅ 实现：两个 `onKey` 开头各加 `if (e.ctrlKey || e.metaKey || e.altKey) return;`（在任何 `preventDefault` 之前）→ 带修饰键组合直接 return、不 preventDefault、冒泡给浏览器/系统；不含 `shiftKey` 故 ImageViewer 的 Shift+R 反向旋转保留。无新 import、无分层/环/可达性影响。
+  - ✅ 浏览器实测（计算器，控制流分支真验）：打开计算器→键入 `1·2·3`=「123」→ 派发 **Ctrl+C** keydown→显示仍「123」且 dispatchEvent 返回 true（未 preventDefault，确认提前 return）→ 再派发普通 `c`→清零「0」（普通键零回归）。ImageViewer 为同一行守卫、同位置、同控制流（+/-/0/r/Shift+R 普通键不变）。0 console error。supervisor 子 Agent PASS（计算器无任何想带修饰键的键/ImageViewer Shift+R 保留+普通键不变/守卫在 preventDefault 之前 五点）。npm check+build 0 错 0 警。
+- [x] **F5（P2）resetDock 不重置 autohide**：「重置 Dock 布局」只清 order/hidden，不复位 autohide → 开了自动隐藏后重置，Dock 仍隐藏、找回入口（右键菜单）在 Dock 上、不直观。修：`resetDock` 也 `autohide=false`。文件：`system/dockPrefs.svelte.ts`。
+  - ✅ 实现：`resetDock()` 末尾加 `dockPrefs.autohide = false;`，现复位 DockPrefs 全部三个持久字段（order/hidden/autohide）。`autohide` 是 DockPrefs 已声明字段（默认 false）；reveal/drag 是 Dock.svelte 局部 `$state` 不在 dockPrefs，`$derived` 链 reactively 重算为 false、reveal 热区 `{#if}` 卸载、右键菜单勾选标签同步更新。
+  - ✅ 浏览器实测（Vite dev 动态 import 活模块）：置 `autohide=true`+order/hidden 自定义 → `resetDock()` → autohide=false、order=[]、hidden=[] → 防抖落地后 localStorage `qz.dock` 持久为 `{autohide:false,order:[],hidden:[]}`。0 console error。supervisor 子 Agent PASS（字段合法/三字段全清无遗漏/无 transient 坏交互 三点）。npm check+build 0 错 0 警。
 - [ ] **F3（P2 潜伏，低优先）restore 二进制节点 blob 已被独立删除**：当前无「删 blob 不删 node」的触发路径，属健壮性记录，暂不处理。
 
 ## 二、功能 / 体验（价值/成本比排序）
@@ -34,4 +38,4 @@
 
 ---
 
-> 当前循环：第 3 轮审计；**F1、F2、G1、G5 已完成**。剩 F4/F5（P2 polish）+ G2/G3/G4/G6/G7（功能）。下一项：F4/F5（P2 小修收尾，可一并）或 G2（Files 详情面板）/ G7（记事本导出）/ G3（科学计算器）。
+> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G5 已完成**（正确性 F 全清）。剩 G2/G3/G4/G6/G7（功能）。下一项：G2（Files 详情/信息面板）/ G7（记事本导出下载）/ G3（科学计算器）。

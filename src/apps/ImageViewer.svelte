@@ -104,6 +104,8 @@
 
   // 键盘：+/- 缩放、0 适应、r 旋转（Shift+R 反向）。仅在查看区聚焦时。
   function onKey(e: KeyboardEvent): void {
+    // 带修饰键的组合（Cmd/Ctrl+0、Cmd+- 浏览器缩放等）放行，不抢系统/浏览器快捷键
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === '+' || e.key === '=') {
       zoom(1.2);
       e.preventDefault();

@@ -78,6 +78,8 @@
 
   // 键盘：数字/./运算符/Enter=等于/Backspace 退格/c·Delete 清空。Esc 不拦 → 仍能关窗。
   function onKey(e: KeyboardEvent) {
+    // 带修饰键的组合（Cmd/Ctrl+C 复制、Ctrl+V 粘贴、Cmd+0/- 等）放行，别被当成计算器按键吞掉
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
     if (k >= '0' && k <= '9') inputDigit(k);
     else if (k === '.') inputDot();

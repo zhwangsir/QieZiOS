@@ -65,6 +65,7 @@ export function dragReorder(orderedIds: string[], dragId: string, targetId: stri
 export function resetDock(): void {
   dockPrefs.order = [];
   dockPrefs.hidden = [];
+  dockPrefs.autohide = false; // 重置布局也复位自动隐藏，否则 Dock 仍滑出、找回入口不直观
 }
 
 // 卸载用户 App 时把它从 Dock 偏好里抹掉，否则 order/hidden 里留下死 appId（只增不减、还随账号同步上云）。
