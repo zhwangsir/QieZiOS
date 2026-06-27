@@ -236,6 +236,15 @@ async function cloneInto(n: VNode, destParentId: string, name: string): Promise<
 export function writeFile(id: string, content: string): void {
   const n = vfs.nodes[id];
   if (n && n.type === 'file') {
+    // 写入文本到一个原本是二进制的节点（如被 shell `>` 重定向覆盖的上传图片）→ 它变成文本文件：
+    // 清掉二进制元数据并删除孤立 blob，否则 kind:'binary' 与文本内容并存（cat 显占位、写入静默丢失 + blob 泄漏）。
+    if (n.kind === 'binary') {
+      if (n.blobId) void deleteBlob(n.blobId);
+      n.kind = undefined;
+      n.blobId = undefined;
+      n.mime = undefined;
+      n.size = undefined;
+    }
     n.content = content;
     n.updatedAt = Date.now();
   }
