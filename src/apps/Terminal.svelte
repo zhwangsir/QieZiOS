@@ -3,8 +3,13 @@
   // 滚动输出区 + 输入行 + 命令历史(↑/↓) + Tab 补全(命令/路径)。
   import { run, newCtx, COMMAND_NAMES, ensureEtcProfile, ensureEtcPasswd } from '../lib/shell';
   import { pathOf, resolvePath, children } from '../kernel/vfs.svelte';
-  import { cmdHistory, addHistory } from '../system/shellPrefs.svelte';
+  import { cmdHistory, addHistory, termPrefs, termScheme, TERM_SCHEMES } from '../system/shellPrefs.svelte';
   import { onMount, tick } from 'svelte';
+
+  // 终端外观（配色 + 字号，持久化、跨终端共享）
+  const sc = $derived(termScheme());
+  let showCfg = $state(false);
+  const lineColor = (kind: 'in' | 'out' | 'err') => (kind === 'in' ? sc.in : kind === 'err' ? sc.err : '');
 
   type Line = { kind: 'in' | 'out' | 'err'; text: string };
 
@@ -144,34 +149,61 @@
   }
 </script>
 
-<!-- 点窗口任意处聚焦到输入框，像真终端 -->
+<!-- 点窗口任意处聚焦到输入框，像真终端。配色/字号走持久化偏好（齿轮可调） -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="flex h-full flex-col bg-[#0c0d12] font-mono text-[13px] leading-relaxed text-[#d6deeb]"
+  class="relative flex h-full flex-col font-mono leading-relaxed"
+  style="background: {sc.bg}; color: {sc.fg}; font-size: {termPrefs.fontSize}px"
   onclick={() => inputEl?.focus()}
   role="presentation"
 >
+  <!-- 外观设置：齿轮 + 弹层（配色 / 字号） -->
+  <button
+    class="absolute right-2 top-1.5 z-10 rounded px-1.5 py-0.5 text-xs opacity-40 hover:opacity-100"
+    style="background: rgb(0 0 0 / 0.3)"
+    title="终端外观"
+    onclick={(e) => { e.stopPropagation(); showCfg = !showCfg; }}>⚙</button>
+  {#if showCfg}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+      class="absolute right-2 top-9 z-10 flex flex-col gap-2 rounded-lg border border-white/15 p-2.5 text-xs shadow-xl backdrop-blur"
+      style="background: rgb(20 20 28 / 0.92); color: #e8e8f0"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <label class="flex items-center justify-between gap-3">配色
+        <select class="rounded bg-black/40 px-1.5 py-0.5 outline-none" bind:value={termPrefs.scheme}>
+          {#each TERM_SCHEMES as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
+        </select>
+      </label>
+      <label class="flex items-center justify-between gap-3">字号
+        <span class="flex items-center gap-1">
+          <button class="grid h-5 w-5 place-items-center rounded bg-black/40 hover:bg-black/60" onclick={() => (termPrefs.fontSize = Math.max(10, termPrefs.fontSize - 1))}>−</button>
+          <span class="w-6 text-center tabular-nums">{termPrefs.fontSize}</span>
+          <button class="grid h-5 w-5 place-items-center rounded bg-black/40 hover:bg-black/60" onclick={() => (termPrefs.fontSize = Math.min(20, termPrefs.fontSize + 1))}>＋</button>
+        </span>
+      </label>
+    </div>
+  {/if}
   <div bind:this={scroller} class="flex-1 overflow-auto px-3 py-2">
     {#each lines as l, i (i)}
-      <div
-        class="qz-cv-row whitespace-pre-wrap break-words"
-        class:text-[#7ee787]={l.kind === 'in'}
-        class:text-[#ff7b72]={l.kind === 'err'}
-      >{l.text}</div>
+      <div class="qz-cv-row whitespace-pre-wrap break-words" style={lineColor(l.kind) ? `color: ${lineColor(l.kind)}` : ''}>{l.text}</div>
     {/each}
     <!-- 输入行 -->
     <div class="flex items-baseline gap-2">
-      <span class="shrink-0 whitespace-pre text-[#7ee787]">{prompt}</span>
+      <span class="shrink-0 whitespace-pre" style="color: {sc.in}">{prompt}</span>
       <input
         bind:this={inputEl}
         bind:value={input}
         onkeydown={onKey}
         disabled={busy}
-        class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[#d6deeb] caret-[#7ee787] outline-none disabled:opacity-50"
+        class="min-w-0 flex-1 border-0 bg-transparent p-0 outline-none disabled:opacity-50"
+        style="color: {sc.fg}; caret-color: {sc.caret}"
         autocomplete="off"
         autocapitalize="off"
         spellcheck="false"
       />
-      {#if busy}<span class="shrink-0 text-[#d6deeb]/50">⏳</span>{/if}
+      {#if busy}<span class="shrink-0" style="color: {sc.fg}; opacity: 0.5">⏳</span>{/if}
     </div>
   </div>
 </div>

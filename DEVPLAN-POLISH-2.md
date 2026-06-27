@@ -41,11 +41,13 @@
 - [x] **E4 文件管理器排序 + 列表/网格视图**：`Files.svelte` items 用原序、只有网格。加 sortBy(name/type/size/mtime)+sortDir + grid/list 切换（list 显大小/属主权限）。可能需给 VNode 加 mtime。中成本、DOM 可验。
   - ✅ 实现（无需加 mtime——复用 VNode 既有 `updatedAt`）：`sortBy/sortDir/view` $state（每窗口内存）；`sortItems`（**文件夹恒在前、不乘 dir**；组内 name=localeCompare('zh') / type=扩展名+name 兜底 / size=`sizeOf`(binary n.size·文本 content.length·dir 0) / mtime=updatedAt，× dir）；`items` 非 aiHits 路径过 sortItems（AI 结果保相关性序不排）；排序/视图条（select 四选项 + 升降序按钮 + 网格/列表按钮高亮）；内容区**同一个 item 包裹 div 单一来源所有交互**、`{#if view==='grid'}…{:else}列表行(图标+名+大小+mtime+属主·权限+行尾悬停){/if}`；重命名输入抽 `{#snippet renameBox(cls)}` 两视图复用；list 列 hidden sm:block/md:block 窄窗渐次藏列。默认 name/asc 与 children() 原序字节一致。
   - ✅ 浏览器实测：默认 name asc=a,b,c；切 size(a=8,b=2,c=1)→asc c,b,a、升降序切→desc a,b,c；切列表视图行显大小列 8B/2B/1B；**list 下点击选中「已选 1 项」、双击打开 textedit**（共享 handler 两视图一致）；0 console error。supervisor 子 Agent PASS（文件夹恒前不受 dir/默认零回归连 locale 对齐/aiHits 不排/视图切换 handler 单一来源两视图一致/snippet 复用 autofocus 单值不冲突/list 响应式藏列+fmtSize·fmtMtime/sortBy·view 响应式/搜索·多选·复制粘贴·拖拽·撤销零回归/分层无环 八点全过）。npm check+build 0 错 0 警。
-- [ ] **E5 终端外观自定义（字号/配色主题）**：`Terminal.svelte` 颜色字号全硬编码。加终端偏好（持久）：字号 + 几套配色（Nord/Dracula/跟随系统）。中成本，与作者「高自由度」对齐。
+- [x] **E5 终端外观自定义（字号/配色主题）**：`Terminal.svelte` 颜色字号全硬编码。加终端偏好（持久）：字号 + 几套配色（Nord/Dracula/跟随系统）。中成本，与作者「高自由度」对齐。
+  - ✅ 实现：`shellPrefs` 加 `TERM_SCHEMES`（default/nord/dracula/solarized/light/**system**，各 bg/fg/in/err/caret，可填 hex 或 CSS var）+ `termPrefs` persisted(`qz.term`:{scheme,fontSize}) + `termScheme()`(回退[0])；system 方案用 `var(--color-qz-surface)` 等 → 换肤时终端跟着变。Terminal 去硬编码 class、改 `sc=$derived(termScheme())` 驱动 inline style（根 bg/fg/font-size、输出行 lineColor、prompt sc.in、input sc.fg+caret）；齿轮按钮 + 弹层（配色 select bind + 字号 −/＋ clamp 10–20，均 stopPropagation 不穿透聚焦）。多终端共享同一偏好（与 aliases/history 一致）。
+  - ✅ 浏览器实测：默认 bg #0c0d12/13px；齿轮开弹层；选 nord→bg rgb(46,52,64)、字号 ＋＋→15px；持久化 {nord,15} 且 reload 后仍 nord+15px；切 system→bg rgb(27,27,39)（var 解析自主题 surface，跟随换肤）；0 console error。supervisor 子 Agent PASS（sc 响应式/lineColor 三类/持久化+clamp/system var 解析跟随主题/齿轮·弹层 stopPropagation/命令·历史·Tab·Ctrl+L·qz-cv-row 等零回归/多终端共享/分层无环+回退不崩/light 可读 八点全过；仅 popover 无点外部关 + fontSize 读未夹紧属可接受 nicety）。npm check+build 0 错 0 警。
 - [ ] **E6 系统音效反馈**：全仓库零 Audio。新 `system/sound.ts` 用 WebAudio 合成开关窗/通知/错误短音 + Settings 开关音量（默认可关）。中成本，提升质感，音频本身 DOM 验不了（验 state+触发）。
 - [ ] **E7 任务视图 Exposé（窗口缩略图总览）**：第 1 轮 B13 注明延后。快捷键触发全屏 Exposé：未最小化窗 CSS scale 缩略平铺、点击聚焦。中/高成本，部分可验。
 - [ ] **E8 Dock 自动隐藏 + 桌面便签小组件**：Dock 常驻、桌面无小组件。加 Dock 自动隐藏开关（移到底部滑出）+ 可选桌面便签 widget。低/中成本，DOM 可验。
 
 ---
 
-> 当前循环：**D1–D5 + A3 全部完成（正确性全清）+ E1–E4 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E5–E8（纯功能/体验特性）**。下一项：E5 终端配色/字号 / E8 Dock 自动隐藏+桌面便签 / E6 系统音效 / E7 Exposé（按价值/成本）。
+> 当前循环：**D1–D5 + A3 正确性全清 + E1–E5 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E6–E8（纯功能/体验特性）**。下一项：E8 Dock 自动隐藏+桌面便签 / E6 系统音效 / E7 Exposé（按价值/成本）。
