@@ -15,6 +15,12 @@
   let lines = $state<Line[]>([
     { kind: 'out', text: 'QieZiOS qzsh —— 输入 help 看命令。Tab 补全，↑/↓ 翻历史。' },
   ]);
+  // 回卷上限：长会话/循环命令输出无限累积会撑大 DOM/内存 → 只保留最近 N 行。
+  // 配合每行 content-visibility（离屏行不渲染），终端在海量输出下仍流畅。
+  const MAX_LINES = 5000;
+  function trimScrollback() {
+    if (lines.length > MAX_LINES) lines = lines.slice(-MAX_LINES);
+  }
   let input = $state('');
   // 命令历史改用持久化共享存储（cmdHistory）→ 跨终端/刷新保留
   let histIdx = $state(-1); // -1 = 不在翻历史
@@ -77,6 +83,7 @@
         busy = false;
       }
     }
+    trimScrollback();
     scrollToEnd();
   }
 
@@ -146,7 +153,7 @@
   <div bind:this={scroller} class="flex-1 overflow-auto px-3 py-2">
     {#each lines as l, i (i)}
       <div
-        class="whitespace-pre-wrap break-words"
+        class="qz-cv-row whitespace-pre-wrap break-words"
         class:text-[#7ee787]={l.kind === 'in'}
         class:text-[#ff7b72]={l.kind === 'err'}
       >{l.text}</div>

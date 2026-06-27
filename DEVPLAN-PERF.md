@@ -15,7 +15,10 @@
 
 ## 二、渲染 / 丝滑
 
-- [ ] **P4 大列表虚拟化**：Files 网格、终端输出、SysMonitor 日志/事件——量大时只渲染可视区（窗口虚拟化思路落到列表）。
+- [x] **P4 长列表渲染优化**（content-visibility 版，非手写虚拟化）：终端输出、SysMonitor 日志/事件——量大时只渲染可视区。
+  - ✅ 实现：因终端行可变高度（whitespace-pre-wrap+多行文本）+ 无头预览验不了滚动几何，**不做手写虚拟化**，改用 CSS `content-visibility:auto`（浏览器自动跳过离屏行的布局/绘制，纯 CSS、不碰滚动逻辑、可访问性不受影响）。新增 `.qz-cv-row { content-visibility:auto; contain-intrinsic-size:auto 1.25rem }`（`auto` 关键字记住真实高度→滚动条估准）；终端输出行 + SysMonitor 日志/事件行各加该类。终端另加回卷上限 `MAX_LINES=5000` + `trimScrollback()`（防长会话 DOM 无限增长；输入行不带该类、始终真实渲染→滚到底正确）。
+  - ✅ 浏览器实测：终端输出行 computed `content-visibility:auto`+`contain-intrinsic-size:auto 20px`、echo 命令输出正常；SysMonitor 日志行/事件行 computed `content-visibility:auto`；0 console error。supervisor 子 Agent PASS（行级裁剪安全/输入行不带类+intrinsic 占位故 scrollToEnd 仍到底/可访问性非 display:none/回卷 slice(-5000) 逻辑+调用位置对/index-key+trim 收敛不错位不崩/清屏·Ctrl+L·Tab·profile push 零回归/intrinsic auto 标准用法/纯 CSS 无环 六点全过）。npm check+build 0 错 0 警。
+  - ⏳ 回卷上限（5000）需 ~2500 条命令才触发、无头难造 → 逻辑+supervisor 确认。Files 网格因 grid 轨道与 content-visibility intrinsic-size 交互更微妙，留待专门一轮。
 - [ ] **P5 信号/重渲染热点审计**：`vfs.children()` 每次 `Object.values+filter+sort`（O(n log n) 每调用、面包屑/resolvePath 高频调）等；高频 $derived 缓存；大对象 snapshot 成本。
 - [ ] **P6 不可见窗口 content-visibility**：最小化已暂停定时器，进一步对被遮挡/最小化窗口跳过布局/绘制（content-visibility:auto / 条件渲染）。
 
@@ -28,4 +31,4 @@
 
 ---
 
-> 当前循环：**P1、P7 已完成**（VFS 迁 IndexedDB 破天花板 + 存储用量仪表盘做尺子）。下一项候选：P4（大列表虚拟化，性能正餐）/ P5（vfs.children() 信号热点）/ P2（chat 迁 IDB）。
+> 当前循环：**P1、P7、P4 已完成**（VFS 迁 IndexedDB + 存储仪表盘 + 长列表 content-visibility）。下一项候选：P5（vfs.children() 信号热点，需专注、高 blast radius）/ P2（chat 迁 IDB）/ P6（不可见窗 content-visibility）。

@@ -42,6 +42,16 @@
   -webkit-backdrop-filter: blur(var(--qz-blur)) saturate(140%);
 }
 
+/* 长列表性能：让浏览器跳过渲染滚动视口外的行（content-visibility），
+   只为可见区做布局/绘制。contain-intrinsic-size 给离屏行一个占位高度（auto
+   关键字会记住上次真实高度 → 滚动条估算准、回滚不跳）。
+   用在终端输出、任务管理器日志/事件等可能很长的扁平列表的「每一行」上。
+   纯 CSS、无虚拟化 JS、不碰滚动逻辑 → 低风险、可达性不受影响（非 display:none）。 */
+.qz-cv-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1.25rem;
+}
+
 html,
 body {
   height: 100%;

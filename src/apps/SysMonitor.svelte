@@ -239,7 +239,7 @@
   {:else if tab === 'log'}
     <div bind:this={logScroller} class="min-h-0 flex-1 overflow-auto p-2 font-mono text-[11px] leading-relaxed">
       {#each klog.entries as e (e.seq)}
-        <div class="flex gap-2">
+        <div class="qz-cv-row flex gap-2">
           <span class="shrink-0 text-qz-muted/70 tabular-nums">{fmtTime(e.ts)}</span>
           <span class="shrink-0 text-qz-muted">[{e.source}]</span>
           <span class={levelCls[e.level]}>{e.msg}</span>
@@ -252,7 +252,7 @@
   {:else if tab === 'evt'}
     <div bind:this={evtScroller} class="min-h-0 flex-1 overflow-auto p-2 font-mono text-[11px] leading-relaxed">
       {#each eventLog.items as e (e.seq)}
-        <div class="flex gap-2">
+        <div class="qz-cv-row flex gap-2">
           <span class="shrink-0 text-qz-muted/70 tabular-nums">{fmtTime(e.ts)}</span>
           <span class="shrink-0 text-qz-accent">{e.event}</span>
           <span class="truncate text-qz-muted">{payloadStr(e.payload)}</span>
