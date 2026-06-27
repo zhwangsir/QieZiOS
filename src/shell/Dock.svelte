@@ -6,6 +6,7 @@
   import { viewport } from '../system/viewport.svelte';
   import { openMenu, type MenuItem } from './menu.svelte';
   import {
+    dockPrefs,
     sortDockApps,
     isPinned,
     pinApp,
@@ -24,6 +25,11 @@
   let hovered = $state<number | null>(null);
   // 正在拖拽重排的 appId（null = 没在拖）
   let dragId = $state<string | null>(null);
+
+  // 自动隐藏：平时滑出屏幕底，鼠标进底边热区或 Dock 才滑回。移动端不启用（用横滚 Dock）。
+  let revealed = $state(false);
+  const autohide = $derived(!!dockPrefs.autohide && !viewport.isMobile);
+  const hidden = $derived(autohide && !revealed && !dragId); // 拖拽重排时不收起
 
   // 离悬停点越近放得越大（macOS Dock 手感）
   function scaleFor(i: number): number {
@@ -60,6 +66,12 @@
       items.push({ label: '从 Dock 移除', icon: '📌', separator: true, onClick: () => unpinApp(app.id) });
     else
       items.push({ label: '固定到 Dock', icon: '📌', separator: true, onClick: () => pinApp(app.id) });
+    items.push({
+      label: dockPrefs.autohide ? '✓ 自动隐藏 Dock' : '自动隐藏 Dock',
+      icon: '⬇',
+      separator: true,
+      onClick: () => (dockPrefs.autohide = !dockPrefs.autohide),
+    });
     items.push({ label: '重置 Dock 布局', icon: '↺', onClick: resetDock });
     openMenu(e, items);
   }
@@ -80,14 +92,22 @@
   }
 </script>
 
+{#if autohide}
+  <!-- 底边热区：Dock 收起时移到这里把它唤出 -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-x-0 bottom-0 z-[9998] h-2" onpointerenter={() => (revealed = true)}></div>
+{/if}
+
 <div
-  class="absolute bottom-4 left-1/2 z-[9999] flex -translate-x-1/2 items-end gap-2 rounded-2xl border border-qz-border qz-glass px-3 py-2 shadow-2xl shadow-black/40"
+  class="absolute bottom-4 left-1/2 z-[9999] flex items-end gap-2 rounded-2xl border border-qz-border qz-glass px-3 py-2 shadow-2xl shadow-black/40"
   class:max-w-[94vw]={viewport.isMobile}
   class:overflow-x-auto={viewport.isMobile}
+  style="transform: translateX(-50%) translateY({hidden ? 'calc(100% + 1.5rem)' : '0'}); transition: transform 250ms var(--qz-ease);"
   role="toolbar"
   tabindex="-1"
   aria-label="程序坞"
-  onpointerleave={() => (hovered = null)}
+  onpointerenter={() => (revealed = true)}
+  onpointerleave={() => { hovered = null; if (autohide) revealed = false; }}
 >
   {#each apps as app, i (app.id)}
     <button

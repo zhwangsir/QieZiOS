@@ -8,9 +8,10 @@ import { persisted } from '../kernel/persist.svelte';
 interface DockPrefs {
   order: string[];   // 自定义排序的 appId 顺序；不在表里的排到后面（保持默认相对顺序）
   hidden: string[];  // 从 Dock 取消固定（移除）的 appId
+  autohide: boolean; // 自动隐藏：平时滑出屏幕底部，鼠标移到底边才滑回
 }
 
-export const dockPrefs = persisted<DockPrefs>('qz.dock', { order: [], hidden: [] });
+export const dockPrefs = persisted<DockPrefs>('qz.dock', { order: [], hidden: [], autohide: false });
 
 // 把传入的 App 列表按 order 排序 + 过滤掉 hidden。
 // 运行中的 App 即使被取消固定也保留（圆点可见、可点回原窗）—— 和 macOS 一致。

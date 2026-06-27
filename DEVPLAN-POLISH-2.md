@@ -46,8 +46,12 @@
   - ✅ 浏览器实测：默认 bg #0c0d12/13px；齿轮开弹层；选 nord→bg rgb(46,52,64)、字号 ＋＋→15px；持久化 {nord,15} 且 reload 后仍 nord+15px；切 system→bg rgb(27,27,39)（var 解析自主题 surface，跟随换肤）；0 console error。supervisor 子 Agent PASS（sc 响应式/lineColor 三类/持久化+clamp/system var 解析跟随主题/齿轮·弹层 stopPropagation/命令·历史·Tab·Ctrl+L·qz-cv-row 等零回归/多终端共享/分层无环+回退不崩/light 可读 八点全过；仅 popover 无点外部关 + fontSize 读未夹紧属可接受 nicety）。npm check+build 0 错 0 警。
 - [ ] **E6 系统音效反馈**：全仓库零 Audio。新 `system/sound.ts` 用 WebAudio 合成开关窗/通知/错误短音 + Settings 开关音量（默认可关）。中成本，提升质感，音频本身 DOM 验不了（验 state+触发）。
 - [ ] **E7 任务视图 Exposé（窗口缩略图总览）**：第 1 轮 B13 注明延后。快捷键触发全屏 Exposé：未最小化窗 CSS scale 缩略平铺、点击聚焦。中/高成本，部分可验。
-- [ ] **E8 Dock 自动隐藏 + 桌面便签小组件**：Dock 常驻、桌面无小组件。加 Dock 自动隐藏开关（移到底部滑出）+ 可选桌面便签 widget。低/中成本，DOM 可验。
+- [x] **E8 Dock 自动隐藏**（桌面便签拆 E8b）：Dock 常驻。加自动隐藏开关（平时滑出屏幕底、鼠标移到底边热区或 Dock 才滑回）。
+  - ✅ 实现：`dockPrefs` 加 `autohide` 字段（持久 `qz.dock`、不进 settings 主题白名单、随账号同步，与 B9 一致）；Dock 右键菜单加「自动隐藏 Dock」开关（✓ 表状态）；`autohide=$derived(dockPrefs.autohide && !viewport.isMobile)`（移动端不启用——Dock 是移动端主导航/横滚）、`hidden=$derived(autohide && !revealed && !dragId)`（拖拽重排时不收起）；Dock 条 inline `transform: translateX(-50%) translateY(hidden?calc(100%+1.5rem):0)`（**inline 含 -50% 保居中**，替原 `-translate-x-1/2` 类）+ transition；`{#if autohide}` 渲染底边 8px 热区（pointerenter→revealed）+ Dock onpointerenter/leave 切 revealed。
+  - ✅ 浏览器实测：菜单有「自动隐藏 Dock」开关、点击翻转并持久化 `qz.dock.autohide=true`；headless(innerWidth=0→isMobile=true) 下守卫正确保持 Dock 可见（mobile 不隐藏）；0 console error。supervisor 子 Agent PASS（hidden 真值表/热区→Dock 衔接无闪烁震荡/**transform 合并保居中**+图标 scale 独立/isMobile 守卫/拖拽 `!dragId` 不中途滑走/持久化默认 false 旧数据不崩/热区仅 autohide 时渲染+pointerenter-only 不吞点击/autohide 关字节级零回归/响应式分层 八点全过）。
+  - ⏳ 桌面端滑出/唤出的视觉因无头预览 0 宽=mobile（autohide 被守卫关）无法验 → **待真机验证**（逻辑已 supervisor 核过、无振荡不动点）。npm check+build 0 错 0 警。
+- [ ] **E8b 桌面便签小组件**（从 E8 拆出）：桌面可放持久化便签 widget（可拖、可编辑）。中成本、DOM 可验。
 
 ---
 
-> 当前循环：**D1–D5 + A3 正确性全清 + E1–E5 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E6–E8（纯功能/体验特性）**。下一项：E8 Dock 自动隐藏+桌面便签 / E6 系统音效 / E7 Exposé（按价值/成本）。
+> 当前循环：**D1–D5 + A3 正确性全清 + E1–E5 + E8(Dock 自动隐藏) 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E6 音效 / E7 Exposé / E8b 桌面便签**。下一项：E6 系统音效（质感）/ E8b 便签 / E7 Exposé（按价值/成本）。
