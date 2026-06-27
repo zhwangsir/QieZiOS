@@ -90,6 +90,46 @@
     aiLabel = '';
   }
 
+  // ── 导出/另存到本机（G7：打通 VFS→本机出口）──────────────────────────
+  function esc(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function downloadBlob(filename: string, blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000); // 留点时间让浏览器接管下载再回收
+  }
+  // asHtml=true：把 Markdown 渲染成可独立打开的 HTML 文档（复用 renderMarkdown 安全渲染器）；
+  // 否则导出原始文本（.md→text/markdown，其余→text/plain）。文件名沿用 VFS 节点名。
+  function exportFile(asHtml: boolean) {
+    if (!node) return;
+    const content = node.content ?? '';
+    if (asHtml) {
+      const baseName = node.name.replace(/\.(md|markdown)$/i, '');
+      const doc = `<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${esc(baseName)}</title>
+<style>body{max-width:720px;margin:2rem auto;padding:0 1rem;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.7;color:#1b1b26}.font-semibold{font-weight:600;font-size:1.2em;margin:1em 0 .3em}.pl-3{padding-left:1.25rem}pre{background:#f4f5fa;padding:.75rem;border-radius:8px;overflow:auto;font-size:.9em}code{background:#f1f1f5;padding:.1em .35em;border-radius:4px;font-family:ui-monospace,Consolas,monospace}pre code{background:none;padding:0}a{color:#6d28d9}.underline{text-decoration:underline}</style>
+</head>
+<body>
+${renderMarkdown(content)}
+</body>
+</html>`;
+      downloadBlob(baseName + '.html', new Blob([doc], { type: 'text/html;charset=utf-8' }));
+    } else {
+      const type = (isMarkdown ? 'text/markdown' : 'text/plain') + ';charset=utf-8';
+      downloadBlob(node.name, new Blob([content], { type }));
+    }
+  }
+
   // ── 查找/替换（Ctrl+F 唤起）+ 行/字符统计 ──────────────────────────────
   let textarea = $state<HTMLTextAreaElement>();
   let findInput = $state<HTMLInputElement>();
@@ -191,11 +231,11 @@
 {#if node}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="flex h-full flex-col" onkeydown={onKey}>
-    <!-- Markdown 工具条：编辑/预览切换（仅 .md/.markdown 文件） -->
-    {#if isMarkdown}
-      <div class="flex shrink-0 items-center gap-2 border-b border-qz-border px-2 py-1.5">
-        <span class="text-[11px] text-qz-muted">📝 Markdown</span>
-        <div class="flex overflow-hidden rounded text-[11px] ring-1 ring-qz-border">
+    <!-- 顶部工具条（常驻）：Markdown 编辑/预览切换（仅 md） + 导出到本机 -->
+    <div class="flex shrink-0 items-center gap-2 border-b border-qz-border px-2 py-1.5 text-[11px]">
+      {#if isMarkdown}
+        <span class="shrink-0 text-qz-muted">📝 Markdown</span>
+        <div class="flex shrink-0 overflow-hidden rounded ring-1 ring-qz-border">
           <button
             class="px-2 py-0.5 transition"
             class:bg-qz-accent={!preview}
@@ -209,8 +249,22 @@
             class:hover:bg-qz-elevated={!preview}
             onclick={() => (preview = true)}>预览</button>
         </div>
+      {:else}
+        <span class="min-w-0 flex-1 truncate text-qz-muted">{node.name}</span>
+      {/if}
+      <div class="ml-auto flex shrink-0 items-center gap-1">
+        <button
+          class="rounded bg-qz-elevated px-2 py-1 transition hover:brightness-110"
+          title="导出到本机"
+          onclick={() => exportFile(false)}>⬇ 导出</button>
+        {#if isMarkdown}
+          <button
+            class="rounded bg-qz-elevated px-2 py-1 transition hover:brightness-110"
+            title="导出为 HTML 文档"
+            onclick={() => exportFile(true)}>HTML</button>
+        {/if}
       </div>
-    {/if}
+    </div>
 
     <!-- AI 动作条（配了 key 才显示） -->
     {#if hasKey}

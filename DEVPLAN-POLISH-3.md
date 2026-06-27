@@ -33,11 +33,13 @@
 - [x] **G5 字体族自定义（主题新维度）**：`Settings` 无 fontFamily、`theme` 无 `--qz-font`。加 fontFamily 字段（系统/无衬线/衬线/等宽/圆体）+ token + Settings select。⭐ 对齐作者第一优先级（美观/自由度），机制已就绪成本低。
   - ✅ 实现：`settings` 加 `fontFamily`（默认 'system'，自动进 SETTINGS_KEYS 随主题导出/同步）+ `FONT_FAMILIES`（5 个，栈锚定通用族 sans/serif/monospace + 中文回退 PingFang/雅黑/宋体）+ `fontStack(id)`（回退[0]）；`theme.activeTokens()` 加 `--qz-font`；`app.css` body `font-family: var(--qz-font, 原栈兜底)`；Settings 界面缩放下加字体 select。换字体走 token 0 组件重渲染。
   - ✅ 浏览器实测：默认 --qz-font 含 system-ui、body 解析自 token；select 选 serif→Georgia/serif、mono→monospace；持久化 qz.settings.fontFamily='mono'；5 项渲染；0 console error。supervisor 子 Agent PASS（select→token→body 链/font-mono 终端等显式字体不受影响/token 机制一致 0 重渲染+var 兜底/白名单随预设·同步+旧数据合并默认/字体栈通用族结尾有可见差异/radius·blur 等零回归/分层无环/未知值回退+fontScale 正交 八点全过）。npm check+build 0 错 0 警。
-- [ ] **G7 记事本导出/另存下载**：TextEdit 只能存进 VFS、无法导出到本机。工具栏加「⬇ 导出」（Blob+`<a download>`，.md 可选导出 HTML 复用 renderMarkdown）。单文件。打通「VFS→本机」出口。
+- [x] **G7 记事本导出/另存下载**：TextEdit 只能存进 VFS、无法导出到本机。工具栏加「⬇ 导出」（Blob+`<a download>`，.md 可选导出 HTML 复用 renderMarkdown）。单文件。打通「VFS→本机」出口。
+  - ✅ 实现：常驻顶部工具条（把原 Markdown 编辑/预览切换并入，非 md 显文件名）右侧加「⬇ 导出」(始终) + 「HTML」(仅 md)。`exportFile(asHtml)`：原始导出 = Blob(node.content，.md→text/markdown 其余→text/plain)、文件名=节点名；HTML 导出 = `renderMarkdown` 渲染包进 `<!doctype html>` 完整文档（内联 `<style>` 映射 renderMarkdown 用的 Tailwind 类 .font-semibold/.pl-3/.underline + pre/code 标签样式 → 脱离 app 独立打开也排版正常）、文件名=去 md 后缀+`.html`、`<title>` 经 `esc()` 转义。`downloadBlob` 标准 `<a download>` 点击 + 1000ms 后 revoke 防泄漏。导出不门控 writable（只读文件也能导出）。
+  - ✅ 浏览器实测（patch `URL.createObjectURL`+anchor.click 捕获、不真下载）：md 文件导出 → 原始 blob 名 `g7-export-test.md`、mime text/markdown、内容**逐字相等**；HTML blob 名 `.html`、mime text/html、`<!doctype html>` 开头、`<title>` 转义、正文含渲染的 `<strong>bold</strong>`、`&` 转义成 `&amp;`、链接带 target/rel。0 console error。supervisor 子 Agent PASS（工具条重构 md 切换零回归+非 md 显名+导出两态都在、XSS 安全[renderMarkdown 先转义+title esc+download 属性赋值非解析]、download 无泄漏/双free、空文件/无扩展名/二进制/只读边界、内联 style 类映射正确、a11y/无环、check+build 0/0 六点全过）。npm check+build 0 错 0 警。
 - [ ] **G3 计算器科学模式**：加 标准/科学 切换（√/x²/1/x/π/括号/sin·cos·log/内存键），受控 parser 非 eval。单文件。
 - [ ] **G4 媒体（音视频）查看器**：上传二进制已支持但只能看图。新 `apps/MediaViewer.svelte`（`<audio>`/`<video>` + readBlob objectURL）+ Files 双击按 mime 分流 + appList 登记。
 - [ ] **G6 截图工具**：`getDisplayMedia`→canvas→存 VFS+下载。中成本、画面无头难验。
 
 ---
 
-> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G2、G5 已完成**（正确性 F 全清）。剩 G3/G4/G6/G7（功能）。下一项：G7（记事本导出下载，单文件低成本，打通 VFS→本机出口）/ G3（科学计算器）/ G4（媒体查看器）。
+> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G2、G5、G7 已完成**（正确性 F 全清）。剩 G3/G4/G6（功能）。下一项：G3（计算器科学模式，单文件，受控 parser）/ G4（媒体音视频查看器）/ G6（截图工具，画面无头难验）。
