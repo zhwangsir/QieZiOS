@@ -22,7 +22,10 @@
 - [x] **D5 `iconPos`/`dockPrefs` 持久化映射只增不删（陈旧+泄漏）**：`purge` 删 VFS 节点不删 `qz.desktopIcons` 里它的 {x,y}；`removeUserApp` 不删 `dockPrefs.order/hidden` 里该 App id。长期堆积孤儿项（且随账号同步上云）。修：iconPos GC + removeUserApp 裁 dockPrefs。P2，浏览器可验。
   - ✅ 实现：(a) `dockPrefs.forgetDockApp(id)`（order/hidden 各 filter 掉 id，含 includes 守卫避免无谓写）+ `removeUserApp` 末尾调它（卸载用户 App 清 Dock 死引用）。(b) iconPos GC 放 **DesktopIcons 组件**（关键：iconPos 同步 localStorage 启动即有真值、vfs 是 persistedAsync 异步水合 → GC 必须等 vfs 水合后跑，否则把「IDB 还没读回」的有效图标误删；组件在 main.ts `await hydrateAll()` 之后才挂载 → 天然 post-hydrate）：`$effect` 读 `Object.keys(vfs.nodes)` 订阅节点增删、`untrack` 包住读写 iconPos.pos（不自触发、只在节点增删时跑）、删 `!valid.has(id)` 的孤儿 pos（节点真不存在才删，移进文件夹/回收站的节点 id 仍在 vfs.nodes 故保留）。
   - ✅ 浏览器实测：localStorage 种入 `{realId:{x,y}, 'd5-orphan-xyz':{x,y}}` → reload（post-hydrate GC）→ **orphan 被删、realId 保留**；0 console error（userApps→dockPrefs 新 import 无 TDZ/环）。dockPrefs.forgetDockApp 为纯 filter+守卫、逻辑平凡，按逻辑+supervisor 确认（removeUserApp 不在测试钩子上）。supervisor 子 Agent PASS（GC 时机推理成立+放模块级会 pre-hydrate 误删/untrack 无限循环规避+写回仍通知 persist 与模板/只删真不存在的不误删移动项/forgetDockApp 守卫/removeUserApp 接入不回归/apps→system·shell→kernel 无环/同步上传瘦身干净 八点全过）。npm check+build 0 错 0 警。
-- [ ] **A3（承接第 1 轮唯一未做项）过期一次性 `at` 命令开机补发执行**：schedd 重新武装时过期任务 `delay=0` 立即 fire，命令型经 shell 跑（可能 rm/mkdir 等副作用），与真 `at`（过期不补）相反。修：重新武装时过期的**命令型**一次性任务只移除不执行；提醒型可保留补发通知或也丢弃。文件：`system/services.ts`。P1，浏览器可验。
+- [x] **A3（承接第 1 轮唯一未做项）过期一次性 `at` 命令开机补发执行**：schedd 重新武装时过期任务 `delay=0` 立即 fire，命令型经 shell 跑（可能 rm/mkdir 等副作用），与真 `at`（过期不补）相反。修：重新武装时过期的**命令型**一次性任务只移除不执行；提醒型可保留补发通知或也丢弃。文件：`system/services.ts`。P1，浏览器可验。
+  - ✅ 实现：`arm(s, boot=false)`；`else if(s.fireAt)` 开头加 `if(boot && s.command && s.fireAt<=Date.now()){ emit('notify','⏰ 跳过已过期命令') + removeSchedule + return }` —— **开机时过期命令型只移除+通知、绝不 runScheduled**；提醒型（无 command）仍走原路径补发一次通知（非破坏、提示「错过了」有用）；未来任务正常武装；recurring 在前一分支不受影响。开机循环改 `for (const s of [...schedules.items]) arm(s, true)`（迭代副本：过期命令现同步 removeSchedule 改原数组会漏项）。运行时 `sched.add` 保持 boot=false（用户当下显式 add 即便过期也照常）。
+  - ✅ 浏览器实测（种 localStorage qz.schedules 后 reload）：过期命令 `mkdir /a3-ghost`→**/a3-ghost 不存在（命令没跑）** + 弹「⏰ 跳过已过期命令」；过期提醒→补发「a3 reminder」通知；未来命令 a3-future→仍 armed 留在 schedules；过期两项都移除（remainingSchedIds=['a3-future']）；0 console error。supervisor 子 Agent PASS（命令型 boot 早 return 不跑 shell/提醒型补发保留/未来正常武装/recurring 不受影响/迭代副本不漏项/运行时 add 语义/drop 不进 timers 无悬挂/notify warn 合理/边界 fireAt==now·空 command·畸形日程/分层无新 import 无回归/持久化无竞态 八点全过）。npm check+build 0 错 0 警。
+  - 🎉 **至此 DEVPLAN-POLISH-2 的正确性全清**（D1–D5 + A3 全 ✅，含承接自第 1 轮的 A3）。剩 E5–E8 功能 + 性能阶段 P5/P6/P3。
 
 ## 二、P1 · 功能 / 体验完善（价值/成本比排序）
 
@@ -45,4 +48,4 @@
 
 ---
 
-> 当前循环：**D1、D3、E1、D2、E2、D4、E3、D5、E4 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 A3（correctness，第 1 轮承接的最后一项）+ E5–E8（功能）。下一项按协议：候选 A3 过期 at 补发（correctness，宜交替）/ E5 终端配色 / E8 Dock 自动隐藏。
+> 当前循环：**D1–D5 + A3 全部完成（正确性全清）+ E1–E4 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 **E5–E8（纯功能/体验特性）**。下一项：E5 终端配色/字号 / E8 Dock 自动隐藏+桌面便签 / E6 系统音效 / E7 Exposé（按价值/成本）。

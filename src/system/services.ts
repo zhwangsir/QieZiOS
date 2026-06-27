@@ -64,11 +64,19 @@ registerService({
       }
       emit('notify', { title: s.title || '提醒', body: s.body, level: 'info' });
     };
-    const arm = (s: Schedule) => {
+    const arm = (s: Schedule, boot = false) => {
       if (timers.has(s.id)) return;
       if (s.every && s.every > 0) {
         timers.set(s.id, setInterval(() => fire(s), Math.max(1000, s.every)));
       } else if (s.fireAt) {
+        // 开机重新武装时，过期的「命令型」一次性任务只移除不执行 —— 否则刷新/隔天打开系统会
+        // 把早该跑的 `at <命令>` 立刻重跑（可能是 rm 等破坏性副作用，用户已不在预期场景）。
+        // 对命令取保守策略（过期不补）；提醒型仍照常补发一次通知（非破坏性、提示「你错过了」有用）。
+        if (boot && s.command && s.fireAt <= Date.now()) {
+          emit('notify', { title: '⏰ 跳过已过期命令', body: s.command, level: 'warn' });
+          removeSchedule(s.id);
+          return;
+        }
         const delay = Math.max(0, Math.min(s.fireAt - Date.now(), 2_000_000_000)); // setTimeout 上限
         timers.set(
           s.id,
@@ -88,9 +96,11 @@ registerService({
         timers.delete(id);
       }
     };
-    for (const s of schedules.items) arm(s);
+    // 开机重新武装（boot=true）：迭代副本——过期命令型会同步 removeSchedule、改原数组会漏项。
+    for (const s of [...schedules.items]) arm(s, true);
     const offs = [
-      on('sched.add', (p) => arm(p as Schedule)),
+      on('sched.add', (p) => arm(p as Schedule)), // 运行时新增 boot=false：用户当下显式加的（即便 +0s）照常执行
+
       on('sched.cancel', (p) => disarm((p as { id: string }).id)),
     ];
     return () => {

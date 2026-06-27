@@ -23,7 +23,8 @@
 - [x] **A2 `persisted` 每次字段变更都全量 `JSON.stringify`+snapshot**（`kernel/persist.svelte.ts:54`，在 effect 体内、只有写盘防抖）→ TextEdit 打字时每键序列化整棵 VFS，大文件卡顿。修：effect 体内只做轻量 deepRead 订阅，把 snapshot+stringify 移进防抖回调。⚠️ 核心 helper，务必验证「所有 persisted 仍正确订阅+持久化（含键增删）」。
   - ✅ 实现（低风险版）：`$state.snapshot` **保留在 effect 体内**（深读维持订阅，与改前字节级等价、零数据丢失风险），只把更重的 `serialize + JSON.stringify` 推迟进防抖 setTimeout 回调。高频变更（逐字输入）每键只做一次轻量 snapshot（对象图克隆、字符串按引用复用），停手 debounceMs 后才序列化一次整棵树——而序列化开销 ∝ 内容大小，是大文件时的主要瓶颈。（未采用 deepRead 替换 snapshot 的激进版，避免动订阅那一步的风险。）
   - ✅ 浏览器实测：VFS 建/写防抖后落盘（120ms 前没、250/500ms 后有）、chat 序列化路径仍剥图留 imageCount、快速三连写只末值落盘、rm→trash 持久化、刷新各存储正常加载。supervisor 子 Agent PASS（订阅字节级不变/闭包捕获无陈旧无饥饿/serialize 纯函数/异常 locus 非回归/debounce 语义不变）。npm check+build 0 错 0 警。
-- [ ] **A3 过期一次性 `at` 命令开机并发补发执行**：schedd 重新武装时 `Math.max(0,delay)` 让过期任务立即 fire，命令型会经 shell 执行 → 刷新后批量跑过期命令（与真 `at` 过期不补相反，可能 rm 等意外副作用）。修：重新武装时过期的命令型一次性任务只移除不执行（提醒型可保留补发通知或也丢弃）。文件：`system/services.ts`。
+- [x] **A3 过期一次性 `at` 命令开机并发补发执行**：schedd 重新武装时 `Math.max(0,delay)` 让过期任务立即 fire，命令型会经 shell 执行 → 刷新后批量跑过期命令（与真 `at` 过期不补相反，可能 rm 等意外副作用）。修：重新武装时过期的命令型一次性任务只移除不执行（提醒型可保留补发通知或也丢弃）。文件：`system/services.ts`。
+  - ✅ 在第 2 轮（[[DEVPLAN-POLISH-2]] A3）完成：`arm(s, boot)` 开机时过期命令型只移除+「⏰ 跳过已过期命令」通知、绝不跑 shell；提醒型仍补发；迭代副本防漏项。实测过期 `mkdir` 不执行、未来任务仍 armed。supervisor PASS、check+build 0/0。**至此第 1 轮 DEVPLAN-POLISH 也彻底全 `[x]`（A1–A9 + B + C + A3）。**
 - [x] **A4 `bgPromises` Map 只增不删（后台作业泄漏）**：`lib/shell.ts` 每个 `cmd &` 的 promise 永久留存（含完整结果串），`jobs.list` 封顶 30 但 bgPromises 无清理。修：作业完成后裁剪 bgPromises（与 jobs.list 同步/保留最近 N）。
   - ✅ 实现：`backgroundRun` 在 addJob 后裁剪——`live = new Set(jobs.list.map(j=>j.n))`，删掉 bgPromises 里不在 live 的键。jobs.list 已封顶 30 → bgPromises ⊆ jobs.list（≤30），长会话不再无限涨。prune 在 set(新 job) 之前、新 job.n 已在 live 不会误删。
   - ✅ 实测：`echo x &`→[1]、`fg`→显示输出（prune 不破坏 fg/wait，它们只认 jobs.list 内作业）。supervisor 子 Agent PASS（Map 迭代中删除安全/新作业不误删/fg·wait 不受影响/无回归）。npm check+build 0 错 0 警。
