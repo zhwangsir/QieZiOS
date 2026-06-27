@@ -25,7 +25,9 @@
 - [x] **E1 Markdown 预览（`.md` 文件可切「编辑/预览」）**：`lib/markdown.ts` 已有 `renderMarkdown()`（AI 回复在用），TextEdit 打开 .md 只显原文。加「编辑/预览」切换 + `{@html renderMarkdown(content)}`。单文件、复用现成、DOM 可验。**成本低、价值高、推荐优先。**
   - ✅ 实现：TextEdit 加 `isMarkdown = $derived(/\.(md|markdown)$/i.test(node.name))` + `preview = $state(false)`；仅 markdown 文件显顶部「📝 Markdown · 编辑/预览」分段切换条；正文区 `{#if isMarkdown && preview}` 渲染只读 `<div>{@html renderMarkdown(content)}</div>`（空内容显占位）`{:else}` 原 textarea；Ctrl+F 分支加 `preview=false`（查找/替换作用于 textarea，先切回编辑）。复用 AI 回复同款安全渲染器（先转义再套白名单标签 → 无 XSS）。
   - ✅ 浏览器实测（真 dev 服务，隔离掉 session 还原的旧窗口后）：`.md` 显工具条、`.txt` 不显（toolbar=0）；预览态 textarea 消失、渲染出 `<strong>`/`<code>`/`<pre>`/`<a href>`/标题 `div.font-semibold`/列表项全部正确；切「编辑」textarea 带内容回来；预览态 Ctrl+F → 切回编辑 + 查找条打开 + focus。0 console error。supervisor 子 Agent PASS（renderMarkdown 先 escapeHtml 再白名单标签、链接 URL 被 https?:// 约束死无 javascript:/突破面 → 无 XSS；isMarkdown/preview 切换响应式正确、AI 写回实时重渲染；预览态 textarea ref=undefined 但 gotoMatch/replaceCurrent/onKey 全有 null 守卫且查找只能经先 preview=false 的 Ctrl+F 唤起；非 md 字节级零回归；只读文件协同；空 md 占位/大小写扩展名/叶子 import 无环 八点全过）。npm check+build 0 错 0 警。
-- [ ] **E2 图片查看器缩放/旋转/适应窗口**：`ImageViewer.svelte` 只有 object-contain，无缩放旋转。加 scale/rotate $state + 工具栏 + 滚轮缩放 + 拖拽平移（纯 CSS transform 走 GPU）。单文件、DOM 可验、契合丝滑。
+- [x] **E2 图片查看器缩放/旋转/适应窗口**：`ImageViewer.svelte` 只有 object-contain，无缩放旋转。加 scale/rotate $state + 工具栏 + 滚轮缩放 + 拖拽平移（纯 CSS transform 走 GPU）。单文件、DOM 可验、契合丝滑。
+  - ✅ 实现：`scale/rot/tx/ty` $state 驱动单条 `transform: translate() scale() rotate()`（GPU 合成）；`zoom`(clamp 0.1–8)/`rotate`(归一化 0–359)/`reset`；工具条（缩小/百分比[点=适应]/放大/逆时针/顺时针/适应+文件名，status==='ok' 才显）；查看区 overflow-hidden 当平移画布——滚轮缩放(preventDefault)、指针拖拽平移(setPointerCapture+dragging 关 transition 跟手)、键盘(+/-/0/r，tabindex)；换图 $effect→reset；保留原 blob→objectURL 加载+revoke 清理。
+  - ✅ 浏览器实测（真 dev 服务 + 合成 PNG）：开图工具条全在、初始 `scale(1) rotate(0) translate(0,0)`；放大×2→144%、顺时针×2→rotate(180deg)、滚轮上→110%、拖拽 (100,100)→(140,120)→`translate(40px,20px)`、适应→复位 100%；0 console error。supervisor 子 Agent PASS（objectURL 生命周期不回归+两 effect 写不相交无竞争/transform 顺序+origin+clamp+归一化对/平移 capture 可选链+try-catch 安全/滚轮 preventDefault/键盘不挡 Esc 关窗+Shift 反向/inline style 只 patch 不重建 img/边界 status≠ok 无害/分层无环+a11y ignore 合理 八点全过；中心缩放无 cursor 锚点、无平移夹紧均属可接受设计取舍）。npm check+build 0 错 0 警。
 - [ ] **E3 计算器键盘输入 + 历史**：`Calculator.svelte` 只有 onclick，无键盘。加 `<svelte:window>` keydown（数字/运算符/Enter=`=`/Esc=C/Backspace）+ 计算历史侧栏。单文件、DOM 可验。
 - [ ] **E4 文件管理器排序 + 列表/网格视图**：`Files.svelte` items 用原序、只有网格。加 sortBy(name/type/size/mtime)+sortDir + grid/list 切换（list 显大小/属主权限）。可能需给 VNode 加 mtime。中成本、DOM 可验。
 - [ ] **E5 终端外观自定义（字号/配色主题）**：`Terminal.svelte` 颜色字号全硬编码。加终端偏好（持久）：字号 + 几套配色（Nord/Dracula/跟随系统）。中成本，与作者「高自由度」对齐。
@@ -35,4 +37,4 @@
 
 ---
 
-> 当前循环：**D1、D3、E1、D2 已完成**（+ 另起的性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 D4/D5/A3（correctness）+ E2–E8（功能）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 E2 图片缩放旋转（可视特性，宜交替）/ D4 父链遍历守卫（correctness）/ D5 持久化映射裁剪。
+> 当前循环：**D1、D3、E1、D2、E2 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 D4/D5/A3（correctness）+ E3–E8（功能）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 D4 父链遍历守卫（correctness，宜交替）/ E3 计算器键盘+历史 / D5 持久化映射裁剪。
