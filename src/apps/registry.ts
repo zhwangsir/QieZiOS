@@ -19,6 +19,7 @@ import Companion from './Companion.svelte';
 import SysMonitor from './SysMonitor.svelte';
 import Clipboard from './Clipboard.svelte';
 import Reminders from './Reminders.svelte';
+import Screenshot from './Screenshot.svelte';
 import WebAppGallery from './WebAppGallery.svelte';
 import WebView from './WebView.svelte';
 
@@ -45,6 +46,7 @@ const components: Record<string, Component> = {
   sysmon: SysMonitor,
   clipboard: Clipboard,
   reminders: Reminders,
+  screenshot: Screenshot,
   webapps: WebAppGallery,
   settings: Settings,
   textedit: TextEdit,
