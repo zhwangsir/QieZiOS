@@ -16,7 +16,9 @@
 - [x] **D3 `restoreFromTrash` 撤销还原不查重名（同 A7/A9 类）**：`kernel/vfs.svelte.ts` restore 把节点放回 prevParent 时不查同名。删 a.txt → 新建同名 a.txt → 点撤销 → 同目录两个 a.txt 并存、路径只命中第一个。修：restore 落地前 `n.name = uniqueName(target, n.name)`（镜像 move）。P1，浏览器可验。
   - ✅ 实现：`restoreFromTrash` 先算 `target`（prevParent 在则用、否则 root），再 `n.name = uniqueName(target, n.name)` 然后才 `n.parentId = target`——此刻 n 仍在 'trash'，children(target) 不含 n，故只对目标已有名去重、不误改自己（与 move 的 A7 时机一致）。补齐 A7(move)/A9(rename)/D3(restore) 数据完整性三件套。顺带扩展 DEV 钩子 `__qzVfs`（仅 DEV）加 createFile/createDir/trash/restoreFromTrash/purge/resolvePath/pathOf/nodes 供测试。
   - ✅ 浏览器实测（真 dev 服务 + `__qzVfs`）：删 d3.txt → 新建同名 d3.txt → 还原 → 还原项变「d3 2.txt」、新建项仍「d3.txt」、两者 parentId=root、名字唯一、**两条路径各自 resolvePath 回到自己 id（都可达，修复前另一个永久不可达）**；无冲突还原 d3-solo.txt 名不变（不误改）；文件夹 d3dir 碰撞还原→「d3dir 2」且子项仍 linked（按 id 关联不受改名影响）；trash→restore→trash 循环 prevParent 清理自洽。supervisor 子 Agent PASS（去重时机/无冲突不改/文件夹子项可达/顺序去重/prevParent 清理/B16·Trash 调用方良性改进/DEV 钩子全 DEV-only 且函数声明无 TDZ/纯内核无环 八点全过）。npm check+build 0 错 0 警。
-- [ ] **D4 VFS 父链遍历遇环死循环（无 visited/深度上限）**：`isInside`/`pathSegments`/`resolvePath` 的 `..` 走 `while(cur)` 跟 parentId，若持久化树/外部 sync blob 含父环（A↦B↦A）→ 无限循环挂死标签页、无恢复。修：三处遍历加深度上限或 visited 集。P2，需损坏态触发但 sync 使其可达，逻辑可验。
+- [x] **D4 VFS 父链遍历遇环死循环（无 visited/深度上限）**：`isInside`/`pathSegments`/`resolvePath` 的 `..` 走 `while(cur)` 跟 parentId，若持久化树/外部 sync blob 含父环（A↦B↦A）→ 无限循环挂死标签页、无恢复。修：三处遍历加深度上限或 visited 集。P2，需损坏态触发但 sync 使其可达，逻辑可验。
+  - ✅ 实现：`isInside`（while 跟 parentId）+ `pathSegments`（while 跟 parentId）各加 `visited Set`（遇重复节点 break/停，正常无环时行为字节级等价、仅环时兜底）；顺带 `purge` 也加 `seen`（children 递归删，A↔B 环会无限递归栈溢出崩溃 → 可选参数默认 new Set、顶层每调用一份、递归传同一份，第二次遇 A 被挡）。`resolvePath` 的 `..` 实查为**本就有界**（for over `p.split('/')` 有限、每个 `..` 只上跳一步、不 while-follow）→ 无环风险、未改。
+  - ✅ 浏览器实测（注入父环 A↔B）：`pathOf(A)` 返回 `/cycA` **0.00ms 终止不挂**；`purge(A)` 'ok' **0.10ms 不栈溢出**、A/B 都删；正常树 `pathOf(/d4dir/sub)`=`/d4dir/sub`、leaf 全路径正确、`purge(d4dir)` 递归删整子树（dir/sub/leaf 全 gone）；0 console error。supervisor 子 Agent PASS（isInside 正常字节等价+return 判断仍最先+环 break 返 false 保守不挂/pathSegments 无环顺序不变+环停部分/purge 可选参数不破坏 emptyTrash·Trash·DEV 三调用方+后序删除语义不变+正常树每节点访问一次不漏删/blob 清理不漏不重/resolvePath 有界不需守/move·copyNode 真环拦截仍有效/分层无环 visited 开销可忽略 七点全过）。npm check+build 0 错 0 警。
 - [ ] **D5 `iconPos`/`dockPrefs` 持久化映射只增不删（陈旧+泄漏）**：`purge` 删 VFS 节点不删 `qz.desktopIcons` 里它的 {x,y}；`removeUserApp` 不删 `dockPrefs.order/hidden` 里该 App id。长期堆积孤儿项（且随账号同步上云）。修：purge 内裁 iconPos、removeUserApp 内裁 dockPrefs。P2，浏览器可验。
 - [ ] **A3（承接第 1 轮唯一未做项）过期一次性 `at` 命令开机补发执行**：schedd 重新武装时过期任务 `delay=0` 立即 fire，命令型经 shell 跑（可能 rm/mkdir 等副作用），与真 `at`（过期不补）相反。修：重新武装时过期的**命令型**一次性任务只移除不执行；提醒型可保留补发通知或也丢弃。文件：`system/services.ts`。P1，浏览器可验。
 
@@ -37,4 +39,4 @@
 
 ---
 
-> 当前循环：**D1、D3、E1、D2、E2 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 D4/D5/A3（correctness）+ E3–E8（功能）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 D4 父链遍历守卫（correctness，宜交替）/ E3 计算器键盘+历史 / D5 持久化映射裁剪。
+> 当前循环：**D1、D3、E1、D2、E2、D4 已完成**（+ 性能/存储阶段 DEVPLAN-PERF 的 P1/P7/P4/P2）。本 backlog 剩 D5/A3（correctness）+ E3–E8（功能）。下一项按协议（数据丢失/崩溃优先 + 与高价值可见 P1 交替）：候选 E3 计算器键盘+历史（可视特性，宜交替）/ D5 持久化映射裁剪 / A3 过期 at 补发。

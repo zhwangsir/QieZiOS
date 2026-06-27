@@ -163,9 +163,12 @@ export function rename(id: string, name: string): boolean {
 
 // dest 是否是 id 的子孙（移动时防止把文件夹拖进自己里面 → 成环）
 function isInside(dest: string, id: string): boolean {
+  const seen = new Set<string>(); // 防御：父链若已成环（损坏/外部 sync 数据），visited 集兜底，免死循环挂死标签页
   let cur: VNode | undefined = vfs.nodes[dest];
   while (cur && cur.parentId) {
     if (cur.parentId === id) return true;
+    if (seen.has(cur.id)) break;
+    seen.add(cur.id);
     cur = vfs.nodes[cur.parentId];
   }
   return false;
@@ -257,9 +260,11 @@ export function restoreFromTrash(id: string): void {
 }
 
 // 彻底删除（文件夹递归删子项）。根节点不可删。二进制文件顺手清掉 IndexedDB 里的字节。
-export function purge(id: string): void {
-  if (id === 'root') return;
-  for (const child of children(id)) purge(child.id);
+// seen：防御父环（损坏/外部 sync 数据）导致递归无限下钻 → 栈溢出崩溃。每个顶层调用一份新集合。
+export function purge(id: string, seen: Set<string> = new Set()): void {
+  if (id === 'root' || seen.has(id)) return;
+  seen.add(id);
+  for (const child of children(id)) purge(child.id, seen);
   const n = vfs.nodes[id];
   if (n?.blobId) void deleteBlob(n.blobId); // fire-and-forget，不阻塞 UI
   delete vfs.nodes[id];
@@ -296,8 +301,10 @@ if (import.meta.env.DEV) {
 // 从根到该节点的路径段（面包屑用）
 export function pathSegments(id: string): VNode[] {
   const segs: VNode[] = [];
+  const seen = new Set<string>(); // 防御父环：遇到重复节点即停，返回已收集的部分而非无限循环挂死
   let cur: VNode | undefined = vfs.nodes[id];
-  while (cur) {
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
     segs.unshift(cur);
     cur = cur.parentId ? vfs.nodes[cur.parentId] : undefined;
   }
