@@ -27,7 +27,9 @@
   - ✅ 实现：tab 分段（时钟[原表盘]/秒表/计时器/世界时钟）；保留原每秒 `now` effect（表盘+世界时钟）；新增 50ms `nowPerf` tick effect（仅 visible && (swRunning||timerRunning) 时跑）。秒表：swBase 累计+swStart perf 基准、swElapsed 派生、开始/暂停/计圈/复位、fmtSW(mm:ss.cs)。计时器：min/sec 输入→timerEnd perf 绝对目标、remaining 派生、开始/暂停/继续/复位、到点在 tick 回调收口(timerRunning 守卫防重)→`sys.notify`+`playSound`。世界时钟：7 区 `Intl.DateTimeFormat(timeZone)`、void now 每秒刷、try/catch。
   - ✅ 浏览器实测：4 tab；秒表 开始→~1.6s 后 00:02.00、计圈记录、暂停冻结 00:03.01；计时器 0:30→1.6s 后 00:27 递减、0:01 到点→noteHistory 出现「⏲ 计时结束」+回 idle；世界时钟 7 区时间各不同(distinct=7)；0 console error。supervisor 子 Agent PASS（计时器 tick 回调收口非自引用 effect 只触发一次/秒表落定累计+派生/tick 生命周期不空转/状态机 idle·暂停·续/世界时钟 Intl+try-catch/响应式性能/原表盘零回归分层无环/边界 八点全过）。npm check+build 0 错 0 警。
   - 📌 后续观察（supervisor，非阻塞）：计时器用绝对 perf 目标 + tick 最小化暂停 → 若 deadline 在窗口最小化期间越过，通知/音效延到还原后第一个 tick 才补发（剩余值正确、通知仍到只是延迟）。要「最小化也准点响铃」需改走 sys.schedule(schedd 后台、不受窗口可见性约束)。当前与全系统 windowVisible 暂停一致、可接受。
-- [ ] **G2 文件管理器详情/信息面板**：选中项看不到完整路径/精确字节/创建·修改时间/mime/属主权限明细（VNode 数据已齐，只差展示）。右侧可折叠详情侧栏或右键「显示简介」+ 图片缩略。文件：`apps/Files.svelte`。
+- [x] **G2 文件管理器详情/信息面板**：选中项看不到完整路径/精确字节/创建·修改时间/mime/属主权限明细（VNode 数据已齐，只差展示）。右侧可折叠详情侧栏或右键「显示简介」+ 图片缩略。文件：`apps/Files.svelte`。
+  - ✅ 实现：右侧可折叠 `<aside>` 详情面板（工具栏 ℹ 切换 + 右键「显示简介」开，✕ 关）。选中**单个**项时 `infoNode=$derived(selected.length===1?getNode:null)` 解析；展示 预览（图片缩略图 / 否则大图标）+ 类型(mime 或扩展名)/完整路径(`pathOf`)/大小(文件人类可读+精确字节、文件夹「N 项」)/创建·修改全时间戳/属主/权限(rwx+八进制)/你的权限(`accessStr`)。图片缩略图 `$effect` 读 `readBlob`→`URL.createObjectURL`、cleanup `alive=false`+revoke 防泄漏与竞态。内容区+面板包进 `flex flex-1 overflow-hidden` 行、内容区加 `min-w-0` 防溢出。`field(label,value)` snippet 复用行。
+  - ✅ 浏览器实测（__qzVfs 种 33 字节文件 + DOM 驱动）：文件面板 路径`/g2-info-test.txt`、大小「33 字节」、类型「TXT 文件」、权限「-rw-r--r-- (644)」、属主 qiezi、你的权限 rw-、创建/修改全时间戳——全对；文件夹(/etc)面板 类型「文件夹」、大小「2 项」(按真实 uuid id 计 children=passwd+profile 一致)、📁 图标非缩略图；ℹ 开 / ✕ 关。0 console error。supervisor 子 Agent PASS（objectURL 无泄漏/竞态[alive 守卫+revoke]、删/改选中项响应式不崩、布局 min-w-0 不破网格滚动/多选条/拖放、folder count 排除回收站、snippet/a11y[img alt]/无环、check+build 0/0 六点全过）；按其建议去掉 `accessStr||'无'` 死分支。npm check+build 0 错 0 警。
 - [x] **G5 字体族自定义（主题新维度）**：`Settings` 无 fontFamily、`theme` 无 `--qz-font`。加 fontFamily 字段（系统/无衬线/衬线/等宽/圆体）+ token + Settings select。⭐ 对齐作者第一优先级（美观/自由度），机制已就绪成本低。
   - ✅ 实现：`settings` 加 `fontFamily`（默认 'system'，自动进 SETTINGS_KEYS 随主题导出/同步）+ `FONT_FAMILIES`（5 个，栈锚定通用族 sans/serif/monospace + 中文回退 PingFang/雅黑/宋体）+ `fontStack(id)`（回退[0]）；`theme.activeTokens()` 加 `--qz-font`；`app.css` body `font-family: var(--qz-font, 原栈兜底)`；Settings 界面缩放下加字体 select。换字体走 token 0 组件重渲染。
   - ✅ 浏览器实测：默认 --qz-font 含 system-ui、body 解析自 token；select 选 serif→Georgia/serif、mono→monospace；持久化 qz.settings.fontFamily='mono'；5 项渲染；0 console error。supervisor 子 Agent PASS（select→token→body 链/font-mono 终端等显式字体不受影响/token 机制一致 0 重渲染+var 兜底/白名单随预设·同步+旧数据合并默认/字体栈通用族结尾有可见差异/radius·blur 等零回归/分层无环/未知值回退+fontScale 正交 八点全过）。npm check+build 0 错 0 警。
@@ -38,4 +40,4 @@
 
 ---
 
-> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G5 已完成**（正确性 F 全清）。剩 G2/G3/G4/G6/G7（功能）。下一项：G2（Files 详情/信息面板）/ G7（记事本导出下载）/ G3（科学计算器）。
+> 当前循环：第 3 轮审计；**F1、F2、F4、F5、G1、G2、G5 已完成**（正确性 F 全清）。剩 G3/G4/G6/G7（功能）。下一项：G7（记事本导出下载，单文件低成本，打通 VFS→本机出口）/ G3（科学计算器）/ G4（媒体查看器）。

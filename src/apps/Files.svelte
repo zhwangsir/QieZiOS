@@ -6,15 +6,18 @@
     createFile,
     createBinaryFile,
     isImage,
+    readBlob,
     rename,
     trash,
     restoreFromTrash,
     move,
     copyNode,
     getNode,
+    pathOf,
     pathSegments,
     setMode,
     setOwner,
+    defaultMode,
     DEFAULT_OWNER,
     type VNode,
   } from '../kernel/vfs.svelte';
@@ -58,6 +61,53 @@
   let sortBy = $state<'name' | 'type' | 'size' | 'mtime'>('name');
   let sortDir = $state<'asc' | 'desc'>('asc');
   let view = $state<'grid' | 'list'>('grid');
+
+  // 详情/信息面板（G2）：选中「单个」项时展示完整路径/精确字节/创建·修改时间/类型·mime/属主权限。
+  // 数据全在 VNode 上，只差展示。infoNode = 仅当恰好选中 1 项时解析出来。
+  let showInfo = $state(false);
+  const infoNode = $derived(selected.length === 1 ? getNode(selected[0]) : null);
+  // 图片节点读 blob 出缩略图；换节点/关面板时 revoke（防 objectURL 泄漏）
+  let thumbUrl = $state<string | null>(null);
+  $effect(() => {
+    const n = showInfo ? infoNode : null;
+    if (!n || n.type !== 'file' || !isImage(n)) {
+      thumbUrl = null;
+      return;
+    }
+    let alive = true;
+    let url: string | null = null;
+    void readBlob(n).then((blob) => {
+      if (!alive || !blob) return;
+      url = URL.createObjectURL(blob);
+      thumbUrl = url;
+    });
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+      thumbUrl = null;
+    };
+  });
+
+  // 详情字段格式化
+  function fullDate(ts: number): string {
+    const d = new Date(ts);
+    const p = (x: number) => String(x).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+  function exactSize(n: VNode): string {
+    if (n.type === 'dir') return `${children(n.id).length} 项`;
+    const b = sizeOf(n);
+    return b >= 1024 ? `${fmtSize(n)}（${b.toLocaleString()} 字节）` : `${b} 字节`;
+  }
+  function typeLabel(n: VNode): string {
+    if (n.type === 'dir') return '文件夹';
+    if (n.mime) return n.mime;
+    const ext = n.name.slice(n.name.lastIndexOf('.') + 1).toLowerCase();
+    return ext && ext !== n.name.toLowerCase() ? `${ext.toUpperCase()} 文件` : '纯文本文件';
+  }
+  function octMode(n: VNode): string {
+    return (n.mode ?? defaultMode(n.type)).toString(8).padStart(3, '0');
+  }
 
   function sizeOf(n: VNode): number {
     if (n.type === 'dir') return 0;
@@ -311,6 +361,15 @@ ${JSON.stringify(files)}`;
       { label: '剪切' + suffix, icon: '✂️', onClick: () => cutItem(n) },
       ...(clip && n.type === 'dir' ? [{ label: `粘贴到此（${clip.ids.length}）`, icon: '📥', onClick: () => paste(n.id) }] : []),
       { label: '复制名称', icon: '📋', onClick: () => sys.clipboard.copy(n.name) },
+      {
+        label: '显示简介',
+        icon: 'ℹ️',
+        onClick: () => {
+          selected = [n.id]; // 强制单选 → infoNode 解析出该节点
+          lastClicked = n.id;
+          showInfo = true;
+        },
+      },
       // 权限：在可读写 / 只读之间切（属主段），目录用 7xx、文件用 6xx
       writable
         ? { label: '设为只读', icon: '🔒', separator: true, onClick: () => chmod(n, 0o444, 0o555) }
@@ -411,6 +470,11 @@ ${JSON.stringify(files)}`;
     <div class="ml-auto flex gap-0.5">
       <button
         class="rounded px-1.5 py-0.5 hover:bg-qz-elevated"
+        class:bg-qz-elevated={showInfo}
+        title="详情面板"
+        onclick={() => (showInfo = !showInfo)}>ℹ</button>
+      <button
+        class="rounded px-1.5 py-0.5 hover:bg-qz-elevated"
         class:bg-qz-elevated={view === 'grid'}
         title="网格视图"
         onclick={() => (view = 'grid')}>▦</button>
@@ -456,11 +520,21 @@ ${JSON.stringify(files)}`;
     />
   {/snippet}
 
+  <!-- 详情面板的一行：标签 + 值 -->
+  {#snippet field(label: string, value: string)}
+    <div class="flex flex-col gap-0.5">
+      <dt class="text-[10px] uppercase tracking-wide text-qz-muted">{label}</dt>
+      <dd class="break-words text-qz-text">{value}</dd>
+    </div>
+  {/snippet}
+
+  <!-- 主体：文件区 + 可选详情面板并排 -->
+  <div class="flex flex-1 overflow-hidden">
   <!-- 内容区：网格 / 列表两种视图，共享同一套交互（点击/双击/右键/拖拽/键盘） -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
-    class={view === 'grid' ? 'grid flex-1 content-start gap-1 overflow-auto p-3' : 'flex flex-1 flex-col gap-0.5 overflow-auto p-2'}
+    class={view === 'grid' ? 'grid min-w-0 flex-1 content-start gap-1 overflow-auto p-3' : 'flex min-w-0 flex-1 flex-col gap-0.5 overflow-auto p-2'}
     style={view === 'grid' ? 'grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));' : ''}
     onclick={clearSelection}
     onkeydown={(e) => {
@@ -549,6 +623,41 @@ ${JSON.stringify(files)}`;
       <div class="grid place-items-center py-12 text-center text-sm text-qz-muted {view === 'grid' ? 'col-span-full' : ''}">
         {aiHits ? '没有命中' : q.trim() ? '没有匹配的文件' : '空文件夹'}
       </div>
+    {/if}
+  </div>
+
+    <!-- 详情/信息面板 -->
+    {#if showInfo}
+      <aside class="flex w-56 shrink-0 flex-col gap-3 overflow-auto border-l border-qz-border p-3 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-medium text-qz-muted">详情</span>
+          <button class="rounded px-1 text-qz-muted hover:bg-qz-elevated" title="关闭" onclick={() => (showInfo = false)}>✕</button>
+        </div>
+        {#if infoNode}
+          {@const n = infoNode}
+          <!-- 预览：图片显缩略图，否则大图标 -->
+          <div class="grid min-h-24 place-items-center rounded-lg bg-qz-surface/60 p-3">
+            {#if thumbUrl}
+              <img src={thumbUrl} alt={n.name} class="max-h-32 max-w-full rounded object-contain" />
+            {:else}
+              <div class="text-5xl">{iconFor(n)}</div>
+            {/if}
+          </div>
+          <div class="break-words text-center text-sm font-medium text-qz-text">{n.name}</div>
+          <dl class="flex flex-col gap-2">
+            {@render field('类型', typeLabel(n))}
+            {@render field('路径', pathOf(n.id))}
+            {@render field('大小', exactSize(n))}
+            {@render field('创建', fullDate(n.createdAt))}
+            {@render field('修改', fullDate(n.updatedAt))}
+            {@render field('属主', n.owner ?? DEFAULT_OWNER)}
+            {@render field('权限', `${modeStr(n)} (${octMode(n)})`)}
+            {@render field('你的权限', accessStr(n, currentUser()))}
+          </dl>
+        {:else}
+          <div class="py-8 text-center text-qz-muted">选中单个项目查看详情</div>
+        {/if}
+      </aside>
     {/if}
   </div>
 </div>
