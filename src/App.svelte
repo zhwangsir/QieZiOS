@@ -3,7 +3,8 @@
   import { settings } from './system/settings.svelte';
   import { activeTokens, applyTokens, resolvedMode } from './system/theme.svelte';
   import { processes } from './kernel/processes.svelte';
-  import { vfs, setOwnerProvider } from './kernel/vfs.svelte';
+  import { vfs, setOwnerProvider, setRecentForgetter } from './kernel/vfs.svelte';
+  import { forgetRecent } from './system/recents.svelte';
   import { startServices } from './kernel/services.svelte';
   import { account } from './system/account.svelte';
   import { setShellRunner } from './system/aiTools';
@@ -15,6 +16,9 @@
 
   // 统一身份：新建文件的属主 = 当前登录账号（未登录 = 访客 qiezi）。
   setOwnerProvider(() => account.username || 'qiezi');
+
+  // 彻底删除文件时把它从「最近文件」抹掉（内核 purge 经注入回调通知 system 层 recents）。
+  setRecentForgetter(forgetRecent);
 
   // AI↔shell 互通：给 AI 的 run_shell 工具接上 shell 运行器（一个常驻 ctx，cd/env 跨调用保留）。
   const aiShellCtx = newCtx();

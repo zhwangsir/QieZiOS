@@ -89,7 +89,7 @@
       if (resizeDir.includes('s')) nh = Math.max(MINH, oh + dy);
       if (resizeDir.includes('w')) {
         const right = ox + ow; // 右边固定
-        nx = Math.min(ox + dx, right - MINW); // 左边不越过「右边-最小宽」
+        nx = Math.max(0, Math.min(ox + dx, right - MINW)); // 左边不出屏 + 不越过「右边-最小宽」（与 n 分支对称）
         nw = right - nx;
       }
       if (resizeDir.includes('n')) {

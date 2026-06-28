@@ -39,6 +39,13 @@ export function setOwnerProvider(fn: () => string): void {
   resolveOwner = fn;
 }
 
+// 彻底删除节点时通知「最近文件」把它的 id 抹掉（避免 recents 留死引用）。
+// 同样用注入避免内核反向依赖 system（recents 在 system 层）。App 启动时 setRecentForgetter 接上。
+let forgetRecentId: (id: string) => void = () => {};
+export function setRecentForgetter(fn: (id: string) => void): void {
+  forgetRecentId = fn;
+}
+
 // 回收站用一个「哨兵 parentId」标记，不需要真节点：
 // children('trash') 即回收站内容；普通文件夹 children 自然不含它们（parentId 已变成 'trash'）。
 export const TRASH = 'trash';
@@ -294,6 +301,7 @@ export function purge(id: string, seen: Set<string> = new Set()): void {
   const n = vfs.nodes[id];
   if (n?.blobId) void deleteBlob(n.blobId); // fire-and-forget，不阻塞 UI
   delete vfs.nodes[id];
+  forgetRecentId(id); // 从「最近文件」抹掉，免死引用累积 + 上云
 }
 
 // 清空回收站

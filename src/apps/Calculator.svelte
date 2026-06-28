@@ -77,8 +77,8 @@
     if (key >= '0' && key <= '9') inputDigit(key);
     else if (key === '.') inputDot();
     else if (key === 'C') clearAll();
-    else if (key === '±') display = String(parseFloat(display) * -1);
-    else if (key === '%') display = String(parseFloat(display) / 100);
+    else if (key === '±') { if (Number.isFinite(parseFloat(display))) display = String(parseFloat(display) * -1); }
+    else if (key === '%') { if (Number.isFinite(parseFloat(display))) display = String(parseFloat(display) / 100); }
     else if (key === '=') compute();
     else setOp(key); // ÷ × − +
   }
@@ -230,7 +230,7 @@
     else if (k === '/') setOp('÷');
     else if (k === 'Enter' || k === '=') compute();
     else if (k === 'Backspace') backspace();
-    else if (k === '%') display = String(parseFloat(display) / 100);
+    else if (k === '%') { if (Number.isFinite(parseFloat(display))) display = String(parseFloat(display) / 100); }
     else if (k === 'c' || k === 'C' || k === 'Delete') clearAll();
     else return; // 其它键（含 Esc）不处理 → 冒泡给桌面（Esc 关窗）
     e.preventDefault();

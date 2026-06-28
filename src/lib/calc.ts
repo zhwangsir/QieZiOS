@@ -56,7 +56,10 @@ function tokenize(src: string): Tok[] {
     if (isDigit(c) || c === '.') {
       let j = i;
       while (j < s.length && (isDigit(s[j]) || s[j] === '.')) j++;
-      const num = parseFloat(s.slice(i, j));
+      const slice = s.slice(i, j);
+      // 多于一个小数点 = 非法数字（如 1.2.3）→ 报错，别让 parseFloat 静默截断成 1.2
+      if ((slice.match(/\./g) || []).length > 1) throw new Error('数字格式错误: ' + slice);
+      const num = parseFloat(slice);
       if (!Number.isFinite(num)) throw new Error('数字格式错误');
       toks.push({ t: 'num', v: num });
       i = j;

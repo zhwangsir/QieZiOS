@@ -10,10 +10,10 @@
 - [x] **R5-C1（P1）桌面小组件可生成/停留在屏外，取不回**：`widgetState.addWidget`（widgets.svelte.ts:20-25）初始位置 `120+(n%6)*28` 无视口夹取；且 `Widgets.svelte` 无 onMount/resize 回夹（不像 R4-C4 的桌宠 clampPet）→ 窄屏/缩窗后小组件可落屏外、手柄抓不到。修：addWidget 初始夹 + Widgets onMount+resize clampAll（镜像 DesktopPet R4-C4，用 innerWidth-40/innerHeight-40 保证手柄可抓回）。
   - ✅ 实现：`addWidget` 初始 x/y 夹 `min(120+…, max(0,innerW-40))` / `min(…, max(36,innerH-40))`。`Widgets.svelte` 抽 `clampW(w)`（x∈[0,innerW-40]、y∈[36,innerH-40]），`move()` 改设原始后 clampW（拖不出屏、零行为变化），`onMount` clampAll + addEventListener('resize',clampAll) + cleanup（镜像 R4-C4）。1s tick effect 不动、与 onMount 独立。
   - ✅ 浏览器实测：innerWidth=0 退化 → addWidget/resize 夹到 (0,36) 无 NaN；视口 1280×800 → 屏外 widget(99999,99999) resize 夹到 (1240,760)=(iw-40,ih-40)。0 console error。supervisor 子 Agent PASS（夹算各 case 含退化无 NaN+保 40px 手柄、move 等价、onMount 生命周期无泄漏+无反应式环、window 仅浏览器调用、build 与 1s tick 独立 五点）。npm check+build 0 错 0 警。
-- [ ] **R5-C2（P2）forgetRecent 死代码，recents 不随删除清理**：`recents.svelte.ts:31-34` 的 `forgetRecent` 无调用方 → 文件/App 删除后 id 永留 recents（≤20，Spotlight 优雅跳过不崩，但累积死引用且上云同步）。修：vfs.purge（注入式）+ removeUserApp 调 forgetRecent（仿 forgetDockApp 接法）。
-- [ ] **R5-C3（P2）calc 词法接受多小数点数字**：`lib/calc.ts:56-62` 数字扫描吞连续 digit+dot，`1.2.3`→parseFloat=1.2 静默丢 `.3`。修：数字片段含 >1 个 `.` 抛错。
-- [ ] **R5-C4（P2）标准计算器 ±/% 对「错误」/NaN 显示出字面 NaN**：`Calculator.press('±'/'%')`（80-81 + 键盘 233）`parseFloat('错误')=NaN`→display='NaN'。科学路径已用 isFinite 守卫、标准没有。修：`±`/`%` 前 `Number.isFinite` 守卫，否则 no-op。
-- [ ] **R5-C5（P2）窗口左/上边缩放 x/y 无下夹，可缩到屏外左/上**：`Window.svelte` west 分支 `nx=min(ox+dx,right-MINW)` 缺 `Math.max(0,…)`（north 已夹）。修：west 的 nx 加 `Math.max(0,…)`。
+- [x] **R5-C2（P2）forgetRecent 死代码，recents 不随删除清理**：`recents.svelte.ts:31-34` 的 `forgetRecent` 无调用方 → 文件删除后 id 永留 recents（≤20，Spotlight 优雅跳过不崩，但累积死引用且上云同步）。修：vfs.purge 经注入 `setRecentForgetter` 回调通知 recents（kernel 不反向依赖 system，仿 setOwnerProvider）；App.svelte `setRecentForgetter(forgetRecent)`。（recents.apps 只存可见内置 App id、永不删 → 无需 removeUserApp 接；用户 App 走 'userapp' 隐藏宿主不入 recents.apps。）✅ 实测：文件入 recents → purge 后 localStorage qz.recents.files 不含其 id。supervisor PASS（注入无环、purge 子项先行各 forget、forgetRecent 缺项 no-op、emptyTrash→purge→forget 通）。
+- [x] **R5-C3（P2）calc 词法接受多小数点数字**：`lib/calc.ts` 数字扫描吞连续 digit+dot，`1.2.3`→parseFloat=1.2 静默丢 `.3`。修：数字片段含 >1 个 `.` 抛错（`(slice.match(/\./g)||[]).length>1`）。✅ 实测 `1.2.3`→ERR、`1.23`=1.23、`2+3*4`=14；三处 evalExpr 调用方（curVal/sciEquals/Spotlight calcResult）皆 try/catch。
+- [x] **R5-C4（P2）标准计算器 ±/% 对「错误」/NaN 显示出字面 NaN**：`Calculator.press('±'/'%')` + 键盘 `%` `parseFloat('错误')=NaN`→display='NaN'。修：`±`/`%` 前 `Number.isFinite(parseFloat(display))` 守卫，否则 no-op（按钮路径 + 键盘路径都改；标准键盘无 ± 绑定故只 %；科学路径原有 isFinite 守卫不动）。✅ 实测 `5÷0=`→错误，±→错误、%→错误（非 NaN）。
+- [x] **R5-C5（P2）窗口左/上边缩放 x/y 无下夹，可缩到屏外左/上**：`Window.svelte` west 分支 `nx=min(ox+dx,right-MINW)` 缺 `Math.max(0,…)`（north 已夹）。修：`nx=Math.max(0,Math.min(ox+dx,right-MINW))`（与 north 对称；min-width 内层 min 不受影响、east/south 不动）。✅ 实测 west 拖过左边缘 → x 夹 0、右边固定 880。
 
 ## 二、功能 / 体验（价值/成本比排序）
 
@@ -30,4 +30,4 @@
 
 ---
 
-> 当前循环：第 5 轮；**R5-C1 + R5-F1（自动明暗）已完成 ✅**。剩 C2-C5（正确性）+ F2-F8（功能）。下一项建议：R5-C2-C5（正确性小修，4 项可一轮批量清，轮换正确性）/ R5-F3（勿扰）/ R5-F4（Files 键盘导航）/ R5-F2（QuickSettings）。
+> 当前循环：第 5 轮；**C1-C5 正确性全清 + F1（自动明暗）已完成 ✅**（一轮批量清掉 C2-C5）。剩 F2-F8（功能）。下一项建议：R5-F3（勿扰，价值高小成本）/ R5-F4（Files 键盘导航 + F2 + Ctrl+D）/ R5-F2（QuickSettings 面板）/ R5-F5（壁纸轮播）。
