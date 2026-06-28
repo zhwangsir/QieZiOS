@@ -35,7 +35,9 @@
   - ✅ 实现：Spotlight 加 `calc` Result 种 + `calcResult(raw)`（正则预过滤须含运算符/括号/函数/常量→排除纯数字/词/App 名，再 `evalExpr`、finite 才返回、throw 则 null）。结果置顶（selected=0 → Enter `sys.clipboard.copy(value)`+`sys.notify` 通知后 closeSpotlight）。activate 的 calc 分支放在 `r.node.type` 判断之前（类型收窄正确、r.node 仅 file 访问）。渲染补 calc 的 key('calc')/图标(🧮)/名(`expr = value`)/徽章(计算·Enter 复制)。
   - ✅ 浏览器实测：`12*8`→「12*8 = 96」、`sqrt(16)+2`→「= 6」、`(1+2)*3`→「= 9」（徽章 计算）；`files`/`5` 不触发 calc（仍走 AI/App）；Enter `2+2` → 剪贴板得 `4` + Spotlight 关闭。0 console error。supervisor 子 Agent PASS（类型收窄真实非 cast、误报/漏报[正则粗过滤+evalExpr 严格 parser 对 my-notes/cosplay/exp 等 30 例全 throw]、keyed 无撞、Enter 行为合理、clipboard/notify 签名正确+fall through closeSpotlight、build 六点；非阻塞：calcResult 双 trim 冗余、pi 等常量会出行 属预期）。npm check+build 0 错 0 警。
 - [ ] **R4-F5 每 App 默认窗口尺寸 / 偏好** [M, 价值高]：App 尺寸硬编码在 appList。新 `system/appPrefs.svelte.ts`（`persisted('qz.appPrefs')` 按 appId 存 w/h），launch/openApp 回退 `appPrefs[id].w ?? meta.width`；窗口标题栏右键加「保存当前大小为默认」。无头可验。
-- [ ] **R4-F6 桌面小组件层（时钟/日历/系统状态）** [M, 价值高]：桌面有图标+便签但无活动小组件。新 `shell/Widgets.svelte`+`shell/widgets.svelte.ts`（镜像 notes 的拖动/持久化），组件：clock（复用 Clock 的 SVG 表盘）/calendar（月历）/sysstat（进程数）。桌面右键「新建小组件」。摆放/持久无头可验、表盘视觉真机。
+- [x] **R4-F6 桌面小组件层（时钟/日历/系统状态）** [M, 价值高]：桌面有图标+便签但无活动小组件。新 `shell/Widgets.svelte`+`shell/widgetState.svelte.ts`（镜像 notes 的拖动/持久化），组件：clock（复用 Clock 的 SVG 表盘）/calendar（月历）/sysstat（进程数）。桌面右键「新建小组件」。摆放/持久无头可验、表盘视觉真机。
+  - ✅ 实现：新 `widgetState.svelte.ts`（`widgets=persisted('qz.widgets',{list})` + addWidget/removeWidget/cycleWidgetKind，⚠️ 名 widgetState 非 widgets 避免与组件 Widgets.svelte 在 Windows 只差大小写撞名——首版撞了被 svelte-check 抓到、改名修复）。`Widgets.svelte`：每个小组件拖拽卡（手柄 ⟳ 切类型 + ✕ 移除），单个 1s `now` tick 经 `$effect` 仅在 `list.length>0` 时武装（读 .length 增删自动重武装、移动不重武装、cleanup 清 interval 无泄漏）；clock=复用 Clock SVG 表盘+时间串、calendar=月历今日高亮、sysstat=`sys.proc.list().length`；拖动镜像 StickyNotes 夹视口。Desktop 挂 `<Widgets/>`（DesktopIcons/StickyNotes 同层、窗口下）+ 右键「新建小组件」。
+  - ✅ 浏览器实测（__qzWidgets）：加 clock/calendar/sysstat → 3 卡渲染（clock SVG circle、calendar grid-cols-7 今日 bg-qz-accent 高亮、sysstat 运行中进程数）+ 持久化 qz.widgets[clock,calendar,sysstat]；cycle clock→calendar；拖到 99999 夹到 (534,648)@574×688；removeAll 清空 store+DOM；fresh-reload 加小组件正常。0 真 console error（编辑期改名残留的 `widgets.svelte` HMR 报错为陈旧 buffer，grep 证无 import、新载正常、check/build 0/0）。supervisor 子 Agent PASS（撞名已解、1s tick 正确武装无泄漏、reactivity[月历/今日/进程数]、拖动夹视口+keyed、层级/pointer-events、build/无环 六点；非阻塞：第 7+ 个堆叠重叠属 cosmetic、随 qz.* 同步、DEV 钩子 prod 剥离）。npm check+build 0 错 0 警。表盘秒针动画真机最佳。
 - [ ] **R4-F7 Files 框选（marquee 拖拽多选）** [M, 价值中高]：B15 已延后。grid 空白处 pointerdown 起选框 → 命中测试 item rect → set selected；与现有 item HTML5 拖拽共存（仅当 down 目标是容器才起框选）。无头可验。
 - [ ] **R4-F8 窗口贴靠布局弹窗（悬停最大化键）** [M, 价值中]：平铺只有键盘/网格，无鼠标可发现入口。WindowControls 最大化键 hover 出布局区选择器（半/四分/三分），点击调现有 setBounds 几何（把 Desktop 的 tile/quarter 几何抽到 `shell/tiling.ts` 共享）。无头可验。
 - [x] **R4-F9 空状态 + 首启引导打磨** [S, 价值中]：Files/Trash/Clipboard 空状态是裸文字；Welcome 是点击计数 demo。给空状态加图标+提示+主操作按钮；Welcome 改 3-4 卡片快速导览（Spotlight/终端/设置/文件）。纯展示。无头可验。
@@ -45,4 +47,4 @@
 
 ---
 
-> 当前循环：第 4 轮；**C1-C4 + F1/F2/F3/F4/F9 已完成 ✅**。剩 F5/F6/F7/F8/F10（功能）。下一项建议：R4-F6（桌面小组件，中成本高价值，镜像 StickyNotes）/ R4-F5（每 App 默认窗口尺寸）/ R4-F8（贴靠布局弹窗）/ R4-F7（Files 框选）。F10（神灯动画）真机验。
+> 当前循环：第 4 轮；**C1-C4 + F1/F2/F3/F4/F6/F9 已完成 ✅**。剩 F5/F7/F8/F10（功能）。下一项建议：R4-F5（每 App 默认窗口尺寸，单文件可验）/ R4-F7（Files 框选 marquee）/ R4-F8（贴靠布局弹窗）。F10（神灯动画）真机验、放最后。

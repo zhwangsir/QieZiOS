@@ -29,6 +29,8 @@
   import DesktopIcons from './DesktopIcons.svelte';
   import StickyNotes from './StickyNotes.svelte';
   import { addNote } from './notes.svelte';
+  import Widgets from './Widgets.svelte';
+  import { addWidget } from './widgetState.svelte';
   import Expose from './Expose.svelte';
   import { expose, openExpose, closeExpose } from './exposeState.svelte';
   import { snapState } from './snapState.svelte';
@@ -77,6 +79,7 @@
       { label: '新建文件夹', icon: '📁', onClick: () => createDir('root') },
       { label: '新建文本文件', icon: '📄', onClick: () => createFile('root') },
       { label: '新建便签', icon: '📝', onClick: () => addNote() },
+      { label: '新建小组件', icon: '🧩', onClick: () => addWidget() },
       { label: '打开设置', icon: '⚙️', separator: true, onClick: () => sys.openApp('settings') },
       {
         label: pet.enabled ? '隐藏桌宠' : '显示桌宠',
@@ -183,6 +186,9 @@
 
   <!-- 桌面便签小组件（在窗口层之下、随桌面） -->
   <StickyNotes />
+
+  <!-- 桌面活动小组件（时钟/日历/系统状态；同便签层，窗口层之下） -->
+  <Widgets />
 
   <TopBar />
 
