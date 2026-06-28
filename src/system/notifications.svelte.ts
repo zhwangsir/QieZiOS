@@ -1,4 +1,5 @@
 import { persisted } from '../kernel/persist.svelte';
+import { dnd } from './dnd.svelte';
 
 // 通知队列（数据层）：系统 toast 的真相源。通知中心服务往里 push，外壳的 toast 层渲染它。
 export type NoteLevel = 'info' | 'success' | 'warn' | 'error';
@@ -32,12 +33,15 @@ export function pushNote(p: {
 }): number {
   const id = ++nid;
   const note: Note = { id, title: p.title, body: p.body, level: p.level ?? 'info', ts: Date.now(), action: p.action };
-  notifications.items.push(note);
+  // 勿扰模式：不弹 live toast，但仍记入历史（通知中心可回看，不丢通知）
+  if (!dnd.enabled) {
+    notifications.items.push(note);
+    const timeout = p.timeout ?? 4500;
+    // setTimeout（非 rAF）：隐藏标签页里也会触发，自动消失才靠谱
+    if (timeout > 0) setTimeout(() => dismissNote(id), timeout);
+  }
   noteHistory.items.push({ ...note, action: undefined }); // 历史不留 action 函数
   if (noteHistory.items.length > HISTORY_CAP) noteHistory.items.splice(0, noteHistory.items.length - HISTORY_CAP);
-  const timeout = p.timeout ?? 4500;
-  // setTimeout（非 rAF）：隐藏标签页里也会触发，自动消失才靠谱
-  if (timeout > 0) setTimeout(() => dismissNote(id), timeout);
   return id;
 }
 

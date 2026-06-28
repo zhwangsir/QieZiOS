@@ -1,4 +1,5 @@
 import { persisted } from '../kernel/persist.svelte';
+import { dnd } from './dnd.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 系统音效 · WebAudio 合成（无需音频文件）
@@ -38,7 +39,7 @@ const SOUNDS: Record<string, Tone[]> = {
 };
 
 export function playSound(kind: string): void {
-  if (!soundPrefs.enabled) return; // 关闭时彻底不发声（也不创建上下文）
+  if (!soundPrefs.enabled || dnd.enabled) return; // 关闭 或 勿扰 → 彻底不发声（也不创建上下文）
   const tones = SOUNDS[kind];
   if (!tones) return;
   const a = audio();
