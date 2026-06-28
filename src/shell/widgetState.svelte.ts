@@ -20,7 +20,10 @@ const KINDS: WidgetKind[] = ['clock', 'calendar', 'sysstat'];
 export function addWidget(kind: WidgetKind = 'clock'): string {
   const id = crypto.randomUUID();
   const n = widgets.list.length;
-  widgets.list.push({ id, kind, x: 120 + (n % 6) * 28, y: 120 + (n % 6) * 28 }); // 错开堆叠
+  // 错开堆叠，但夹进视口（窄屏不至于生成到屏外取不回；保留 ≥40px 手柄可抓）
+  const x = Math.min(120 + (n % 6) * 28, Math.max(0, window.innerWidth - 40));
+  const y = Math.min(120 + (n % 6) * 28, Math.max(36, window.innerHeight - 40));
+  widgets.list.push({ id, kind, x, y });
   return id;
 }
 

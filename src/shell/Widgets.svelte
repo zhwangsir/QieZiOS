@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { widgets, removeWidget, cycleWidgetKind, type Widget } from './widgetState.svelte';
   import { sys } from '../system/sys';
 
@@ -42,13 +43,26 @@
     drag = { id: w.id, sx: e.clientX, sy: e.clientY, ox: w.x, oy: w.y };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
+  // 把某小组件夹进视口（保留 ≥40px 手柄可抓回）。拖动 / 挂载 / 缩窗 共用。
+  function clampW(w: Widget) {
+    w.x = Math.min(Math.max(0, window.innerWidth - 40), Math.max(0, w.x));
+    w.y = Math.min(Math.max(36, window.innerHeight - 40), Math.max(36, w.y));
+  }
   function move(e: PointerEvent) {
     if (!drag) return;
     const w = widgets.list.find((x) => x.id === drag!.id);
     if (!w) return;
-    w.x = Math.min(Math.max(0, drag.ox + (e.clientX - drag.sx)), Math.max(0, window.innerWidth - 40));
-    w.y = Math.min(Math.max(36, drag.oy + (e.clientY - drag.sy)), Math.max(36, window.innerHeight - 40));
+    w.x = drag.ox + (e.clientX - drag.sx);
+    w.y = drag.oy + (e.clientY - drag.sy);
+    clampW(w); // 拖不出屏
   }
+  // 挂载即夹回屏外的持久位置 + 窗口缩小时持续回夹（镜像 DesktopPet R4-C4，显式 addEventListener 可靠）
+  onMount(() => {
+    const clampAll = () => widgets.list.forEach(clampW);
+    clampAll();
+    window.addEventListener('resize', clampAll);
+    return () => window.removeEventListener('resize', clampAll);
+  });
   function end(e: PointerEvent) {
     drag = null;
     try {
