@@ -7,6 +7,7 @@
   import { processes, minimize, close } from '../kernel/processes.svelte';
   import { settings } from '../system/settings.svelte';
   import { recents } from '../system/recents.svelte';
+  import { evalExpr } from '../lib/calc';
   import { sys } from '../system/sys';
 
   // 系统动作命令（命令面板）：label/keywords 参与匹配，run 真执行
@@ -37,7 +38,22 @@
     | { kind: 'userapp'; app: UserApp }
     | { kind: 'action'; action: ActionDef }
     | { kind: 'file'; node: VNode; icon: string; sub?: string }
+    | { kind: 'calc'; expr: string; value: string }
     | { kind: 'ai'; query: string };
+
+  // 内联计算器：query 像个算式（含运算符/括号/函数）且能被安全求值 → 给个结果，Enter 复制
+  function calcResult(raw: string): { expr: string; value: string } | null {
+    const q = raw.trim();
+    // 预过滤：必须含运算符/括号/函数名，排除纯数字、纯词、App 名
+    if (!/[+\-*/^()×÷√]|sqrt|sin|cos|tan|asin|acos|atan|log|ln|exp|abs|pi/i.test(q)) return null;
+    try {
+      const v = evalExpr(q);
+      if (!Number.isFinite(v)) return null;
+      return { expr: q, value: String(+v.toFixed(10)) };
+    } catch {
+      return null;
+    }
+  }
 
   let query = $state('');
   let selected = $state(0);
@@ -99,9 +115,12 @@
           .slice(0, 6)
           .map((n) => ({ kind: 'file', node: n, icon: n.type === 'dir' ? '📁' : '📄', sub: snippetFor(n, q) }))
       : [];
+    // 内联计算器：算式置顶（Enter 复制结果），不抢 App——纯数字/词不会触发（calcResult 预过滤）
+    const c = calcResult(query.trim());
+    const calc: Result[] = c ? [{ kind: 'calc', expr: c.expr, value: c.value }] : [];
     // 有输入就在末尾挂一个「问 AI」入口（放最后，不抢 App 的默认 Enter）
     const ai: Result[] = query.trim() ? [{ kind: 'ai', query: query.trim() }] : [];
-    return [...recentFiles, ...apps, ...installed, ...actions, ...files].slice(0, 12).concat(ai);
+    return [...calc, ...recentFiles, ...apps, ...installed, ...actions, ...files].slice(0, 12).concat(ai);
   });
 
   function activate(r: Result) {
@@ -113,6 +132,9 @@
       sys.openApp(r.id);
     } else if (r.kind === 'action') {
       r.action.run();
+    } else if (r.kind === 'calc') {
+      sys.clipboard.copy(r.value); // Enter 复制结果到剪贴板
+      sys.notify('已复制结果', { body: `${r.expr} = ${r.value}`, level: 'success', timeout: 1500 });
     } else if (r.node.type === 'dir') {
       sys.openApp('files', { title: r.node.name, data: r.node.id });
     } else {
@@ -161,7 +183,7 @@
       />
       {#if results.length}
         <div class="max-h-80 overflow-auto border-t border-qz-border p-1">
-          {#each results as r, i (r.kind === 'app' ? 'app:' + r.id : r.kind === 'userapp' ? 'user:' + r.app.id : r.kind === 'action' ? 'act:' + r.action.id : r.kind === 'file' ? 'file:' + r.node.id : 'ai')}
+          {#each results as r, i (r.kind === 'app' ? 'app:' + r.id : r.kind === 'userapp' ? 'user:' + r.app.id : r.kind === 'action' ? 'act:' + r.action.id : r.kind === 'file' ? 'file:' + r.node.id : r.kind === 'calc' ? 'calc' : 'ai')}
             <button
               class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm"
               class:bg-qz-elevated={i === selected}
@@ -169,10 +191,10 @@
               onclick={() => activate(r)}
             >
               <span class="shrink-0 text-lg"
-                >{r.kind === 'ai' ? '🤖' : r.kind === 'userapp' ? r.app.icon : r.kind === 'action' ? r.action.icon : r.icon}</span>
+                >{r.kind === 'ai' ? '🤖' : r.kind === 'calc' ? '🧮' : r.kind === 'userapp' ? r.app.icon : r.kind === 'action' ? r.action.icon : r.icon}</span>
               <span class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate">
-                  {#if r.kind === 'app'}{r.title}{:else if r.kind === 'userapp'}{r.app.name}{:else if r.kind === 'action'}{r.action.label}{:else if r.kind === 'file'}{r.node.name}{:else}问
+                  {#if r.kind === 'app'}{r.title}{:else if r.kind === 'userapp'}{r.app.name}{:else if r.kind === 'action'}{r.action.label}{:else if r.kind === 'file'}{r.node.name}{:else if r.kind === 'calc'}{r.expr} = <span class="font-medium text-qz-text">{r.value}</span>{:else}问
                     AI：{r.query}{/if}
                 </span>
                 {#if r.kind === 'file' && r.sub}
@@ -180,7 +202,7 @@
                 {/if}
               </span>
               <span class="shrink-0 text-xs text-qz-muted"
-                >{r.kind === 'app' ? 'App' : r.kind === 'userapp' ? '我的' : r.kind === 'action' ? '动作' : r.kind === 'file' ? '文件' : 'AI'}</span>
+                >{r.kind === 'app' ? 'App' : r.kind === 'userapp' ? '我的' : r.kind === 'action' ? '动作' : r.kind === 'file' ? '文件' : r.kind === 'calc' ? '计算 · Enter 复制' : 'AI'}</span>
             </button>
           {/each}
         </div>

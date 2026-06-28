@@ -29,7 +29,9 @@
   - ✅ 浏览器实测：openApp terminal+calculator+textedit(带 fileid)+webview → recents.apps=[calculator,terminal]（textedit/webview 正确排除）、files=[fid]、持久化 qz.recents；Spotlight 空查询 row0=最近文件「r4f2-note.txt」(badge 文件)、随后 App 按最近度 计算器/终端 浮前、其余原序；forgetRecent 清理通。0 真 console error（编辑期 Vite Failed-to-reload 为 sys.ts 广泛 import 的 HMR 回退噪声，check+build 0/0 + 运行时 Studio/AppGallery 正常 证无真错）。supervisor 子 Agent PASS（无环[recents 仅依赖 persist]、openApp 分类正确、persisted 对象重赋值反应式正确、Spotlight 搜索零回归+cast 安全+keyed 无撞+stale id 优雅跳过、selected/Enter 不崩、build 六点全过）。npm check+build 0 错 0 警。
   - 📌 后续（supervisor 非阻塞，记入 backlog）：(a) `forgetRecent` 目前仅导出未挂 `vfs.purge`/`removeUserApp`（靠 Spotlight 优雅跳过兜底，stale id 至多滞留到 CAP 淘汰，需注入式接进内核 purge）；(b) 最近文件若其父文件夹后被 trash，子节点 parentId 仍非 'trash' 会漏过过滤（与既有搜索路径同款约定，非本次回归）。
 - [ ] **R4-F3 主题：主色微调表面色（accent tint）** [S, 价值高]：`theme.svelte.ts` 表面色是固定中性、不吸主色。加 `settings.accentTint`(0~0.15)，`activeTokens` 用 `color-mix(accent X%, surface)` 算 `--color-qz-surface`/`--color-qz-elevated` → 全 UI 更统一。对齐作者#1 美观/#2 自定义。无头可验（断言 :root token）。
-- [ ] **R4-F4 Spotlight 内联计算器** [S, 价值高]：Spotlight 不算数学。query 能被 `lib/calc.ts`（已存在）解析时置顶 `{kind:'calc'}` 结果、Enter 复制结果到剪贴板。近零成本复用 calc.ts。无头可验。
+- [x] **R4-F4 Spotlight 内联计算器** [S, 价值高]：Spotlight 不算数学。query 能被 `lib/calc.ts`（已存在）解析时置顶 `{kind:'calc'}` 结果、Enter 复制结果到剪贴板。近零成本复用 calc.ts。无头可验。
+  - ✅ 实现：Spotlight 加 `calc` Result 种 + `calcResult(raw)`（正则预过滤须含运算符/括号/函数/常量→排除纯数字/词/App 名，再 `evalExpr`、finite 才返回、throw 则 null）。结果置顶（selected=0 → Enter `sys.clipboard.copy(value)`+`sys.notify` 通知后 closeSpotlight）。activate 的 calc 分支放在 `r.node.type` 判断之前（类型收窄正确、r.node 仅 file 访问）。渲染补 calc 的 key('calc')/图标(🧮)/名(`expr = value`)/徽章(计算·Enter 复制)。
+  - ✅ 浏览器实测：`12*8`→「12*8 = 96」、`sqrt(16)+2`→「= 6」、`(1+2)*3`→「= 9」（徽章 计算）；`files`/`5` 不触发 calc（仍走 AI/App）；Enter `2+2` → 剪贴板得 `4` + Spotlight 关闭。0 console error。supervisor 子 Agent PASS（类型收窄真实非 cast、误报/漏报[正则粗过滤+evalExpr 严格 parser 对 my-notes/cosplay/exp 等 30 例全 throw]、keyed 无撞、Enter 行为合理、clipboard/notify 签名正确+fall through closeSpotlight、build 六点；非阻塞：calcResult 双 trim 冗余、pi 等常量会出行 属预期）。npm check+build 0 错 0 警。
 - [ ] **R4-F5 每 App 默认窗口尺寸 / 偏好** [M, 价值高]：App 尺寸硬编码在 appList。新 `system/appPrefs.svelte.ts`（`persisted('qz.appPrefs')` 按 appId 存 w/h），launch/openApp 回退 `appPrefs[id].w ?? meta.width`；窗口标题栏右键加「保存当前大小为默认」。无头可验。
 - [ ] **R4-F6 桌面小组件层（时钟/日历/系统状态）** [M, 价值高]：桌面有图标+便签但无活动小组件。新 `shell/Widgets.svelte`+`shell/widgets.svelte.ts`（镜像 notes 的拖动/持久化），组件：clock（复用 Clock 的 SVG 表盘）/calendar（月历）/sysstat（进程数）。桌面右键「新建小组件」。摆放/持久无头可验、表盘视觉真机。
 - [ ] **R4-F7 Files 框选（marquee 拖拽多选）** [M, 价值中高]：B15 已延后。grid 空白处 pointerdown 起选框 → 命中测试 item rect → set selected；与现有 item HTML5 拖拽共存（仅当 down 目标是容器才起框选）。无头可验。
@@ -39,4 +41,4 @@
 
 ---
 
-> 当前循环：第 4 轮；**R4-C1 + R4-F1 + R4-C2 + R4-F2 + R4-C3 + R4-C4 已完成 ✅**（正确性 C1-C4 全清）。剩 F3-F10（功能）。下一项建议：R4-F4（Spotlight 计算器，单文件复用 calc.ts）/ R4-F3（accent tint，美观）/ R4-F6（桌面小组件）/ R4-F9（空状态+引导）。
+> 当前循环：第 4 轮；**C1-C4 + F1 + F2 + F4 已完成 ✅**。剩 F3/F5/F6/F7/F8/F9/F10（功能）。下一项建议：R4-F3（accent tint 主色微调表面色，美观对齐作者#1）/ R4-F9（空状态+首启引导，单文件纯展示）/ R4-F6（桌面小组件，中成本）/ R4-F8（贴靠布局弹窗）。
