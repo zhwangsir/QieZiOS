@@ -11,6 +11,8 @@
   } from '../kernel/processes.svelte';
   import { snapState } from './snapState.svelte';
   import { openMenu } from './menu.svelte';
+  import { setAppSize, getAppPref, clearAppPref } from '../system/appPrefs.svelte';
+  import { sys } from '../system/sys';
   import { pop } from '../lib/motion';
   import { viewport } from '../system/viewport.svelte';
   import { provideWindow } from '../lib/winctx';
@@ -169,6 +171,24 @@
         icon: '▢',
         onClick: () => toggleMaximize(proc.id),
       },
+      // 仅窗口态（非最大化/移动）可把当前尺寸记为该 App 默认 → 之后都按此开
+      ...(fullscreen
+        ? []
+        : [
+            {
+              label: '保存当前大小为默认',
+              icon: '📐',
+              separator: true,
+              onClick: () => {
+                setAppSize(proc.appId, proc.width, proc.height);
+                sys.notify('已保存默认窗口大小', { body: `${Math.round(proc.width)}×${Math.round(proc.height)}`, level: 'success', timeout: 1500 });
+              },
+            },
+          ]),
+      // 存过默认尺寸才显示「重置」→ 回到 appList 出厂尺寸
+      ...(!fullscreen && getAppPref(proc.appId)
+        ? [{ label: '重置默认大小', icon: '↩', onClick: () => clearAppPref(proc.appId) }]
+        : []),
       { label: '关闭', icon: '✕', danger: true, separator: true, onClick: () => close(proc.id) },
     ]);
   }

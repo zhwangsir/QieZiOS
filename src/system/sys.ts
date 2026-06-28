@@ -8,6 +8,7 @@ import { clipboard, currentClip } from './clipboard.svelte';
 import { schedules, addSchedule, removeSchedule } from './schedules.svelte';
 import { appMeta } from '../apps/appList';
 import { pushRecentFile, pushRecentApp } from './recents.svelte';
+import { getAppPref } from './appPrefs.svelte';
 
 // 文件查看器 App：经它们打开 = 打开了一个文件（data 为文件 id）→ 记入「最近文件」而非「最近 App」
 const FILE_VIEWERS = new Set(['textedit', 'imageviewer', 'mediaviewer']);
@@ -33,7 +34,13 @@ export const sys = {
   openApp(appId: string, opts: { title?: string; data?: unknown; ppid?: number } = {}) {
     const a = appMeta[appId];
     if (!a) return;
-    launch(appId, opts.title ?? a.title, { width: a.width, height: a.height, data: opts.data, ppid: opts.ppid });
+    const pref = getAppPref(appId); // 用户存过的默认尺寸优先，否则用 appMeta 出厂尺寸
+    launch(appId, opts.title ?? a.title, {
+      width: pref?.w ?? a.width,
+      height: pref?.h ?? a.height,
+      data: opts.data,
+      ppid: opts.ppid,
+    });
     // 记最近：文件查看器带文件 id → 最近文件；其余可见 App → 最近 App（隐藏宿主 webview/userapp 不记）
     if (FILE_VIEWERS.has(appId) && typeof opts.data === 'string') pushRecentFile(opts.data);
     else if (!a.hidden) pushRecentApp(appId);
