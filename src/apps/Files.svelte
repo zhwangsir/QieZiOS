@@ -623,8 +623,15 @@ ${JSON.stringify(files)}`;
     {/each}
 
     {#if items.length === 0}
-      <div class="grid place-items-center py-12 text-center text-sm text-qz-muted {view === 'grid' ? 'col-span-full' : ''}">
-        {aiHits ? '没有命中' : q.trim() ? '没有匹配的文件' : '空文件夹'}
+      <div class="grid place-items-center gap-2 py-12 text-center {view === 'grid' ? 'col-span-full' : ''}">
+        <div class="text-4xl opacity-50">{aiHits || q.trim() ? '🔍' : '📂'}</div>
+        <div class="text-sm text-qz-muted">{aiHits ? '没有命中' : q.trim() ? '没有匹配的文件' : '这个文件夹是空的'}</div>
+        {#if !aiHits && !q.trim()}
+          <div class="mt-1 flex gap-2">
+            <button class="rounded-md bg-qz-accent/85 px-3 py-1 text-xs text-qz-accent-contrast transition hover:brightness-110" onclick={newFile}>＋ 新建文件</button>
+            <button class="rounded-md bg-qz-elevated px-3 py-1 text-xs transition hover:brightness-110 disabled:opacity-50" disabled={uploading} onclick={() => fileInput?.click()}>⬆ 上传</button>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>

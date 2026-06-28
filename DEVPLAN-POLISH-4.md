@@ -38,9 +38,11 @@
 - [ ] **R4-F6 桌面小组件层（时钟/日历/系统状态）** [M, 价值高]：桌面有图标+便签但无活动小组件。新 `shell/Widgets.svelte`+`shell/widgets.svelte.ts`（镜像 notes 的拖动/持久化），组件：clock（复用 Clock 的 SVG 表盘）/calendar（月历）/sysstat（进程数）。桌面右键「新建小组件」。摆放/持久无头可验、表盘视觉真机。
 - [ ] **R4-F7 Files 框选（marquee 拖拽多选）** [M, 价值中高]：B15 已延后。grid 空白处 pointerdown 起选框 → 命中测试 item rect → set selected；与现有 item HTML5 拖拽共存（仅当 down 目标是容器才起框选）。无头可验。
 - [ ] **R4-F8 窗口贴靠布局弹窗（悬停最大化键）** [M, 价值中]：平铺只有键盘/网格，无鼠标可发现入口。WindowControls 最大化键 hover 出布局区选择器（半/四分/三分），点击调现有 setBounds 几何（把 Desktop 的 tile/quarter 几何抽到 `shell/tiling.ts` 共享）。无头可验。
-- [ ] **R4-F9 空状态 + 首启引导打磨** [S, 价值中]：Files/Trash/Clipboard 空状态是裸文字；Welcome 是点击计数 demo。给空状态加图标+提示+主操作按钮；Welcome 改 3-4 卡片快速导览（Spotlight/终端/设置/文件）。纯展示。无头可验。
+- [x] **R4-F9 空状态 + 首启引导打磨** [S, 价值中]：Files/Trash/Clipboard 空状态是裸文字；Welcome 是点击计数 demo。给空状态加图标+提示+主操作按钮；Welcome 改 3-4 卡片快速导览（Spotlight/终端/设置/文件）。纯展示。无头可验。
+  - ✅ 实现：Welcome 重写为快速导览——4 张卡片（文件/终端/设置/应用商店，点开对应 App via `sys.openApp`）+ Spotlight 提示按钮（`openSpotlight()`）+ 窗口手感提示，去掉点击计数 demo，根加 overflow-auto。Files 空状态加 图标(📂空文件夹 / 🔍 无匹配) + 文案 + （仅空文件夹）「＋新建文件」「⬆上传」按钮（复用 newFile/fileInput，col-span-full 保留）。Trash 空状态升为 图标+「回收站是空的」+提示行。Clipboard 原有提示已够、不动。
+  - ✅ 浏览器实测：Welcome 显 4 卡片+Spotlight 提示+无计数，点「终端」卡片→开终端；Files 空文件夹显「这个文件夹是空的」+新建文件+上传；Trash 空显图标+消息+提示。0 console error。supervisor 子 Agent PASS（Welcome openSpotlight 存在+leaf 无环+app id 有效+无残留 count、Files newFile/fileInput/uploading 在作用域+仅空文件夹显按钮+非空零干扰、Trash 纯展示逻辑未动、Svelte5/kbd/build 五点全过）。npm check+build 0 错 0 警。
 - [ ] **R4-F10 最小化/启动「神灯」朝 Dock 飞的动画** [S/M, 价值高(美观/丝滑)]：现窗口开关是居中 pop、最小化是原地淡出，无朝 Dock 图标的空间连接。算目标图标 rect → transform-origin+translate/scale 朝它过渡（仅 transform/opacity，尊重 reducedMotion）。动画平滑需真机验。
 
 ---
 
-> 当前循环：第 4 轮；**C1-C4 + F1 + F2 + F3 + F4 已完成 ✅**。剩 F5/F6/F7/F8/F9/F10（功能）。下一项建议：R4-F9（空状态+首启引导，单文件纯展示，美观/首印象）/ R4-F6（桌面小组件，中成本）/ R4-F5（每 App 默认窗口尺寸）/ R4-F8（贴靠布局弹窗）。
+> 当前循环：第 4 轮；**C1-C4 + F1/F2/F3/F4/F9 已完成 ✅**。剩 F5/F6/F7/F8/F10（功能）。下一项建议：R4-F6（桌面小组件，中成本高价值，镜像 StickyNotes）/ R4-F5（每 App 默认窗口尺寸）/ R4-F8（贴靠布局弹窗）/ R4-F7（Files 框选）。F10（神灯动画）真机验。
