@@ -10,6 +10,7 @@
   } from '../kernel/processes.svelte';
   import { resolveAppDef } from '../apps/desktopApps.svelte';
   import { settings } from '../system/settings.svelte';
+  import { resolvedMode } from '../system/theme.svelte';
   import {
     noteHistory,
     unreadCount,
@@ -65,8 +66,9 @@
     if (trayOpen && trayEl && !trayEl.contains(e.target as Node)) trayOpen = false;
   }
 
+  // 点一下设成「当前外观的反面」的显式模式（从 auto/schedule 切到固定 明/暗）
   function toggleMode() {
-    settings.mode = settings.mode === 'dark' ? 'light' : 'dark';
+    settings.mode = resolvedMode() === 'dark' ? 'light' : 'dark';
   }
 
   // 通知等级 → 左侧竖条颜色
@@ -120,7 +122,7 @@
   <button
     class="grid h-6 w-6 place-items-center rounded text-sm hover:bg-qz-elevated"
     title="切换明暗"
-    onclick={toggleMode}>{settings.mode === 'dark' ? '🌙' : '☀️'}</button>
+    onclick={toggleMode}>{resolvedMode() === 'dark' ? '🌙' : '☀️'}</button>
 
   <!-- 通知中心铃铛 -->
   <div class="relative" bind:this={trayEl}>

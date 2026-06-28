@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { settings } from './system/settings.svelte';
-  import { activeTokens, applyTokens } from './system/theme.svelte';
+  import { activeTokens, applyTokens, resolvedMode } from './system/theme.svelte';
   import { processes } from './kernel/processes.svelte';
   import { vfs, setOwnerProvider } from './kernel/vfs.svelte';
   import { startServices } from './kernel/services.svelte';
@@ -37,7 +37,7 @@
   // 注意：这里只改 CSS 变量 → 整屏换肤，0 个组件重新渲染。
   $effect(() => {
     applyTokens(activeTokens());
-    document.documentElement.style.colorScheme = settings.mode;
+    document.documentElement.style.colorScheme = resolvedMode(); // 用解析后的明/暗（auto/schedule 也对）→ 原生控件/滚动条配色跟上
     // 界面缩放：改根字号 → 所有 rem 尺寸（字号/间距）整体缩放
     document.documentElement.style.fontSize = `${(16 * settings.fontScale).toFixed(2)}px`;
   });

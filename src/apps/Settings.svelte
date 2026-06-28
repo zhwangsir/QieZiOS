@@ -10,9 +10,11 @@
   import { soundPrefs, playSound } from '../system/sound';
   import { sys } from '../system/sys';
 
-  const modes: Array<['dark' | 'light', string]> = [
+  const modes: Array<[typeof settings.mode, string]> = [
     ['dark', '暗色'],
     ['light', '明色'],
+    ['auto', '跟随系统'],
+    ['schedule', '定时'],
   ];
 
   let presetName = $state('');
@@ -265,19 +267,27 @@
     {/if}
   </section>
 
-  <!-- 明 / 暗 -->
+  <!-- 明 / 暗 / 跟随系统 / 定时 -->
   <section class="flex flex-col gap-2">
     <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">外观</h2>
-    <div class="flex gap-2">
+    <div class="grid grid-cols-2 gap-2">
       {#each modes as [val, label] (val)}
         <button
-          class="flex-1 rounded-qz border px-3 py-2 transition-colors"
+          class="rounded-qz border px-3 py-2 transition-colors"
           class:bg-qz-elevated={settings.mode === val}
           style="border-color: {settings.mode === val ? 'var(--color-qz-accent)' : 'var(--color-qz-border)'}"
           onclick={() => (settings.mode = val)}
         >{label}</button>
       {/each}
     </div>
+    {#if settings.mode === 'schedule'}
+      <div class="flex items-center gap-2 text-xs text-qz-muted">
+        <span>☀️ 转明</span>
+        <input type="time" bind:value={settings.lightStart} class="rounded bg-qz-surface px-1.5 py-0.5 text-qz-text outline-none ring-1 ring-qz-border focus:ring-qz-accent" />
+        <span>🌙 转暗</span>
+        <input type="time" bind:value={settings.darkStart} class="rounded bg-qz-surface px-1.5 py-0.5 text-qz-text outline-none ring-1 ring-qz-border focus:ring-qz-accent" />
+      </div>
+    {/if}
   </section>
 
   <!-- 主色 -->

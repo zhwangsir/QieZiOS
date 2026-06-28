@@ -17,7 +17,9 @@
 
 ## 二、功能 / 体验（价值/成本比排序）
 
-- [ ] **R5-F1 自动明暗（跟随系统 + 定时）** [S, 价值极高]：`settings.mode` 仅 dark/light，`viewport` 不监听 `prefers-color-scheme`。扩 mode→dark/light/auto/schedule + lightStart/darkStart；viewport 加 matchMedia(prefers-color-scheme) → `resolvedMode` derived，theme 读它；schedule 复用 schedd。Settings 四段控件。对齐作者#1 美观。无头可验（faked matchMedia 断言 token）。
+- [x] **R5-F1 自动明暗（跟随系统 + 定时）** [S, 价值极高]：`settings.mode` 仅 dark/light，`viewport` 不监听 `prefers-color-scheme`。扩 mode→dark/light/auto/schedule + lightStart/darkStart；viewport 加 matchMedia(prefers-color-scheme) → `resolvedMode` derived，theme 读它；schedule 复用 schedd。Settings 四段控件。对齐作者#1 美观。无头可验（faked matchMedia 断言 token）。
+  - ✅ 实现：settings.mode 扩 `dark/light/auto/schedule` + `lightStart/darkStart`（默认 07:00/19:00，自动进 SETTINGS_KEYS）。viewport 加 `systemDark` $state + matchMedia('(prefers-color-scheme: dark)') 监听。theme 加 `resolvedMode()`（auto→systemDark、schedule→inLightWindow[支持跨午夜]、dark/light 直通）+ 模块级 `$effect.root` 的 `scheduleTick`（60s tick 仅 schedule 时武装）；`activeTokens` 用 `palettes[resolvedMode()]`。TopBar 切换/图标用 resolvedMode（从 auto/schedule 切到显式反面）。Settings 四段控件(2×2)+schedule 时显两个 time 输入。**App.svelte `colorScheme` 改用 resolvedMode（supervisor 抓到这处漏改——原 `settings.mode` 会把 'auto'/'schedule' 灌进 CSS color-scheme 致原生控件配色失效/陈旧）**。
+  - ✅ 浏览器实测：暗→#0b0b12 / 明→#eceef4（零回归）；auto 跟随 systemDark（reload colorScheme=light→auto 解析 light）；schedule 全天明窗→明、1 分钟明窗→暗；colorScheme 修复后 auto→'dark'/schedule→'light'（非字面 auto/schedule）；4 段按钮+time 输入；Settings 复位干净。0 console error。supervisor 子 Agent PASS（类型安全 palettes 只收 resolvedMode/resolvedMode 边界/scheduleTick 仅 schedule 武装无泄漏无环/反应式/TopBar 转义/sync 白名单 undefined 安全 + **抓到 App.svelte colorScheme 漏改**[已修验]）。npm check+build 0 错 0 警。live 系统主题切换是标准浏览器行为（CDP 模拟不派发 change 事件、真机即时跟随）。
 - [ ] **R5-F2 顶栏快捷设置面板（Quick Settings）** [M, 价值高]：顶栏只有 🍆/🌙/🔔/钟。新 `shell/QuickSettings.svelte`（仿 TopBar 托盘下拉）：明暗/auto、声音开关+音量、勿扰、下一张壁纸、主色swatch。承载 F1/F3。
 - [ ] **R5-F3 勿扰 / 专注模式** [S/M, 价值高]：无 dnd。加 `dnd` + 在 `notifications.pushNote` 门控（勿扰时不弹 toast 但仍进 noteHistory）、`soundd` 查 dnd。顶栏/QuickSettings 开关。无头可验（断言 noteHistory 增长但无 toast）。
 - [ ] **R5-F4 Files 键盘导航 + F2 改名 + Ctrl+D 复制** [M, 价值高]：Files 仅 Enter/Delete/Ctrl+CXV，无方向键/F2/Ctrl+D/首字母跳。复用现有选择模型+copyNode+startRename，纯接线。无头可验。
@@ -28,4 +30,4 @@
 
 ---
 
-> 当前循环：第 5 轮审计已 seed；**R5-C1（小组件屏外）已完成 ✅**。剩 C2-C5（正确性）+ F1-F8（功能）。下一项建议：R5-F1（自动明暗，价值极高单文件）/ R5-C2-C5（正确性小修，可批量一轮清）/ R5-F4（Files 键盘导航）。
+> 当前循环：第 5 轮；**R5-C1 + R5-F1（自动明暗）已完成 ✅**。剩 C2-C5（正确性）+ F2-F8（功能）。下一项建议：R5-C2-C5（正确性小修，4 项可一轮批量清，轮换正确性）/ R5-F3（勿扰）/ R5-F4（Files 键盘导航）/ R5-F2（QuickSettings）。

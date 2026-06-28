@@ -1,6 +1,42 @@
 import { settings, fontStack } from './settings.svelte';
 import { wallpapers } from './wallpaper';
 import { customWallpaperUrl } from './wallpaperBlob.svelte';
+import { viewport } from './viewport.svelte';
+
+// 定时模式的分钟信号：每分钟 +1，让 resolvedMode 在跨过 lightStart/darkStart 时重算。
+// 仅在 mode='schedule' 时武装（effect 读 settings.mode → 切到/离开定时自动起停），避免空转。
+let scheduleTick = $state(0);
+$effect.root(() => {
+  $effect(() => {
+    if (settings.mode !== 'schedule') return;
+    const t = setInterval(() => (scheduleTick = (scheduleTick + 1) % 1e9), 60000);
+    return () => clearInterval(t);
+  });
+});
+
+// 'HH:MM' → 当天分钟数
+function hm(s: string): number {
+  const [h, m] = (s || '').split(':').map(Number);
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+}
+// 当前是否落在「明色时段」[lightStart, darkStart)（支持跨午夜）
+function inLightWindow(light: string, dark: string): boolean {
+  const now = new Date();
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const ls = hm(light), ds = hm(dark);
+  if (ls === ds) return true;
+  return ls < ds ? cur >= ls && cur < ds : cur >= ls || cur < ds;
+}
+
+// 把 settings.mode（含 auto/schedule）解析成最终的 'dark'|'light'。
+// 在 effect/模板里调用会订阅 systemDark（auto）与 scheduleTick（schedule）→ 自动切换。
+export function resolvedMode(): 'dark' | 'light' {
+  const m = settings.mode;
+  if (m === 'light' || m === 'dark') return m;
+  if (m === 'auto') return viewport.systemDark ? 'dark' : 'light';
+  scheduleTick; // 订阅分钟信号
+  return inLightWindow(settings.lightStart, settings.darkStart) ? 'light' : 'dark';
+}
 
 // ───────────────────────────────────────────────────────────
 // 主题 · 把「设置」翻译成一组 CSS token，写进 :root
@@ -39,7 +75,7 @@ function tintMix(base: string, accent: string, tint: number): string {
 }
 
 export function activeTokens(): Tokens {
-  const base = palettes[settings.mode];
+  const base = palettes[resolvedMode()];
   return {
     ...base,
     // 表面/抬升色叠加主色微调（在 base 展开之后覆盖；qz-glass 的 color-mix 会再嵌套一层，现代浏览器支持）

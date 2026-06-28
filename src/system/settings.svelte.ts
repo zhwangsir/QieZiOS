@@ -13,7 +13,9 @@ export type CustomWallpaper =
   | null;
 
 export interface Settings {
-  mode: 'dark' | 'light';   // 明 / 暗
+  mode: 'dark' | 'light' | 'auto' | 'schedule'; // 明 / 暗 / 跟随系统 / 定时（lightStart~darkStart 为明，余为暗）
+  lightStart: string;       // 定时模式：转明色的时刻 'HH:MM'
+  darkStart: string;        // 定时模式：转暗色的时刻 'HH:MM'
   accent: string;           // 主色（#hex）
   radius: number;           // 全局圆角（px）
   blur: number;             // 磨砂模糊（px）
@@ -28,6 +30,8 @@ export interface Settings {
 
 const defaults: Settings = {
   mode: 'dark',
+  lightStart: '07:00',
+  darkStart: '19:00',
   accent: '#8b5cf6',
   radius: 14,
   blur: 18,
