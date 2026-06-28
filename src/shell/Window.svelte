@@ -162,6 +162,36 @@
     }
   }
 
+  // 贴靠布局（R4-F8）：把窗口铺到窗口层的某个区域。给 WindowControls 的悬停浮层用。
+  function tileTo(zone: string) {
+    if (zone === 'max') {
+      setBounds(proc.id, { maximized: true });
+      return;
+    }
+    const layer = el?.parentElement;
+    if (!layer) return;
+    const W = layer.clientWidth;
+    const H = layer.clientHeight;
+    const half = Math.round(W / 2);
+    const halfH = Math.round(H / 2);
+    const third = Math.round(W / 3);
+    const map: Record<string, { x: number; y: number; width: number; height: number }> = {
+      left: { x: 0, y: 0, width: half, height: H },
+      right: { x: W - half, y: 0, width: W - half, height: H },
+      top: { x: 0, y: 0, width: W, height: halfH },
+      bottom: { x: 0, y: halfH, width: W, height: H - halfH },
+      tl: { x: 0, y: 0, width: half, height: halfH },
+      tr: { x: W - half, y: 0, width: W - half, height: halfH },
+      bl: { x: 0, y: halfH, width: half, height: H - halfH },
+      br: { x: W - half, y: halfH, width: W - half, height: H - halfH },
+      lthird: { x: 0, y: 0, width: third, height: H },
+      cthird: { x: third, y: 0, width: W - 2 * third, height: H },
+      rthird: { x: W - third, y: 0, width: third, height: H },
+    };
+    const b = map[zone];
+    if (b) setBounds(proc.id, { maximized: false, ...b });
+  }
+
   // 标题栏右键菜单
   function onTitleMenu(e: MouseEvent) {
     openMenu(e, [
@@ -238,7 +268,7 @@
     ondblclick={() => toggleMaximize(proc.id)}
     oncontextmenu={onTitleMenu}
   >
-    <WindowControls {proc} />
+    <WindowControls {proc} onTile={tileTo} />
     <span class="flex-1 truncate text-[13px] font-medium text-qz-muted">{proc.title}</span>
   </div>
 
