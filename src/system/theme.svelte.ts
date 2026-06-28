@@ -31,10 +31,20 @@ const palettes: Record<'dark' | 'light', Tokens> = {
 
 // 纯函数：读当前 settings，算出「应该写到 :root 的全部 token」。
 // 在 effect 里调用它 → 会自动订阅它读到的每个 settings 字段。
+// 把主色按比例渗进中性表面色（accentTint）→ 表面/控件带一点主色调、整体更统一。tint=0 时返回原色（零变化）。
+function tintMix(base: string, accent: string, tint: number): string {
+  const t = Math.min(0.15, Math.max(0, tint || 0));
+  if (t <= 0) return base;
+  return `color-mix(in srgb, ${accent} ${Math.round(t * 100)}%, ${base})`;
+}
+
 export function activeTokens(): Tokens {
   const base = palettes[settings.mode];
   return {
     ...base,
+    // 表面/抬升色叠加主色微调（在 base 展开之后覆盖；qz-glass 的 color-mix 会再嵌套一层，现代浏览器支持）
+    '--color-qz-surface': tintMix(base['--color-qz-surface'], settings.accent, settings.accentTint),
+    '--color-qz-elevated': tintMix(base['--color-qz-elevated'], settings.accent, settings.accentTint),
     '--color-qz-accent': settings.accent,
     '--color-qz-accent-contrast': pickContrast(settings.accent),
     '--radius-qz': `${settings.radius}px`,

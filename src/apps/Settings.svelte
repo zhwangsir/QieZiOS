@@ -335,6 +335,21 @@
     />
   </section>
 
+  <!-- 主色渗透：把主色调拌进面板/控件表面，整体配色更统一（0=纯中性表面） -->
+  <section class="flex flex-col gap-1.5">
+    <div class="flex justify-between text-xs text-qz-muted">
+      <span>主色渗透</span><span>{Math.round(settings.accentTint * 100)}%</span>
+    </div>
+    <input
+      type="range"
+      min="0"
+      max="0.15"
+      step="0.01"
+      bind:value={settings.accentTint}
+      class="w-full accent-qz-accent"
+    />
+  </section>
+
   <!-- 界面缩放 -->
   <section class="flex flex-col gap-1.5">
     <div class="flex justify-between text-xs text-qz-muted">

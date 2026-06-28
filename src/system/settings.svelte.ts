@@ -18,6 +18,7 @@ export interface Settings {
   radius: number;           // 全局圆角（px）
   blur: number;             // 磨砂模糊（px）
   surfaceOpacity: number;   // 面板半透明度（0~1）
+  accentTint: number;       // 主色渗入表面色的比例（0~0.15）→ 整体配色更统一；0=纯中性表面
   fontScale: number;        // 界面缩放（根字号倍率，0.85~1.2）
   fontFamily: string;       // 界面字体族 id（见 FONT_FAMILIES）
   wallpaperId: string;      // 当前内置壁纸 id（customWallpaper 为 null 时生效）
@@ -31,6 +32,7 @@ const defaults: Settings = {
   radius: 14,
   blur: 18,
   surfaceOpacity: 0.66,
+  accentTint: 0,
   fontScale: 1,
   fontFamily: 'system',
   wallpaperId: 'aurora',
