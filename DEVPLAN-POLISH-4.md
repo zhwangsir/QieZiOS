@@ -13,8 +13,11 @@
 - [x] **R4-C2（P1 资源泄漏）OpenAI 流式 `[DONE]` 提前 return 不释放 reader**：`streamOpenAI`（ai.ts ~347-366）在收到 `data: [DONE]` 时直接 return，未 `reader.cancel()`/`releaseLock()` → 底层 ReadableStream 锁与连接挂到 GC；agent loop 每问至多 8 轮，长会话累积悬挂 reader/连接。修：读循环包 try/finally，finally 里 `try{ await reader.cancel() }catch{}`。文件：`system/ai.ts`。
   - ✅ 实现：`streamOpenAI` 把「for 读循环 + 循环后 return」整体包进 `try{}finally{ try{ await reader.cancel() }catch{} }`（getReader/decoder/累加器声明在 try 外，reader 在 finally 可见）→ `[DONE]` 提前 return、流自然结束、signal 中断三条路径都释放 reader（取消底层流关连接+释放锁）。finally 无 return/throw → AbortError 仍正常上抛给 runOpenAIAgent/complete；解析/输出逻辑零改动。Anthropic 路径用 SDK `client.messages.stream()` 自管 reader、无手动 getReader，无同类泄漏。
   - ✅ 浏览器实测（stub fetch 返回合成 SSE 流：两段 delta + `data: [DONE]` 且**不关闭流**模拟 keep-alive 尾字节）：`__qzAi.complete('hi')` → 返回 "hello world"（delta 累加正确）+ 底层流 cancel() 触发（cancelled=true，修前 [DONE] 路径不会取消→泄漏）；无 error；reload 后 app 正常挂载、Studio(渲染 Sandbox)/AppGallery 等深层 import ai.ts 的模块运行正常（编辑期 Vite「Failed to reload」HMR 回退噪声，check+build 0/0 证无真错）。supervisor 子 Agent PASS（两 return 路径全覆盖+reader 作用域、中断 AbortError 仍上抛 finally 不吞、cancel 语义[DONE/已结束/中断]内 try-catch 不掩盖返回值、解析零回归、缩进/scope/build 五点全过）。npm check+build 0 错 0 警。顺手清掉测试污染的 qz.ai.apiKey('g4spot'→'')。
-- [ ] **R4-C3（P2）Terminal 历史 ↑/↓ 读共享 cmdHistory 陈旧索引**：`recallHistory`（Terminal.svelte ~95）`hist[histIdx]` 的 histIdx 按调用时长度夹取，但 cmdHistory.list 是多终端共享 persisted、另一终端 addHistory 去重裁到 200 会缩短 → `input` 可能为 `undefined`（输入框显字面 undefined）。修：访问处再夹 `histIdx>=hist.length?'':(hist[histIdx]??'')`。文件：`apps/Terminal.svelte`。
-- [ ] **R4-C4（P2）桌宠拖动只夹左上、不夹右下、resize 不回收**：`DesktopPet.move`（~102）只 `>=0/>=36` 夹，窗口缩小后桌宠可停到屏外取不回。修：按 `innerWidth/innerHeight`（减桌宠尺寸）夹 move + resize 时回夹 pet.x/y。文件：`shell/DesktopPet.svelte`/`system/pet.svelte.ts`。
+- [x] **R4-C3（P2，复审为防御）Terminal 历史 ↑/↓ 读共享 cmdHistory 陈旧索引**：审计担心 `hist[histIdx]` 可能 undefined。**复审结论：当前已安全**——`recallHistory` 每次调用都重读 `hist=cmdHistory.list` + 重夹 `histIdx=Math.min(hist.length,…)`，且 `addHistory` 只 push/在 200 处 splice 队首（长度从不缩短到某前值之下）→ histIdx∈[0,length]、`hist[histIdx]` 对 <length 恒有定义。仍把末行改 `histIdx>=hist.length?'':(hist[histIdx]??'')` 作**防御**（行为等价、未来若出现「中途缩短」也不灌字面 undefined）。文件：`apps/Terminal.svelte`。
+  - ✅ supervisor 子 Agent 确认行为等价、空表早返回不变、↑/↓ 零回归。check+build 0/0。
+- [x] **R4-C4（P2）桌宠拖动只夹左上、不夹右下、resize 不回收**：`DesktopPet.move` 只 `>=0/>=36` 夹，窗口缩小后桌宠可停到屏外取不回。修：按 `innerWidth/innerHeight`（减桌宠尺寸）夹 move + resize 时回夹 pet.x/y。文件：`shell/DesktopPet.svelte`。
+  - ✅ 实现：`clampPet()`（PET_W220/PET_H300，`maxX=max(0,innerW-W)`/`maxY=max(36,innerH-H)`，`pet.x=min(maxX,max(0,x))`、`pet.y=min(maxY,max(36,y))`）。`move()` 改为设原始 x/y 后调 clampPet（拖不出屏）。`onMount(()=>{ clampPet(); addEventListener('resize',clampPet); return ()=>removeEventListener })`：挂载即夹回屏外持久位置 + 窗口缩小持续回夹 + 卸载清理。**起初用 `<svelte:window onresize>` 但实测不可靠触发 → 改显式 addEventListener**（DesktopPet 在 Desktop 无条件挂载、onMount 跑一次，无泄漏）。
+  - ✅ 浏览器实测（**经 DOM transform 读组件真实实例**——dynamic import 的 pet 是另一实例会误导，故以 DOM 为准）：种 enabled+(99999,99999) reload → onMount 夹到 (maxX,maxY)；真实拖动越过右下角 → 钉在 (maxX,maxY)；340×320 视口下合成 resize 把 (580,400)→(120,36)。0 真 console error。supervisor 子 Agent PASS（C3 等价/C4 夹算各 case 含退化无 NaN/move 锚点不抖/监听生命周期无泄漏/无反应式环/build 六点全过；非阻塞记：PET 尺寸为近似、resize 仅内收不外扩 属预期）。npm check+build 0 错 0 警。
 
 ## 二、功能 / 体验（价值/成本比排序）
 
@@ -36,4 +39,4 @@
 
 ---
 
-> 当前循环：第 4 轮；**R4-C1 + R4-F1 + R4-C2 + R4-F2（recents）已完成 ✅**。剩 C3/C4（正确性）+ F3-F10（功能）。下一项建议：R4-C3（终端历史陈旧索引，小修，轮换正确性）/ R4-F4（Spotlight 计算器，单文件复用 calc.ts）/ R4-F3（accent tint，美观）。
+> 当前循环：第 4 轮；**R4-C1 + R4-F1 + R4-C2 + R4-F2 + R4-C3 + R4-C4 已完成 ✅**（正确性 C1-C4 全清）。剩 F3-F10（功能）。下一项建议：R4-F4（Spotlight 计算器，单文件复用 calc.ts）/ R4-F3（accent tint，美观）/ R4-F6（桌面小组件）/ R4-F9（空状态+引导）。

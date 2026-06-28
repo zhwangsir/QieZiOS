@@ -97,7 +97,9 @@
     if (!hist.length) return;
     if (histIdx === -1) histIdx = hist.length;
     histIdx = Math.min(hist.length, Math.max(0, histIdx + dir));
-    input = histIdx === hist.length ? '' : hist[histIdx];
+    // 防御：cmdHistory 多终端共享，理论上每次调用已按当前长度重夹 histIdx，但用 >= + ?? '' 兜底，
+    // 万一未来出现「列表中途缩短」的路径也不会把字面 undefined 灌进输入框。
+    input = histIdx >= hist.length ? '' : (hist[histIdx] ?? '');
   }
 
   // Tab 补全：首词补命令名，否则补当前目录下的路径

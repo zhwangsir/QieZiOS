@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { pet } from '../system/pet.svelte';
   import { companion } from '../system/companion.svelte';
   import { createPet, type Pet } from '../lib/live2d';
@@ -99,14 +100,31 @@
     oy = pet.y;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
+  // 桌宠主体大致尺寸（手柄 + 280 画布）。把位置夹进视口，左/上≥0/36，右/下不出屏。
+  const PET_W = 220,
+    PET_H = 300;
+  function clampPet() {
+    const maxX = Math.max(0, window.innerWidth - PET_W);
+    const maxY = Math.max(36, window.innerHeight - PET_H);
+    pet.x = Math.min(maxX, Math.max(0, pet.x));
+    pet.y = Math.min(maxY, Math.max(36, pet.y));
+  }
   function move(e: PointerEvent) {
     if (!dragging) return;
-    pet.x = Math.max(0, ox + (e.clientX - sx));
-    pet.y = Math.max(36, oy + (e.clientY - sy));
+    pet.x = ox + (e.clientX - sx);
+    pet.y = oy + (e.clientY - sy);
+    clampPet(); // 拖动即夹 → 拖不出屏幕
   }
   function up() {
     dragging = false;
   }
+  // 开机若持久位置已在屏外（上次窗口更大时存的）→ 挂载即夹回；窗口缩小时也持续拉回可见区。
+  // 用显式 addEventListener（而非 <svelte:window>）注册 resize → 行为可靠、卸载清理。
+  onMount(() => {
+    clampPet();
+    window.addEventListener('resize', clampPet);
+    return () => window.removeEventListener('resize', clampPet);
+  });
 </script>
 
 {#if pet.enabled}
