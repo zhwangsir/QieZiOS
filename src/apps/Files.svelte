@@ -304,6 +304,55 @@ ${JSON.stringify(files)}`;
     selected = [];
     lastClicked = null;
   }
+
+  // ── 框选（marquee 拖拽多选，R4-F7）────────────────────────────
+  // 从内容区空白处按下拖出一个选框，命中的 item 进选区。与 item 的 HTML5 拖拽共存：
+  // 只在按下目标不是 item/按钮时起框选；item 自己的拖拽走 dragstart 不受影响。
+  let containerEl = $state<HTMLElement>();
+  let marqueeBox = $state<{ left: number; top: number; w: number; h: number } | null>(null); // 容器内绝对定位用
+  let mq: { cx: number; cy: number; base: string[]; add: boolean } | null = null;
+  let suppressClear = false; // 框选刚结束的那次 click 不要清空选区
+
+  function onContainerPointerDown(e: PointerEvent) {
+    if (e.button !== 0 || renamingId) return;
+    // 落在 item / 按钮 / 输入框上 → 交给它们，不起框选
+    if ((e.target as HTMLElement).closest('[role="button"], button, input, textarea')) return;
+    const add = e.ctrlKey || e.metaKey || e.shiftKey; // 加选：保留已选
+    mq = { cx: e.clientX, cy: e.clientY, base: add ? [...selected] : [], add };
+    marqueeBox = null;
+    containerEl?.setPointerCapture(e.pointerId);
+  }
+  function onContainerPointerMove(e: PointerEvent) {
+    if (!mq || !containerEl) return;
+    const r = containerEl.getBoundingClientRect();
+    const minX = Math.min(mq.cx, e.clientX), maxX = Math.max(mq.cx, e.clientX);
+    const minY = Math.min(mq.cy, e.clientY), maxY = Math.max(mq.cy, e.clientY);
+    if (maxX - minX < 4 && maxY - minY < 4) { marqueeBox = null; return; } // 抖动阈值，免吃掉普通点击
+    marqueeBox = {
+      left: minX - r.left + containerEl.scrollLeft,
+      top: minY - r.top + containerEl.scrollTop,
+      w: maxX - minX,
+      h: maxY - minY,
+    };
+    const set = new Set(mq.add ? mq.base : []);
+    for (const el of containerEl.querySelectorAll<HTMLElement>('[data-file-id]')) {
+      const ir = el.getBoundingClientRect();
+      if (ir.right >= minX && ir.left <= maxX && ir.bottom >= minY && ir.top <= maxY) set.add(el.dataset.fileId!);
+    }
+    selected = [...set];
+  }
+  function onContainerPointerUp(e: PointerEvent) {
+    if (!mq) return;
+    const moved = marqueeBox !== null;
+    mq = null;
+    marqueeBox = null;
+    try { containerEl?.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    if (moved) suppressClear = true; // 紧跟的 click 别清空刚框选的结果
+  }
+  function onContainerClick() {
+    if (suppressClear) { suppressClear = false; return; }
+    clearSelection();
+  }
   // 对某节点操作时的「有效目标」：它在多选里就用整个多选，否则就这一个
   function effectiveTargets(n: VNode): string[] {
     return selected.length > 1 && selected.includes(n.id) ? [...selected] : [n.id];
@@ -537,9 +586,13 @@ ${JSON.stringify(files)}`;
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
-    class={view === 'grid' ? 'grid min-w-0 flex-1 content-start gap-1 overflow-auto p-3' : 'flex min-w-0 flex-1 flex-col gap-0.5 overflow-auto p-2'}
+    bind:this={containerEl}
+    class={view === 'grid' ? 'relative grid min-w-0 flex-1 content-start gap-1 overflow-auto p-3' : 'relative flex min-w-0 flex-1 flex-col gap-0.5 overflow-auto p-2'}
     style={view === 'grid' ? 'grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));' : ''}
-    onclick={clearSelection}
+    onclick={onContainerClick}
+    onpointerdown={onContainerPointerDown}
+    onpointermove={onContainerPointerMove}
+    onpointerup={onContainerPointerUp}
     onkeydown={(e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && clip) {
         e.preventDefault();
@@ -562,6 +615,7 @@ ${JSON.stringify(files)}`;
         class:bg-qz-elevated={selected.includes(n.id)}
         style={dragOverId === n.id ? 'box-shadow: inset 0 0 0 2px var(--color-qz-accent)' : ''}
         title={`${modeStr(n)}  属主 ${n.owner ?? DEFAULT_OWNER}`}
+        data-file-id={n.id}
         role="button"
         tabindex="0"
         draggable={renamingId !== n.id}
@@ -633,6 +687,14 @@ ${JSON.stringify(files)}`;
           </div>
         {/if}
       </div>
+    {/if}
+
+    <!-- 框选选框（拖拽中显示）。pointer-events-none 不挡命中测试 -->
+    {#if marqueeBox}
+      <div
+        class="pointer-events-none absolute z-10 rounded-sm border border-qz-accent bg-qz-accent/15"
+        style="left: {marqueeBox.left}px; top: {marqueeBox.top}px; width: {marqueeBox.w}px; height: {marqueeBox.h}px"
+      ></div>
     {/if}
   </div>
 
