@@ -11,7 +11,7 @@
   import { resolveAppDef } from '../apps/desktopApps.svelte';
   import { settings } from '../system/settings.svelte';
   import { resolvedMode } from '../system/theme.svelte';
-  import { dnd, toggleDnd } from '../system/dnd.svelte';
+  import QuickSettings from './QuickSettings.svelte';
   import {
     noteHistory,
     unreadCount,
@@ -119,19 +119,14 @@
     {/each}
   </div>
 
-  <!-- 系统托盘：明暗切换 -->
+  <!-- 系统托盘：明暗切换（一键）-->
   <button
     class="grid h-6 w-6 place-items-center rounded text-sm hover:bg-qz-elevated"
     title="切换明暗"
     onclick={toggleMode}>{resolvedMode() === 'dark' ? '🌙' : '☀️'}</button>
 
-  <!-- 勿扰模式：开启后不弹 toast、不发声（通知仍进通知中心）。用 🤫 与右侧通知铃铛区分 -->
-  <button
-    class="grid h-6 w-6 place-items-center rounded text-sm hover:bg-qz-elevated"
-    class:text-qz-accent={dnd.enabled}
-    class:opacity-50={!dnd.enabled}
-    title={dnd.enabled ? '勿扰：开（点击关闭）' : '勿扰：关（点击开启）'}
-    onclick={toggleDnd}>🤫</button>
+  <!-- 快捷设置面板：外观/勿扰/声音/主色/壁纸 -->
+  <QuickSettings />
 
   <!-- 通知中心铃铛 -->
   <div class="relative" bind:this={trayEl}>
