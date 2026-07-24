@@ -70,7 +70,7 @@
   $effect(() => {
     if (quickLook && !qlNode) quickLook = false;
   });
-  // 键盘：空格开关面板；开着时 Esc 关、←/→/↑/↓ 在可见 items 上步进选中（预览联动）。
+  // 键盘：空格开关面板；开着时 Esc 关。方向键已移至容器 onkeydown 统一处理。
   // 仅拦「有选中 + 非输入态」的空格：焦点在输入框/按钮/媒体元素上时一律放行
   // （重命名框本来 stopPropagation 不冒泡到这里；视频里的空格是播放控制）。
   function onQuickLookKey(e: KeyboardEvent): void {
@@ -83,19 +83,56 @@
       if (!e.repeat) quickLook = !quickLook; // 按住不连闪
       return;
     }
-    if (!quickLook) return;
-    if (e.key === 'Escape') {
+    if (quickLook && e.key === 'Escape') {
       e.preventDefault();
       quickLook = false;
-    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
-      const next = stepSelection(items.map((i) => i.id), selected[0], delta);
-      if (next) {
-        selected = [next];
-        lastClicked = next;
+    }
+  }
+
+  // ── 键盘导航辅助 ────────────────────────────────────────
+  // grid 视图列数：读 getComputedStyle 的 grid-template-columns 算实际列数
+  function gridCols(): number {
+    if (!containerEl || view !== 'grid') return 1;
+    const cols = getComputedStyle(containerEl).gridTemplateColumns.split(' ').filter(Boolean);
+    return cols.length || 1;
+  }
+  // 把指定项滚入视口
+  function scrollItemIntoView(id: string): void {
+    requestAnimationFrame(() => {
+      const el = containerEl?.querySelector<HTMLElement>(`[data-file-id="${id}"]`);
+      el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+  }
+  // 首字母跳转：从当前选中之后找第一个以 ch 开头的项，没有则从头找
+  function jumpToLetter(ch: string): void {
+    const lower = ch.toLowerCase();
+    const ids = items.map((i) => i.id);
+    if (!ids.length) return;
+    const curIdx = selected[0] ? ids.indexOf(selected[0]) : -1;
+    for (let i = curIdx + 1; i < ids.length; i++) {
+      if (getNode(ids[i])?.name.toLowerCase().startsWith(lower)) {
+        selected = [ids[i]]; lastClicked = ids[i]; scrollItemIntoView(ids[i]); return;
       }
     }
+    for (let i = 0; i <= curIdx; i++) {
+      if (getNode(ids[i])?.name.toLowerCase().startsWith(lower)) {
+        selected = [ids[i]]; lastClicked = ids[i]; scrollItemIntoView(ids[i]); return;
+      }
+    }
+  }
+  // Ctrl+D 原地复制（Duplicate）
+  async function duplicateSelected(): Promise<void> {
+    if (pasting) return; // 防重入
+    pasting = true;
+    try {
+      const newIds: string[] = [];
+      for (const id of selected) {
+        if (!getNode(id)) continue;
+        const newId = await copyNode(id, cwd);
+        if (newId) newIds.push(newId);
+      }
+      if (newIds.length) { selected = newIds; lastClicked = newIds[0]; }
+    } finally { pasting = false; }
   }
 
   // 排序 + 视图（每窗口内存态）
@@ -644,15 +681,66 @@ ${JSON.stringify(files)}`;
     onpointermove={onContainerPointerMove}
     onpointerup={onContainerPointerUp}
     onkeydown={(e) => {
+      // 粘贴
       if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && clip) {
         e.preventDefault();
         paste();
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected.length) {
+        return;
+      }
+      // Ctrl+D 原地复制
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D') && selected.length) {
+        e.preventDefault();
+        void duplicateSelected();
+        return;
+      }
+      // 删除
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selected.length) {
         e.preventDefault();
         delTargets([...selected]);
-      } else {
-        onQuickLookKey(e); // Quick Look：空格/Esc/方向键
+        return;
       }
+      // F2 改名（仅单选）
+      if (e.key === 'F2' && selected.length === 1 && !renamingId) {
+        e.preventDefault();
+        const n = getNode(selected[0]);
+        if (n) { renamingId = n.id; renameText = n.name; }
+        return;
+      }
+      // 方向键 / 首字母跳转（非输入态、无修饰键）
+      if (!renamingId && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const t = e.target as HTMLElement | null;
+        if (!t?.closest('input, textarea, select, button, video, audio')) {
+          const arr = e.key;
+          if (arr === 'ArrowRight' || arr === 'ArrowDown' || arr === 'ArrowLeft' || arr === 'ArrowUp') {
+            e.preventDefault();
+            if (!selected.length && items.length) {
+              selected = [items[0].id]; lastClicked = items[0].id;
+              return;
+            }
+            const ids = items.map((i) => i.id);
+            let delta: number;
+            if (view === 'list') {
+              delta = arr === 'ArrowDown' ? 1 : arr === 'ArrowUp' ? -1 : 0;
+            } else {
+              const cols = gridCols();
+              delta = arr === 'ArrowRight' ? 1 : arr === 'ArrowLeft' ? -1
+                    : arr === 'ArrowDown' ? cols : -cols;
+            }
+            if (delta !== 0) {
+              const next = stepSelection(ids, selected[0], delta);
+              if (next) { selected = [next]; lastClicked = next; scrollItemIntoView(next); }
+            }
+            return;
+          }
+          // 首字母跳转
+          if (arr.length === 1) {
+            e.preventDefault();
+            jumpToLetter(arr);
+            return;
+          }
+        }
+      }
+      onQuickLookKey(e); // Quick Look：空格/Esc
     }}
   >
     {#each items as n (n.id)}

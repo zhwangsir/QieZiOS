@@ -49,7 +49,8 @@
 - [x] **R4-F9 空状态 + 首启引导打磨** [S, 价值中]：Files/Trash/Clipboard 空状态是裸文字；Welcome 是点击计数 demo。给空状态加图标+提示+主操作按钮；Welcome 改 3-4 卡片快速导览（Spotlight/终端/设置/文件）。纯展示。无头可验。
   - ✅ 实现：Welcome 重写为快速导览——4 张卡片（文件/终端/设置/应用商店，点开对应 App via `sys.openApp`）+ Spotlight 提示按钮（`openSpotlight()`）+ 窗口手感提示，去掉点击计数 demo，根加 overflow-auto。Files 空状态加 图标(📂空文件夹 / 🔍 无匹配) + 文案 + （仅空文件夹）「＋新建文件」「⬆上传」按钮（复用 newFile/fileInput，col-span-full 保留）。Trash 空状态升为 图标+「回收站是空的」+提示行。Clipboard 原有提示已够、不动。
   - ✅ 浏览器实测：Welcome 显 4 卡片+Spotlight 提示+无计数，点「终端」卡片→开终端；Files 空文件夹显「这个文件夹是空的」+新建文件+上传；Trash 空显图标+消息+提示。0 console error。supervisor 子 Agent PASS（Welcome openSpotlight 存在+leaf 无环+app id 有效+无残留 count、Files newFile/fileInput/uploading 在作用域+仅空文件夹显按钮+非空零干扰、Trash 纯展示逻辑未动、Svelte5/kbd/build 五点全过）。npm check+build 0 错 0 警。
-- [ ] **R4-F10 最小化/启动「神灯」朝 Dock 飞的动画** [S/M, 价值高(美观/丝滑)]：现窗口开关是居中 pop、最小化是原地淡出，无朝 Dock 图标的空间连接。算目标图标 rect → transform-origin+translate/scale 朝它过渡（仅 transform/opacity，尊重 reducedMotion）。动画平滑需真机验。
+✅ M54.2 确认已实现
+- [x] **R4-F10 最小化/启动「神灯」朝 Dock 飞的动画** [S/M, 价值高(美观/丝滑)]：现窗口开关是居中 pop、最小化是原地淡出，无朝 Dock 图标的空间连接。算目标图标 rect → transform-origin+translate/scale 朝它过渡（仅 transform/opacity，尊重 reducedMotion）。动画平滑需真机验。
 
 ---
 

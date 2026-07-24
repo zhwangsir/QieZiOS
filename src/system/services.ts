@@ -4,6 +4,7 @@ import { pushNote, type NoteLevel } from './notifications.svelte';
 import { pushClip } from './clipboard.svelte';
 import { schedules, removeSchedule, runScheduled, type Schedule } from './schedules.svelte';
 import { playSound } from './sound';
+import { wallpaperSlideshow, advanceSlideshow } from './wallpaperSlideshow.svelte';
 
 // ───────────────────────────────────────────────────────────
 // 系统自带服务的注册处（import 本模块即登记；App 在开机时 startServices()）。
@@ -127,6 +128,36 @@ registerService({
     return () => {
       for (const id of [...timers.keys()]) disarm(id);
       offs.forEach((o) => o());
+    };
+  },
+});
+
+// 壁纸轮播：常驻服务，按 intervalSec 定时调用 advanceSlideshow 切换内置壁纸。
+// 与 schedd 的差异：间隔/启用状态是响应式的——用 $effect.root 订阅配置变化，
+// enabled/intervalSec/wallpaperIds 一改就自动重新武装计时器（无需总线事件）。
+registerService({
+  id: 'wallpaperd',
+  name: '壁纸轮播',
+  start() {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const dispose = $effect.root(() => {
+      $effect(() => {
+        // 依赖：enabled / intervalSec / wallpaperIds（读 length 跟踪增删）
+        const enabled = wallpaperSlideshow.enabled;
+        const intervalSec = wallpaperSlideshow.intervalSec;
+        const count = wallpaperSlideshow.wallpaperIds.length;
+        if (timer) {
+          clearInterval(timer);
+          timer = undefined;
+        }
+        if (!enabled || count === 0) return;
+        const ms = Math.max(1000, intervalSec * 1000);
+        timer = setInterval(() => advanceSlideshow(), ms);
+      });
+    });
+    return () => {
+      if (timer) clearInterval(timer);
+      dispose();
     };
   },
 });

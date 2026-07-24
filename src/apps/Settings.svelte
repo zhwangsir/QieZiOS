@@ -1,6 +1,14 @@
 <script lang="ts">
   import { settings, accentPresets, SETTINGS_KEYS, FONT_FAMILIES, type Settings } from '../system/settings.svelte';
   import { wallpapers } from '../system/wallpaper';
+  import {
+    wallpaperSlideshow,
+    SLIDESHOW_INTERVALS,
+    setSlideshowEnabled,
+    setSlideshowInterval,
+    toggleSlideshowWallpaper,
+    applyCurrentSlideshow,
+  } from '../system/wallpaperSlideshow.svelte';
   import { putBlob, deleteBlob } from '../kernel/blobStore';
   import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
   import { aiConfig, AI_MODELS, AI_PRESETS, applyAiPreset } from '../system/aiConfig.svelte';
@@ -435,6 +443,65 @@
           class="rounded-qz px-2.5 py-1.5 text-xs text-qz-muted ring-1 ring-qz-border transition-colors hover:ring-qz-accent"
           onclick={() => useBuiltinWallpaper(settings.wallpaperId)}>恢复内置预设</button
         >
+      {/if}
+    </div>
+
+    <!-- 壁纸轮播（M54.3）：启用后由 wallpaperd 服务按间隔自动切换内置壁纸 -->
+    <div class="mt-1 flex flex-col gap-2 rounded-qz bg-qz-surface/40 p-2 ring-1 ring-qz-border">
+      <div class="flex items-center justify-between">
+        <span class="flex items-center gap-1 text-xs text-qz-muted"><Icon name="Layers" size={13} />壁纸轮播</span>
+        <button
+          class="rounded-qz px-2.5 py-1 text-xs ring-1 ring-qz-border transition-colors hover:ring-qz-accent {wallpaperSlideshow.enabled ? 'bg-qz-accent/20 text-qz-text' : 'bg-qz-surface text-qz-muted'}"
+          onclick={() => setSlideshowEnabled(!wallpaperSlideshow.enabled)}
+        >
+          {wallpaperSlideshow.enabled ? '已开启' : '已关闭'}
+        </button>
+      </div>
+      {#if wallpaperSlideshow.enabled}
+        <div class="flex items-center justify-between text-xs text-qz-muted">
+          <span>切换间隔</span>
+          <select
+            class="rounded bg-qz-surface px-2 py-1 text-xs text-qz-text outline-none ring-1 ring-qz-border focus:ring-qz-accent"
+            value={wallpaperSlideshow.intervalSec}
+            onchange={(e) => setSlideshowInterval(Number((e.target as HTMLSelectElement).value))}
+          >
+            {#each SLIDESHOW_INTERVALS as opt (opt.value)}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-xs text-qz-muted"
+            >轮播壁纸（已选 {wallpaperSlideshow.wallpaperIds.length}/{wallpapers.length}）</span
+          >
+          <div class="grid grid-cols-3 gap-2">
+            {#each wallpapers as w (w.id)}
+              {@const selected = wallpaperSlideshow.wallpaperIds.includes(w.id)}
+              <button
+                class="relative h-12 overflow-hidden rounded-qz transition-transform hover:scale-[1.03]"
+                style="background: {w.css}; border: {selected
+                  ? '2px solid var(--color-qz-accent)'
+                  : '1px solid var(--color-qz-border)'};"
+                title={w.name}
+                onclick={() => toggleSlideshowWallpaper(w.id)}
+              >
+                {#if selected}
+                  <span
+                    class="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-qz-accent text-white"
+                    ><Icon name="Check" size={11} /></span
+                  >
+                {/if}
+              </button>
+            {/each}
+          </div>
+          {#if wallpaperSlideshow.wallpaperIds.length < 2}
+            <span class="text-[11px] text-qz-muted">至少选 2 张才能轮播</span>
+          {/if}
+          <button
+            class="self-start rounded-qz px-2.5 py-1 text-xs text-qz-muted ring-1 ring-qz-border transition-colors hover:ring-qz-accent"
+            onclick={() => applyCurrentSlideshow()}>立即切换一次</button
+          >
+        </div>
       {/if}
     </div>
   </section>

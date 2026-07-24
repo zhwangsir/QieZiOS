@@ -16,6 +16,7 @@ export interface Process {
   z: number;         // 叠放层级（越大越在上）
   minimized: boolean;
   maximized: boolean;
+  alwaysOnTop?: boolean; // 置顶：z 段始终高于普通窗口（10000+ vs 0-9999）
   startedAt: number; // 启动时间戳（任务管理器算运行时长）
   data?: unknown;    // 启动参数（如记事本要打开的文件 id）；会随会话一起持久化
 }
@@ -36,23 +37,47 @@ for (const p of processes) {
   if (p.startedAt == null) p.startedAt = Date.now();
 }
 
-// 还原会话后，让 nextZ 从已有最大 z 之上接着发，新窗口才不会被压在底下。
-let nextZ = processes.reduce((m, p) => Math.max(m, p.z), 0) + 1;
+// 置顶窗口 z 段：TOP_BASE+；普通窗口 z 段：1..TOP_BASE-1（互不重叠 → 置顶窗始终在普通窗之上）。
+const TOP_BASE = 10000;
+
+// 还原会话后，让 nextZ / nextTopZ 从已有最大 z 之上接着发，新窗口才不会被压在底下。
+// 普通窗与置顶窗分别维护计数器（会话还原后按 alwaysOnTop 归位到对应段）。
+let nextZ = 1;
+let nextTopZ = TOP_BASE + 1;
+for (const p of processes) {
+  if (p.alwaysOnTop) nextTopZ = Math.max(nextTopZ, p.z + 1);
+  else nextZ = Math.max(nextZ, p.z + 1);
+}
+
+// 最近聚焦窗 id。activeId() 优先返回它 —— 置顶窗 z 始终高于普通窗，
+// 若仅按 z 取最大，普通窗在有置顶窗时永远拿不到焦点高亮（破坏既有行为）。
+let lastFocusedId: string | null = null;
 
 // z 值无上限递增会缓慢膨胀（focus/restore 每次都 ++）。超过阈值时按当前层级
 // 重新编号为 1..n —— 相对顺序不变，只是压缩数值，避免 z-index 无界增长。
+// 仅规整化普通窗段（置顶窗通常很少，不会触阈）。
 const Z_NORMALIZE_THRESHOLD = 500;
 function normalizeZ() {
   if (nextZ < Z_NORMALIZE_THRESHOLD) return;
-  const sorted = [...processes].sort((a, b) => a.z - b.z);
+  const sorted = [...processes].filter((p) => !p.alwaysOnTop).sort((a, b) => a.z - b.z);
   sorted.forEach((p, i) => (p.z = i + 1));
-  nextZ = sorted.length;
+  nextZ = sorted.length + 1;
 }
 
-// 分配新 z 值（聚焦/置顶前调用，自动触发规整化）
+// 分配普通窗 z 值（聚焦/置顶前调用，自动触发规整化）
 function allocZ(): number {
   normalizeZ();
   return ++nextZ;
+}
+
+// 分配置顶窗 z 值（始终 > TOP_BASE，置顶窗之间仍按点击顺序排列）
+function allocTopZ(): number {
+  return ++nextTopZ;
+}
+
+// 按窗口的置顶态分配对应段的 z
+function allocZFor(p: Process): number {
+  return p.alwaysOnTop ? allocTopZ() : allocZ();
 }
 
 // 启动一个 App = 往进程表加一项（= 开一个窗口）
@@ -81,6 +106,7 @@ export function launch(
     startedAt: Date.now(),
     data: opts.data,
   });
+  lastFocusedId = id;
   emit('proc.launch', { pid, ppid, appId });
 }
 
@@ -88,14 +114,18 @@ export function close(id: string) {
   const i = processes.findIndex((p) => p.id === id);
   if (i !== -1) {
     emit('proc.exit', { pid: processes[i].pid, appId: processes[i].appId });
+    if (lastFocusedId === id) lastFocusedId = null;
     processes.splice(i, 1);
   }
 }
 
-// 聚焦：提到最上层
+// 聚焦：提到最上层（普通窗在普通段、置顶窗在置顶段）
 export function focus(id: string) {
   const p = byId(id);
-  if (p) p.z = allocZ();
+  if (p) {
+    p.z = allocZFor(p);
+    lastFocusedId = id;
+  }
 }
 
 export function minimize(id: string) {
@@ -112,7 +142,8 @@ export function restore(id: string) {
   if (p) {
     if (p.minimized) emit('proc.restore', { pid: p.pid, appId: p.appId });
     p.minimized = false;
-    p.z = allocZ();
+    p.z = allocZFor(p);
+    lastFocusedId = id;
   }
 }
 
@@ -122,7 +153,8 @@ export function toggleMaximize(id: string) {
   const p = byId(id);
   if (!p) return;
   p.maximized = !p.maximized;
-  p.z = allocZ();
+  p.z = allocZFor(p);
+  lastFocusedId = id;
 }
 
 // 设置窗口几何/最大化状态。窗口拖拽/缩放/吸附都走它 ——
@@ -140,9 +172,35 @@ export function setBounds(
   if (b.maximized !== undefined) p.maximized = b.maximized;
 }
 
-// 当前活动窗 id = 没最小化的里 z 最大那个。键盘快捷键、焦点高亮都靠它。
+// 置顶 ⇄ 取消。切换 alwaysOnTop 后重分配 z 到对应段（置顶段 10000+ / 普通段 1+），
+// 确保置顶窗始终在普通窗之上。置顶窗之间、普通窗之间仍按点击顺序排列。
+export function setAlwaysOnTop(id: string, value: boolean) {
+  const p = byId(id);
+  if (!p || p.alwaysOnTop === value) return;
+  p.alwaysOnTop = value;
+  p.z = value ? allocTopZ() : allocZ();
+  lastFocusedId = id;
+  emit('proc.alwaysOnTop', { pid: p.pid, appId: p.appId, value });
+}
+
+// 改窗口的启动参数 data（与可选 title）—— M54.4 R5-F6：把文件拖进查看器窗口时
+// 用它切换当前查看的文件。统一经内核改 proc，避免组件直接改 prop 触发 Svelte ownership 警告
+// （与 setBounds 同语义：组件不直接改 proc）。
+export function setData(id: string, data: unknown, title?: string): void {
+  const p = byId(id);
+  if (!p) return;
+  p.data = data;
+  if (title !== undefined) p.title = title;
+}
+
+// 当前活动窗 id。优先返回最近聚焦的窗口（置顶窗 z 始终更高，但焦点可以落在普通窗上）；
+// 回退到 z 最大的可见窗口（首次启动 / 活动窗被关闭后）。
 // 在 effect/模板里调用会自动订阅 processes（读了每个 p 的 z/minimized）。
 export function activeId(): string | null {
+  if (lastFocusedId) {
+    const p = byId(lastFocusedId);
+    if (p && !p.minimized) return p.id;
+  }
   let top: Process | null = null;
   for (const p of processes) {
     if (p.minimized) continue;
@@ -152,16 +210,19 @@ export function activeId(): string | null {
 }
 
 // 窗口轮换：把最底层的可见窗提到最前 → 反复调用即在所有窗口间循环（Alt+`）。
+// 按置顶态分配对应段 z（置顶窗只在置顶窗之间轮换，普通窗只在普通窗之间轮换）。
 export function cycleWindows() {
   const visible = processes.filter((p) => !p.minimized);
   if (visible.length < 2) return;
   const bottom = visible.reduce((b, p) => (p.z < b.z ? p : b));
-  bottom.z = allocZ();
+  bottom.z = allocZFor(bottom);
+  lastFocusedId = bottom.id;
 }
 
 // 关闭所有窗口
 export function closeAll() {
   processes.splice(0, processes.length);
+  lastFocusedId = null;
 }
 
 // 层叠排列：所有可见窗口取消最大化、错位摆放
@@ -172,7 +233,7 @@ export function cascade() {
     p.maximized = false;
     p.x = 80 + i * 32;
     p.y = 60 + i * 32;
-    p.z = allocZ();
+    p.z = allocZFor(p);
     i++;
   }
 }

@@ -11,7 +11,7 @@
     cascade,
     setBounds,
   } from '../kernel/processes.svelte';
-  import { createDir, createFile, vfs } from '../kernel/vfs.svelte';
+  import { createDir, createFile, createBinaryFile, copyNode, getNode, vfs } from '../kernel/vfs.svelte';
   import { startServices } from '../kernel/services.svelte';
   import { sys } from '../system/sys';
   import { session, lock, powerConfirm, cancelShutdown, confirmShutdown } from '../system/session.svelte';
@@ -140,6 +140,56 @@
     ]);
   }
 
+  // ── M54.4 R5-F6：拖文件到桌面 ─────────────────────────────
+  // 两种来源：① 浏览器外部拖入 OS 文件（图片等）→ createBinaryFile 到桌面（root）；
+  // ② Files 内部拖出（dataTransfer('text/plain') = VFS 节点 id）→ copyNode 到桌面建副本。
+  // 落在窗口上的拖拽由窗口自己接（Window.svelte），这里按 target.closest('[data-window]')
+  // 跳过，避免与窗口拖入逻辑打架。dragover 仅在拖入的是 Files 或 text/plain 时 preventDefault
+  // 允许 drop（其它类型的拖拽不接管，保持默认行为）。
+  let desktopDropHover = $state(false);
+
+  function onDesktopDragOver(e: DragEvent): void {
+    if ((e.target as HTMLElement).closest('[data-window]')) return;
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    if (!dt.types.includes('Files') && !dt.types.includes('text/plain')) return;
+    e.preventDefault();
+    if (dt.types.includes('Files')) dt.dropEffect = 'copy';
+    desktopDropHover = true;
+  }
+
+  function onDesktopDragLeave(e: DragEvent): void {
+    // 仍在桌面根内（子元素间穿越，且未进窗口）→ 不清；离开桌面根 / 进入窗口 → 清掉高亮
+    const rt = e.relatedTarget as HTMLElement | null;
+    if (rt && rt.closest('[data-desktop-root]') && !rt.closest('[data-window]')) return;
+    desktopDropHover = false;
+  }
+
+  async function onDesktopDrop(e: DragEvent): Promise<void> {
+    desktopDropHover = false;
+    if ((e.target as HTMLElement).closest('[data-window]')) return;
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    // 允许 drop（防浏览器把文件当链接打开）
+    if (dt.types.includes('Files') || dt.types.includes('text/plain')) e.preventDefault();
+    // ① 外部 OS 文件 → 二进制存进 VFS 桌面
+    const files = dt.files && dt.files.length ? Array.from(dt.files) : [];
+    for (const f of files) {
+      await createBinaryFile('root', f.name, f);
+    }
+    // ② 内部 VFS 拖出 → 在桌面目录建副本（copyNode 自动去重名 +2）
+    const nodeId = dt.getData('text/plain');
+    if (nodeId && getNode(nodeId)) {
+      await copyNode(nodeId, 'root');
+    }
+    if (files.length || nodeId) {
+      sys.notify(
+        files.length ? `已添加 ${files.length} 个文件到桌面` : '已在桌面创建副本',
+        { level: 'success', timeout: 1500, source: '文件' },
+      );
+    }
+  }
+
   // 全局快捷键。注意：在输入框/可编辑区里打字时不拦截。
   function onKey(e: KeyboardEvent) {
     // 关机确认框开着：Esc 取消 / Enter 确认，吞掉其它键（防 Esc 误关背后的窗）
@@ -242,8 +292,18 @@
 <div
   class="relative h-full w-full overflow-hidden"
   style="background: var(--qz-wallpaper)"
+  data-desktop-root
   oncontextmenu={onDesktopMenu}
+  ondragover={onDesktopDragOver}
+  ondragleave={onDesktopDragLeave}
+  ondrop={onDesktopDrop}
 >
+  <!-- 拖入高亮：拖文件到桌面时整片盖一层 accent 半透明 + 描边，提示「松手即落地到桌面」 -->
+  {#if desktopDropHover}
+    <div
+      class="pointer-events-none absolute inset-0 z-[9500] ring-2 ring-inset ring-qz-accent/60 bg-qz-accent/10"
+    ></div>
+  {/if}
   <!-- 景深 vignette：壁纸四周/底部压暗一点，更有层次（不挡交互） -->
   <div
     class="pointer-events-none absolute inset-0"

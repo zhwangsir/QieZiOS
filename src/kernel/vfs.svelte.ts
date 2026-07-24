@@ -87,9 +87,17 @@ export function children(parentId: string): VNode[] {
     );
 }
 
+// 同 children() 但不排序 —— 给内部按名查找/遍历/去重用（resolvePath/uniqueName/purge 等）。
+// 这些调用者要么 .find(name)/.some(name)（uniqueName 已杜绝同名并存，find 顺序无关）、
+// 要么 for-of 全量遍历，都不依赖排序；跳过 O(n log n) sort 省掉路径解析/递归删除的主要开销。
+// 展示用（Files/Trash/DesktopIcons 的 $derived、shell ls）仍走 children() 保证稳定排序。
+function childrenRaw(parentId: string): VNode[] {
+  return Object.values(vfs.nodes).filter((n) => n.parentId === parentId);
+}
+
 // 同一文件夹下重名时自动加序号（保留扩展名）
 function uniqueName(parentId: string, base: string): string {
-  const taken = new Set(children(parentId).map((n) => n.name));
+  const taken = new Set(childrenRaw(parentId).map((n) => n.name));
   if (!taken.has(base)) return base;
   const dot = base.lastIndexOf('.');
   const stem = dot > 0 ? base.slice(0, dot) : base;
@@ -192,7 +200,7 @@ export function rename(id: string, name: string): boolean {
   const nm = name.trim();
   if (!n || !nm) return false;
   if (nm === n.name) return true; // 没变，视为成功（无操作）
-  if (n.parentId && children(n.parentId).some((c) => c.id !== id && c.name === nm)) return false;
+  if (n.parentId && childrenRaw(n.parentId).some((c) => c.id !== id && c.name === nm)) return false;
   n.name = nm;
   n.updatedAt = Date.now();
   return true;
@@ -241,7 +249,7 @@ async function cloneInto(n: VNode, destParentId: string, name: string): Promise<
   const owner = resolveOwner();
   if (n.type === 'dir') {
     vfs.nodes[newId] = { id: newId, name, type: 'dir', parentId: destParentId, content: '', mode: n.mode, owner, createdAt: t, updatedAt: t };
-    for (const c of children(n.id)) await cloneInto(c, newId, c.name); // 子项进空的新目录，原名即可
+    for (const c of childrenRaw(n.id)) await cloneInto(c, newId, c.name); // 子项进空的新目录，原名即可
   } else if (n.kind === 'binary' && n.blobId) {
     const blob = await getBlob(n.blobId);
     const newBlobId = crypto.randomUUID();
@@ -310,7 +318,7 @@ export function restoreFromTrash(id: string): void {
 export function purge(id: string, seen: Set<string> = new Set()): void {
   if (id === 'root' || seen.has(id)) return;
   seen.add(id);
-  for (const child of children(id)) purge(child.id, seen);
+  for (const child of childrenRaw(id)) purge(child.id, seen);
   const n = vfs.nodes[id];
   if (n?.blobId) void deleteBlob(n.blobId); // fire-and-forget，不阻塞 UI
   delete vfs.nodes[id];
@@ -319,7 +327,7 @@ export function purge(id: string, seen: Set<string> = new Set()): void {
 
 // 清空回收站
 export function emptyTrash(): void {
-  for (const n of children(TRASH)) purge(n.id);
+  for (const n of childrenRaw(TRASH)) purge(n.id);
 }
 
 if (import.meta.env.DEV) {
@@ -379,7 +387,7 @@ function resolvePathHops(cwd: string, path: string, hops: number): string | unde
       curId = n?.parentId && n.parentId !== 'trash' ? n.parentId : 'root';
       continue;
     }
-    const hit = children(curId).find((k) => k.name === part);
+    const hit = childrenRaw(curId).find((k) => k.name === part);
     if (!hit) return undefined;
     if (hit.linkTo !== undefined) {
       if (hops <= 0) return undefined; // 链接环/嵌套过深
@@ -417,7 +425,7 @@ export function lresolvePath(cwd: string, path: string): string | undefined {
     const n = vfs.nodes[curId];
     return n?.parentId && n.parentId !== 'trash' ? n.parentId : 'root';
   }
-  return children(curId).find((k) => k.name === last)?.id;
+  return childrenRaw(curId).find((k) => k.name === last)?.id;
 }
 
 // 节点 → 绝对路径串（root = "/"）

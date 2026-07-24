@@ -62,11 +62,13 @@
     <span class="opacity-0 transition-opacity group-hover/tl:opacity-100">−</span>
   </button>
   <!-- 最大化键 + 悬停贴靠布局浮层（移动端无贴靠，不渲染浮层） -->
+  <!-- 置顶时绿键外加白色光环（视觉指示 = alwaysOnTop） -->
   <div class="group/max relative">
     <button
       class="grid {btnSize} place-items-center rounded-full text-[8px] leading-none text-black/60"
-      style="background-color: {active ? '#28c840' : gray}; box-shadow: {ballShadow}; transition: background-color var(--qz-dur) var(--qz-ease);"
+      style="background-color: {active ? '#28c840' : gray}; box-shadow: {ballShadow}{proc.alwaysOnTop ? ', 0 0 0 2px rgba(255,255,255,0.6)' : ''}; transition: background-color var(--qz-dur) var(--qz-ease), box-shadow var(--qz-dur) var(--qz-ease);"
       aria-label={proc.maximized ? '还原' : '最大化'}
+      title={proc.alwaysOnTop ? '已钉在最前' : undefined}
       onclick={() => (onToggleMax ? onToggleMax() : toggleMaximize(proc.id))}
     >
       <span class="opacity-0 transition-opacity group-hover/tl:opacity-100">+</span>

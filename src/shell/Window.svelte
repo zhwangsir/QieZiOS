@@ -7,8 +7,11 @@
     minimize,
     toggleMaximize,
     setBounds,
+    setAlwaysOnTop,
+    setData,
     type Process,
   } from '../kernel/processes.svelte';
+  import { getNode, isImage, isMedia, type VNode } from '../kernel/vfs.svelte';
   import { snapState } from './snapState.svelte';
   import { detectSnapZone, zoneBounds, type SnapZone } from './snapPreview';
   import { openMenu } from './menu.svelte';
@@ -256,6 +259,43 @@
     }
   }
 
+  // ── M54.4 R5-F6：拖文件进查看器窗口 ──────────────────────────
+  // Files 内部拖拽把 VFS 节点 id 放进 dataTransfer('text/plain')，这里按窗口的 App
+  // 类型分流：图片查看器收图片、记事本收文本、媒体查看器收音/视频。其它 App（如 Files
+  // 自己）不接管 → 让其内部子元素（文件夹 ondrop）继续工作，互不干扰。
+  const VIEWER_ACCEPT: Record<string, (n: VNode) => boolean> = {
+    imageviewer: (n) => isImage(n),
+    mediaviewer: (n) => isMedia(n),
+    // 文本类文件：非图片、非媒体，且非二进制（二进制 content 空 → 记事本无内容可显）
+    textedit: (n) => n.type === 'file' && n.kind !== 'binary' && !isImage(n) && !isMedia(n),
+  };
+  let dropHover = $state(false);
+
+  function onContentDragOver(e: DragEvent): void {
+    const accept = VIEWER_ACCEPT[proc.appId];
+    if (!accept) return; // 非查看器窗口（如 Files）不接管 HTML5 拖入
+    e.preventDefault(); // 允许 drop
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    dropHover = true;
+  }
+
+  function onContentDragLeave(): void {
+    dropHover = false;
+  }
+
+  function onContentDrop(e: DragEvent): void {
+    dropHover = false;
+    const accept = VIEWER_ACCEPT[proc.appId];
+    if (!accept) return; // 非查看器 → 让 Files 等自己的 ondrop 处理
+    if (e.defaultPrevented) return; // 子元素已处理（防御）
+    const id = e.dataTransfer?.getData('text/plain');
+    if (!id) return;
+    const n = getNode(id);
+    if (!n || !accept(n)) return; // 类型不匹配 → 静默拒绝（光标已显示可放，但类型不符）
+    e.preventDefault();
+    setData(proc.id, n.id, n.name); // 切换查看的文件 + 标题栏改名
+  }
+
   // 标题栏右键菜单
   function onTitleMenu(e: MouseEvent) {
     openMenu(e, [
@@ -264,6 +304,11 @@
         label: proc.maximized ? '还原' : '最大化',
         icon: '▢',
         onClick: onToggleMax,
+      },
+      {
+        label: proc.alwaysOnTop ? '取消钉住' : '钉在最前',
+        icon: '◉',
+        onClick: () => setAlwaysOnTop(proc.id, !proc.alwaysOnTop),
       },
       // 仅窗口态（非最大化/移动）可把当前尺寸记为该 App 默认 → 之后都按此开
       ...(fullscreen
@@ -381,12 +426,23 @@
 
   <!-- 内容：渲染 App 组件。最小化时 content-visibility:hidden → 浏览器跳过其布局/绘制
        （窗口仍挂载以保持还原动画，但不可见内容不再耗渲染；只作用于内容区、不碰标题栏/边框
-       动画；flex-1 决定盒子尺寸故不塌陷；还原时移除→重新渲染）。配合 windowVisible() 暂停定时器。 -->
+       动画；flex-1 决定盒子尺寸故不塌陷；还原时移除→重新渲染）。配合 windowVisible() 暂停定时器。
+       M54.4 R5-F6：查看器窗口（图片/媒体/记事本）接管 HTML5 拖入 → 切换查看的文件。 -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="flex-1 overflow-auto text-qz-text"
+    class="relative flex-1 overflow-auto text-qz-text"
     style:content-visibility={minHidden ? 'hidden' : 'visible'}
+    ondragover={onContentDragOver}
+    ondragleave={onContentDragLeave}
+    ondrop={onContentDrop}
   >
     {@render children()}
+    {#if dropHover}
+      <!-- 拖入高亮：内容区盖一层 accent 半透明环，提示「松手即加载此文件」 -->
+      <div
+        class="pointer-events-none absolute inset-0 z-50 rounded-sm ring-2 ring-inset ring-qz-accent/70 bg-qz-accent/10"
+      ></div>
+    {/if}
   </div>
 
   <!-- 缩放手柄：四边 + 四角（最大化 / 移动模式隐藏）。左/上边缩放同时调 x/y。 -->

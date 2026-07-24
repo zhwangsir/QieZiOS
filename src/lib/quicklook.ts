@@ -36,7 +36,7 @@ export function truncatePreview(text: string, max: number = TEXT_PREVIEW_MAX): T
 
 // Quick Look 开着时 ←/→（↑/↓）移动选中：在当前可见 items 序列上前/后走一步。
 // macOS 手感：两端到头停住不循环；当前项不在列表里（被过滤/删除）→ 回到第一项；空列表 → null。
-export function stepSelection(ids: string[], currentId: string | null | undefined, delta: 1 | -1): string | null {
+export function stepSelection(ids: string[], currentId: string | null | undefined, delta: number): string | null {
   if (!ids.length) return null;
   const i = currentId ? ids.indexOf(currentId) : -1;
   if (i === -1) return ids[0];

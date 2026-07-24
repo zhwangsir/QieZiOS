@@ -1,5 +1,53 @@
 # TEST_LOG
 
+## 2026-07-24 · M54「UI/UX 完善与性能优化」（Files 键盘导航 · 神灯确认 · 壁纸轮播 · 拖文件进 App · 小组件 · 窗口置顶 · 重渲染审计）
+
+**回归**：vitest 26 文件 1178 例全绿；build 成功（646ms）。
+
+**改动概览**（7 子任务，清理 POLISH-3/4/5 + PERF 遗留待办）：
+
+- **M54.1 Files 键盘导航**：容器 `onkeydown` 统一处理方向键/F2/Ctrl+D/首字母跳转。`onQuickLookKey` 精简为只管空格/Esc。`stepSelection` 签名 `1|-1`→`number` 支持 grid 多列跳跃。
+  ```typescript
+  // grid 视图方向键：←/→ = ±1，↑/↓ = ±列数
+  const cols = gridCols(); // getComputedStyle 读实际列数
+  delta = arr === 'ArrowRight' ? 1 : arr === 'ArrowLeft' ? -1
+        : arr === 'ArrowDown' ? cols : -cols;
+  const next = stepSelection(ids, selected[0], delta);
+  ```
+
+- **M54.2 神灯动画确认**：调研发现 POLISH-4 R4-F10 已在 `motion.ts`（`genieFrame`/`genieClipPath` 纯函数）+ `Window.svelte`（`startGenie` `$effect.pre` + rAF 主循环）+ `Dock.svelte`（`trackDockIcon` action）中完整实现。标记完成。
+
+- **M54.3 壁纸轮播**：新建 `wallpaperSlideshow.svelte.ts`（persisted 持久化配置）+ `wallpaperd` 服务（`$effect.root` 订阅间隔变化 `setInterval` 切换）+ Settings UI（开关/间隔/多选/立即切换）。
+
+- **M54.4 拖文件进 App**：`processes` 加 `setData` 原语；`Window.svelte` 加 `ondrop` 按 appId 分流（imageviewer/textedit/mediaviewer）；`Desktop.svelte` 加 `ondrop` 外部文件→`createBinaryFile`、VFS 拖出→`copyNode`。
+  ```typescript
+  // Window.svelte: 按 App 类型分流拖入
+  const VIEWER_ACCEPT: Record<string, (n: VNode) => boolean> = {
+    imageviewer: (n) => isImage(n),
+    textedit: (n) => n.type === 'file' && !isImage(n),
+    mediaviewer: (n) => isMedia(n),
+  };
+  ```
+
+- **M54.5 小组件**：`WidgetKind` 加 `todo`/`worldclock`。todo 复用 `schedules` 前 5 条可勾选完成；worldclock 三时区（北京/纽约/伦敦）每秒更新。
+
+- **M54.6 窗口置顶**：`Process` 加 `alwaysOnTop` + `TOP_BASE=10000` 双段 z-index + `setAlwaysOnTop`。关键修复：`activeId()` 引入 `lastFocusedId`（置顶窗 z 始终更高，旧逻辑普通窗永拿不到焦点高亮）。
+  ```typescript
+  // 双段 z-index：普通 1..9999 / 置顶 10001+
+  const TOP_BASE = 10000;
+  function allocZFor(p: Process): number { return p.alwaysOnTop ? allocTopZ() : allocZ(); }
+  ```
+
+- **M54.7 性能审计**：`childrenRaw`（仅 filter 不 sort O(n)）替换 7 个内部调用者，路径解析 O(k·n log n)→O(k·n)。审计 persist snapshot/processes/derived/effect 均已优化到位。
+  ```typescript
+  // 新增：仅 filter 不 sort，给内部路径用（uniqueName/rename/cloneInto/purge/...）
+  function childrenRaw(parentId: string): VNode[] {
+    return Object.values(vfs.nodes).filter((n) => n.parentId === parentId);
+  }
+  ```
+
+---
+
 ## 2026-07-24 · M53「文本处理 · 归档压缩 · 差异同步补全」（grep -c/-E · sed · awk · join · tar · gzip/gunzip · ln/readlink · wget · strings · hexdump/od · diff · patch · sync）
 
 **回归**：vitest 26 文件 1178 例全绿（shell.test.ts 697 例，M53 +109 例新测试：grep 7 + sed 12 + awk 11 + join 7 + tar 13 + gzip 9 + ln/readlink 10 + wget 7 + strings 4 + hexdump/od 8 + diff 10 + patch 10 + sync 1）；build 成功（680ms，index 555.98kB gzip 187.62kB）。

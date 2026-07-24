@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { widgets, removeWidget, cycleWidgetKind, type Widget } from './widgetState.svelte';
+  import { schedules } from '../system/schedules.svelte';
   import { sys } from '../system/sys';
   import Icon from '../lib/Icon.svelte';
 
@@ -36,6 +37,44 @@
 
   // 系统状态：进程数（reactive，读 sys.proc.list）
   const procCount = $derived(sys.proc.list().length);
+
+  // ── 待办小组件：复用 schedules（提醒事项）数据，勾选即取消该提醒 ──
+  function fmtTodoWhen(s: { every?: number; fireAt?: number }): string {
+    void now; // 订阅每秒更新
+    if (s.every) {
+      if (s.every % 3600000 === 0) return `每${s.every / 3600000}h`;
+      if (s.every % 60000 === 0) return `每${s.every / 60000}m`;
+      return `每${Math.round(s.every / 1000)}s`;
+    }
+    if (s.fireAt) {
+      const r = s.fireAt - now.getTime();
+      if (r <= 0) return '即将';
+      if (r < 90000) return `${Math.round(r / 1000)}s`;
+      return new Date(s.fireAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    }
+    return '';
+  }
+
+  // ── 世界时钟小组件：复用 Clock App 的 Intl 时区格式化 ──
+  const WC_ZONES: [string, string][] = [
+    ['北京', 'Asia/Shanghai'],
+    ['纽约', 'America/New_York'],
+    ['伦敦', 'Europe/London'],
+  ];
+  function zoneTime(tz: string): string {
+    void now; // 订阅每秒更新
+    try {
+      return new Intl.DateTimeFormat('zh-CN', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: tz,
+      }).format(now);
+    } catch {
+      return '—';
+    }
+  }
 
   // 拖动（镜像 StickyNotes：仅顶栏手柄可拖，夹在视口内）
   let drag: { id: string; sx: number; sy: number; ox: number; oy: number } | null = null;
@@ -113,6 +152,49 @@
               {#each WEEK as wd (wd)}<div class="text-qz-muted">{wd}</div>{/each}
               {#each cells as c, i (i)}
                 <div class="rounded py-0.5 {c === today ? 'bg-qz-accent font-semibold text-qz-accent-contrast' : 'text-qz-text'}">{c ?? ''}</div>
+              {/each}
+            </div>
+          </div>
+        {:else if w.kind === 'todo'}
+          <div class="w-44">
+            <div class="mb-1 flex items-center justify-between text-xs text-qz-muted">
+              <span class="flex items-center gap-1"><Icon name="List" size={11} />待办</span>
+              <span class="tabular-nums">{schedules.items.length}</span>
+            </div>
+            {#if schedules.items.length === 0}
+              <div class="py-3 text-center text-[11px] text-qz-muted">暂无待办</div>
+            {:else}
+              <div class="flex flex-col gap-0.5">
+                {#each schedules.items.slice(0, 5) as s (s.id)}
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <button
+                    type="button"
+                    class="flex items-center gap-1.5 rounded px-1 py-0.5 text-left text-[11px] hover:bg-qz-elevated"
+                    title="勾选完成（取消该提醒）"
+                    onclick={() => sys.schedule.cancel(s.id)}
+                  >
+                    <Icon name="Square" size={12} class="shrink-0 text-qz-muted" />
+                    <span class="min-w-0 flex-1 truncate text-qz-text">{s.title}</span>
+                    <span class="shrink-0 tabular-nums text-[10px] text-qz-muted">{fmtTodoWhen(s)}</span>
+                  </button>
+                {/each}
+                {#if schedules.items.length > 5}
+                  <div class="px-1 py-0.5 text-[10px] text-qz-muted">+{schedules.items.length - 5} 更多</div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {:else if w.kind === 'worldclock'}
+          <div class="w-40">
+            <div class="mb-1 flex items-center gap-1 text-xs text-qz-muted">
+              <Icon name="Globe" size={11} />世界时钟
+            </div>
+            <div class="flex flex-col gap-0.5">
+              {#each WC_ZONES as [name, tz] (name)}
+                <div class="flex items-center justify-between px-1 py-0.5 text-[11px]">
+                  <span class="text-qz-text">{name}</span>
+                  <span class="tabular-nums text-qz-muted">{zoneTime(tz)}</span>
+                </div>
               {/each}
             </div>
           </div>

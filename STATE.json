@@ -1,9 +1,25 @@
 {
   "project": "QieZiOS",
   "updatedAt": "2026-07-24",
-  "currentMilestone": "M53",
+  "currentMilestone": "M54",
   "status": "done",
   "milestones": [
+    {
+      "id": "M54",
+      "name": "UI/UX 完善与性能优化（Files 键盘导航 · 神灯动画确认 · 壁纸轮播 · 拖文件进 App · 小组件扩展 · 窗口置顶 · 重渲染热点审计）",
+      "status": "done",
+      "scope": "清理 POLISH-3/4/5 + PERF 遗留待办：M54.1 Files 键盘导航（方向键 grid/list 分列步进 + F2 改名 + Ctrl+D 原地复制 + 首字母跳转 + scrollIntoView）；M54.2 神灯动画确认已实现（genieFrame/genieClipPath + trackDockIcon + startGenie，motion.test.ts 覆盖）；M54.3 壁纸轮播（wallpaperSlideshow.svelte.ts persisted + wallpaperd 服务 $effect.root 订阅间隔变化 setInterval 切换 + Settings UI 开关/间隔/多选/立即切换）；M54.4 拖文件进 App（processes 加 setData 原语 + Window ondrop 按 appId 分流 imageviewer/textedit/mediaviewer + Desktop ondrop 外部文件 createBinaryFile/VFS 拖出 copyNode）；M54.5 小组件扩展（WidgetKind 加 todo/worldclock，todo 复用 schedules 前 5 条可勾选完成，worldclock 三时区每秒更新）；M54.6 窗口置顶（Process 加 alwaysOnTop + TOP_BASE=10000 双段 z-index + setAlwaysOnTop + lastFocusedId 修复 activeId + 右键菜单「钉在最前」+ WindowControls 视觉指示）；M54.7 性能审计（childrenRaw 仅 filter 不 sort O(n) 替换 7 内部调用者，路径解析 O(k·n log n)→O(k·n)，审计 persist snapshot/processes/derived/effect 均已优化到位）。",
+      "subtasks": [
+        { "id": "M54.1", "title": "Files 键盘导航（方向键/F2/Ctrl+D/首字母跳）", "status": "done", "notes": "容器 onkeydown 统一处理：onQuickLookKey 精简为空格/Esc，方向键移至容器（list 上下±1、grid 左右±1 上下±列数 gridCols 读 getComputedStyle），stepSelection 签名 1|-1→number 支持 grid 多列跳跃，F2 改名单选触发，Ctrl/Cmd+D duplicateSelected 原地复制 copyNode 后选中新副本，首字母跳转 jumpToLetter 从当前后找再从头找，scrollItemIntoView 滚入视口。" },
+        { "id": "M54.2", "title": "神灯动画确认", "status": "done", "notes": "调研发现 POLISH-4 R4-F10 神灯动画已在 motion.ts（genieFrame/genieClipPath 纯函数）+ Window.svelte（startGenie $effect.pre 监听 proc.minimized 翻转 + dockIconPos 取目标 + rAF 主循环 + 降级 reducedMotion/isMobile）+ Dock.svelte（trackDockIcon action 挂载/resize 上报坐标）中完整实现。motion.test.ts 有 U5 genieFrame/genieClipPath 测试覆盖。标记完成。" },
+        { "id": "M54.3", "title": "壁纸轮播", "status": "done", "notes": "新建 wallpaperSlideshow.svelte.ts（persisted 持久化 enabled/wallpaperIds/intervalSec/currentIndex，advanceSlideshow 切换走 settings.customWallpaper=null+wallpaperId=next）。services.ts 注册 wallpaperd 服务（$effect.root 订阅 enabled/intervalSec/ids.length 变化，setInterval 按间隔调 advanceSlideshow，cleanup 清 timer+dispose）。Settings.svelte 壁纸区加轮播面板（开关+间隔下拉 30s/1min/5min/10min+多选壁纸网格 accent 边框+Check 徽标+立即切换按钮）。主色提取跳过。" },
+        { "id": "M54.4", "title": "拖文件进 App / 拖到桌面", "status": "done", "notes": "processes 加 setData(id,data,title?) 原语（统一改 proc.data+title 避免组件直接改 prop 触发 Svelte ownership 警告，ImageViewer/TextEdit 的 node=$derived(getNode(data)) 响应式自动加载）。Window.svelte 内容容器加 ondragover/ondragleave/ondrop：VIEWER_ACCEPT 表按 appId 分流（imageviewer 收图片/textedit 收文本/mediaviewer 收音视频），非查看器 return 不接管 Files 内部拖拽，dropHover 高亮。Desktop.svelte 加 ondrop：外部 OS 文件→createBinaryFile('root',name,File)，VFS 拖出→copyNode(id,'root')，落点在窗口上跳过让窗口接。" },
+        { "id": "M54.5", "title": "小组件（待办 + 世界时钟）", "status": "done", "notes": "widgetState.svelte.ts WidgetKind 加 'todo'|'worldclock'，KINDS 数组追加。Widgets.svelte 加 todo 渲染分支（复用 schedules.items 前 5 条，Square 复选框+截断标题+fmtTodoWhen 倒计时，点击整行 sys.schedule.cancel 完成待办，空态「暂无待办」，超出显「+N 更多」）；加 worldclock 渲染分支（WC_ZONES 北京/纽约/伦敦，zoneTime 用 Intl.DateTimeFormat zh-CN hour12:false 每秒随 now 更新，tabular-nums 对齐）。未修改既有 3 种小组件代码。" },
+        { "id": "M54.6", "title": "窗口置顶 / pin", "status": "done", "notes": "Process 加 alwaysOnTop? 字段。引入 TOP_BASE=10000 双段 z-index（普通 1..9999 / 置顶 10001+），nextZ/nextTopZ 双计数器，allocTopZ/allocZFor(p) 按置顶态选段。setAlwaysOnTop(id,value) 切换并重分配 z + emit 事件。focus/restore/toggleMaximize/cycleWindows/cascade 全改用 allocZFor。关键修复：activeId() 引入 lastFocusedId 跟踪最近聚焦窗（置顶窗 z 始终更高，旧逻辑普通窗永拿不到焦点高亮），focus/launch/restore/toggleMaximize/cycleWindows/setAlwaysOnTop/close/closeAll 均维护此变量。Window.svelte 右键菜单加「钉在最前/取消钉住」。WindowControls.svelte 置顶时绿色按钮加白色光环 box-shadow。" },
+        { "id": "M54.7", "title": "信号/重渲染热点审计", "status": "done", "notes": "热点1：children() 的 O(n log n) 排序在内部路径浪费——新增 childrenRaw(parentId) 仅 filter 不 sort O(n)，替换 7 个内部调用者（uniqueName/rename/cloneInto/purge/emptyTrash/resolvePathHops/lresolvePath），路径解析 O(k·n log n)→O(k·n)。公开 children()（带排序）不变供展示用。热点2-5 审计结论：persist effect $state.snapshot 是 Svelte 5 深订阅必要手段且 JSON.stringify 已防抖推迟；processes 数组操作只改单字段非重建+防抖 250ms；80+ $derived 均正确缓存；$effect 无级联写入；Spotlight 全文搜索可用 early-exit 优化但保守不改。" },
+        { "id": "M54.8", "title": "全量回归 + STATE/TEST_LOG + commit", "status": "done", "notes": "vitest 26 文件 1178 例全绿；build 成功。STATE.json currentMilestone→M54 + M54 完整条目。TEST_LOG.md 顶部插入 M54 章节。" }
+      ]
+    },
     {
       "id": "M53",
       "name": "文本处理 · 归档压缩 · 差异同步补全（grep -c/-E · sed · awk · join · tar · gzip/gunzip · ln/readlink · wget · strings · hexdump/od · diff · patch · sync）",

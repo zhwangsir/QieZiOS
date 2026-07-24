@@ -26,11 +26,16 @@
 - [x] **R5-F3 勿扰 / 专注模式** [S/M, 价值高]：无 dnd。加 `dnd` + 在 `notifications.pushNote` 门控（勿扰时不弹 toast 但仍进 noteHistory）、`soundd` 查 dnd。顶栏/QuickSettings 开关。无头可验（断言 noteHistory 增长但无 toast）。
   - ✅ 实现：新 `system/dnd.svelte.ts`（`dnd=persisted('qz.dnd',{enabled})` + toggleDnd；不入 SETTINGS_KEYS 但随 qz.* 同步）。`pushNote`：dnd 时跳过 live toast(`notifications.items.push`)+ 自动消失计时器，但仍 push `noteHistory`（不丢，bell/中心可回看）；nid 仍自增（id 单调防撞）。`playSound`：dnd 时早 return 静音全部系统音。TopBar 加 🤫 切换（与 🔔 通知铃铛区分，accent 高亮/opacity-50）。
   - ✅ 浏览器实测：dnd 关→toast「DND-TEST-A」DOM 可见；dnd 开(🤫 高亮)→toast「DND-TEST-B」不显；localStorage qz.notehistory 含 A+B（均入历史不丢）。0 console error。supervisor 子 Agent PASS（toast 抑制+历史不丢+cap-trim 两路都在、nid 单调、sound 早 return 无 hydration 崩、无环、qz.dnd 同步不入主题白名单、UI 区分；非阻塞：toggle 无 aria-pressed 与既有 🌙 一致）。npm check+build 0 错 0 警。
-- [ ] **R5-F4 Files 键盘导航 + F2 改名 + Ctrl+D 复制** [M, 价值高]：Files 仅 Enter/Delete/Ctrl+CXV，无方向键/F2/Ctrl+D/首字母跳。复用现有选择模型+copyNode+startRename，纯接线。无头可验。
-- [ ] **R5-F5 壁纸轮播（+可选取色配主色）** [S/M, 价值中高]：单壁纸无轮播。新 `wallpaperSlideshow` persisted + `wallpaperd` 服务（仿 schedd）定时换 wallpaperId；Settings 启用+间隔+多选。可选 canvas 取主色。
-- [ ] **R5-F6 拖文件进 App（图片→查看器 / 文本→记事本）+ 拖到桌面** [M, 价值中高]：Window 无 ondrop。Files 内部拖（node id）→查看器加载；外部 OS 文件→createBinaryFile。
-- [ ] **R5-F7 更多小组件：待办 + 世界时钟** [M, 价值中]：WidgetKind 仅 3 种。扩 KINDS + Widgets 渲染分支；待办接现有 reminders、世界时钟复用 Clock 的 Intl 时区。
-- [ ] **R5-F8 窗口置顶 / pin** [S, 价值中]：processes 无 alwaysOnTop。加标志 + 内核 setter + z 序保持置顶；标题/chip 右键「钉在最前」。无头可验（断言 z 序）。
+✅ M54.1 完成
+- [x] **R5-F4 Files 键盘导航 + F2 改名 + Ctrl+D 复制** [M, 价值高]：Files 仅 Enter/Delete/Ctrl+CXV，无方向键/F2/Ctrl+D/首字母跳。复用现有选择模型+copyNode+startRename，纯接线。无头可验。
+✅ M54.3 完成
+- [x] **R5-F5 壁纸轮播（+可选取色配主色）** [S/M, 价值中高]：单壁纸无轮播。新 `wallpaperSlideshow` persisted + `wallpaperd` 服务（仿 schedd）定时换 wallpaperId；Settings 启用+间隔+多选。可选 canvas 取主色。
+✅ M54.4 完成
+- [x] **R5-F6 拖文件进 App（图片→查看器 / 文本→记事本）+ 拖到桌面** [M, 价值中高]：Window 无 ondrop。Files 内部拖（node id）→查看器加载；外部 OS 文件→createBinaryFile。
+✅ M54.5 完成
+- [x] **R5-F7 更多小组件：待办 + 世界时钟** [M, 价值中]：WidgetKind 仅 3 种。扩 KINDS + Widgets 渲染分支；待办接现有 reminders、世界时钟复用 Clock 的 Intl 时区。
+✅ M54.6 完成
+- [x] **R5-F8 窗口置顶 / pin** [S, 价值中]：processes 无 alwaysOnTop。加标志 + 内核 setter + z 序保持置顶；标题/chip 右键「钉在最前」。无头可验（断言 z 序）。
 
 ---
 

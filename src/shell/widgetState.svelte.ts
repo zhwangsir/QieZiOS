@@ -5,7 +5,7 @@ import { persisted } from '../kernel/persist.svelte';
 // 镜像便签（notes.svelte.ts）的拖动 + 持久化模式：持久一组 {kind,x,y}，拖动改位置自动存。
 // ⚠️ 文件名用 widgetState（非 widgets）避免与组件 Widgets.svelte 在 Windows 上只差大小写而撞名。
 // ───────────────────────────────────────────────────────────
-export type WidgetKind = 'clock' | 'calendar' | 'sysstat';
+export type WidgetKind = 'clock' | 'calendar' | 'sysstat' | 'todo' | 'worldclock';
 export interface Widget {
   id: string;
   kind: WidgetKind;
@@ -15,7 +15,7 @@ export interface Widget {
 
 export const widgets = persisted<{ list: Widget[] }>('qz.widgets', { list: [] });
 
-const KINDS: WidgetKind[] = ['clock', 'calendar', 'sysstat'];
+const KINDS: WidgetKind[] = ['clock', 'calendar', 'sysstat', 'todo', 'worldclock'];
 
 export function addWidget(kind: WidgetKind = 'clock'): string {
   const id = crypto.randomUUID();
