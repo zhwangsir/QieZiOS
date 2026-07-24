@@ -1,5 +1,6 @@
 <script lang="ts">
   import { shortcuts, closeShortcuts } from './shortcutsState.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   // 快捷键速查表（与 Desktop.onKey / Window 拖拽吸附 / 各 App 内快捷键一致）
   const groups: { title: string; items: [string, string][] }[] = [
@@ -13,7 +14,9 @@
         ['F3', '任务视图（所有窗口）'],
         ['双击标题栏', '最大化 / 还原'],
         ['Esc', '关闭活动窗口'],
+        ['Ctrl/⌘ + W', '关闭活动窗口'],
         ['Ctrl/⌘ + M', '最小化活动窗口'],
+        ['Ctrl/⌘ + H', '隐藏其他窗口'],
         ['Alt + `', '轮换窗口'],
       ],
     },
@@ -21,7 +24,7 @@
       title: '系统',
       items: [
         ['Ctrl/⌘ + K', '命令面板 (Spotlight)'],
-        ['点顶栏 🍆', '所有 App (Launchpad)'],
+        ['点顶栏 Logo', '所有 App (Launchpad)'],
         ['?', '本快捷键速查'],
       ],
     },
@@ -45,11 +48,11 @@
   >
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="w-[min(560px,92vw)] overflow-hidden rounded-2xl border border-qz-border qz-glass shadow-2xl shadow-black/50"
+      class="w-[min(560px,92vw)] overflow-hidden rounded-2xl border border-qz-border qz-glass qz-glass-float"
       onpointerdown={(e) => e.stopPropagation()}
     >
       <div class="flex items-center justify-between border-b border-qz-border px-4 py-3">
-        <span class="text-sm font-semibold">⌨️ 键盘快捷键</span>
+        <span class="flex items-center gap-1.5 text-sm font-semibold"><Icon name="⌨️" size={15} />键盘快捷键</span>
         <button class="rounded px-2 py-0.5 text-xs text-qz-muted hover:bg-qz-elevated" onclick={closeShortcuts}>关闭 (Esc)</button>
       </div>
       <div class="grid max-h-[70vh] gap-4 overflow-auto p-4 sm:grid-cols-2">

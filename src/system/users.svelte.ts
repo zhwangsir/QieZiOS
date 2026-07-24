@@ -24,6 +24,12 @@ export function getUser(name: string): User | undefined {
 export function userExists(name: string): boolean {
   return users.list.some((u) => u.name === name);
 }
+// 用户家目录（passwdLine 与 shell 波浪号展开共用同一来源）；未知用户 undefined
+export function userHome(name: string): string | undefined {
+  const u = getUser(name);
+  if (!u) return undefined;
+  return u.name === 'root' ? '/root' : '/';
+}
 // 新建用户：uid 从现有最大值（≥1000）往后排
 export function addUser(name: string): User {
   // 从 1000 起算（floor 1000 → 即便 qiezi 被删也不会复用其规范 uid 1000，新用户恒 ≥1001）
@@ -40,7 +46,7 @@ export function ensureUser(name: string): User {
 
 // 渲染成 /etc/passwd 一行：name:x:uid:gid::home:shell
 export function passwdLine(u: User): string {
-  return `${u.name}:x:${u.uid}:${u.gid}::${u.name === 'root' ? '/root' : '/'}:/bin/qzsh`;
+  return `${u.name}:x:${u.uid}:${u.gid}::${userHome(u.name)}:/bin/qzsh`;
 }
 export function passwdContent(): string {
   return users.list.map(passwdLine).join('\n') + '\n';

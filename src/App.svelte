@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { settings } from './system/settings.svelte';
   import { activeTokens, applyTokens, resolvedMode } from './system/theme.svelte';
-  import { processes } from './kernel/processes.svelte';
-  import { vfs, setOwnerProvider, setRecentForgetter } from './kernel/vfs.svelte';
+  import { setOwnerProvider, setRecentForgetter } from './kernel/vfs.svelte';
   import { forgetRecent } from './system/recents.svelte';
-  import { startServices } from './kernel/services.svelte';
   import { account } from './system/account.svelte';
   import { setShellRunner } from './system/aiTools';
   import { setScheduleRunner } from './system/schedules.svelte';
   import { run as shellRun, newCtx } from './lib/shell';
-  import { sys } from './system/sys';
   import './system/services'; // 登记系统自带服务（通知中心等）
+  import { session, power, powerConfirm, cancelShutdown, confirmShutdown } from './system/session.svelte';
   import Desktop from './shell/Desktop.svelte';
+  import BootScreen from './shell/boot/BootScreen.svelte';
+  import LoginScreen from './shell/boot/LoginScreen.svelte';
+  import LockScreen from './shell/boot/LockScreen.svelte';
 
   // 统一身份：新建文件的属主 = 当前登录账号（未登录 = 访客 qiezi）。
   setOwnerProvider(() => account.username || 'qiezi');
@@ -57,19 +57,76 @@
     el.textContent = settings.customCss ?? '';
   });
 
-  // 开机 init 序列：走总线发事件 → 日志/事件检查器都会收到（事件驱动）
-  onMount(() => {
-    sys.bus.emit('sys.boot');
-    sys.bus.emit('sys.mount', { nodes: Object.keys(vfs.nodes).length });
-    startServices(); // 启动后台服务（通知中心等）
-    if (processes.length === 0) {
-      sys.openApp('welcome');
-    } else {
-      sys.bus.emit('sys.restore', { count: processes.length });
-    }
-    sys.bus.emit('sys.ready');
-    sys.notify('QieZiOS 已就绪 🍆', { body: '系统服务已启动', level: 'success' });
-  });
+  // 关机黑屏时：任意键 = 重新启动（reload 回到开机流程）
+  function onPowerKey() {
+    if (power.off) location.reload();
+  }
 </script>
 
-<Desktop />
+<svelte:window onkeydown={onPowerKey} />
+
+<!-- M3/U7 仪式感流程：boot/login 期间不挂载 Desktop（服务/通知在 Desktop 挂载时才启动，见 Desktop onMount）；
+     desktop 与 locked 共用同一 Desktop 实例 → 锁定只是盖上锁屏，窗口状态原样保留。 -->
+{#if session.phase === 'boot'}
+  <BootScreen />
+{:else if session.phase === 'login'}
+  <LoginScreen />
+{:else}
+  <Desktop />
+  <LockScreen />
+{/if}
+
+<!-- 关机确认（U8）：系统菜单「关机」弹出；Esc 取消 / Enter 确认（键盘由 Desktop 全局 handler 统一接） -->
+{#if powerConfirm.open}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="fixed inset-0 z-[10009] grid select-none place-items-center bg-black/45"
+    onclick={cancelShutdown}
+  >
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+      class="w-72 rounded-qz border border-qz-border qz-glass qz-glass-float p-5"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <div class="flex items-center gap-2.5">
+        <img src="/favicon.svg" alt="" class="h-8 w-8" draggable="false" />
+        <div class="text-sm font-semibold text-qz-text">确定要关机吗？</div>
+      </div>
+      <p class="mt-2 text-xs leading-relaxed text-qz-muted">桌面布局与文件已自动保存，重新启动后原样还原。</p>
+      <div class="mt-4 flex justify-end gap-2 text-xs">
+        <button
+          class="rounded-qz px-3 py-1.5 ring-1 ring-qz-border transition hover:bg-qz-elevated"
+          onclick={cancelShutdown}>取消</button>
+        <button
+          class="rounded-qz bg-red-500 px-3 py-1.5 font-medium text-white transition active:scale-95"
+          onclick={confirmShutdown}>关机</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- 关机（U8）：确认后整屏黑屏「已关机」，点击或按任意键 = 重新启动（reload → 重新开机） -->
+{#if power.off}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="fixed inset-0 z-[10010] flex select-none flex-col items-center justify-center gap-4 bg-black"
+    onclick={() => location.reload()}
+  >
+    <img src="/favicon.svg" alt="" class="h-14 w-14 opacity-30 grayscale" draggable="false" />
+    <div class="text-sm tracking-[0.3em] text-white/60">已关机</div>
+    <div class="text-xs text-white/35">点击或按任意键重新启动</div>
+  </div>
+{/if}
+
+<!-- U2 玻璃折射滤镜（Liquid Glass 配方：turbulence → blur → displacement）。
+     供 qz-glass 的 backdrop-filter: url(#qz-glass-refraction) 引用；默认关，设置 → 玻璃折射 可开。 -->
+<svg aria-hidden="true" style="position: absolute; width: 0; height: 0; overflow: hidden">
+  <filter id="qz-glass-refraction">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="7" result="noise" />
+    <feGaussianBlur in="noise" stdDeviation="2.2" result="soft" />
+    <feDisplacementMap in="SourceGraphic" in2="soft" scale="12" xChannelSelector="R" yChannelSelector="G" />
+  </filter>
+</svg>

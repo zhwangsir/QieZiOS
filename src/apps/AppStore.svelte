@@ -4,6 +4,7 @@
   import { repoConfig, fetchCatalog, installCatalogApp, isInstalled, type CatalogApp } from '../system/appRepo.svelte';
   import { sys } from '../system/sys';
   import { onMount } from 'svelte';
+  import Icon from '../lib/Icon.svelte';
 
   let apps = $state<CatalogApp[]>([]);
   let catalogName = $state('');
@@ -30,9 +31,9 @@
   function install(entry: CatalogApp) {
     try {
       installCatalogApp(entry);
-      sys.notify(`已安装 ${entry.name}`, { body: '到「我的 App」里启动', level: 'success' });
+      sys.notify(`已安装 ${entry.name}`, { body: '到「我的 App」里启动', level: 'success', source: 'App Store' });
     } catch (e) {
-      sys.notify('安装失败', { body: e instanceof Error ? e.message : String(e), level: 'error' });
+      sys.notify('安装失败', { body: e instanceof Error ? e.message : String(e), level: 'error', source: 'App Store' });
     }
   }
 
@@ -47,7 +48,7 @@
 <div class="flex h-full flex-col text-qz-text">
   <!-- 仓库源 -->
   <div class="flex shrink-0 items-center gap-2 border-b border-qz-border p-2">
-    <span class="shrink-0 text-xs text-qz-muted">📦 仓库</span>
+    <span class="flex shrink-0 items-center gap-1 text-xs text-qz-muted"><Icon name="📦" size={12} />仓库</span>
     <input
       class="min-w-0 flex-1 rounded-qz bg-qz-surface px-2 py-1 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent"
       bind:value={url}
@@ -62,7 +63,7 @@
 
   <div class="min-h-0 flex-1 overflow-auto p-2">
     {#if error}
-      <div class="m-2 rounded-qz bg-red-500/15 px-3 py-2 text-xs text-red-300">⚠️ 拉取失败：{error}</div>
+      <div class="m-2 flex items-center gap-1 rounded-qz bg-red-500/15 px-3 py-2 text-xs text-red-300"><Icon name="⚠️" size={13} />拉取失败：{error}</div>
     {:else if loading && apps.length === 0}
       <div class="grid h-full place-items-center text-sm text-qz-muted">加载中…</div>
     {:else if apps.length === 0}
@@ -73,13 +74,13 @@
         {#each apps as a (a.id)}
           {@const installed = isInstalled(a)}
           <div class="flex items-center gap-3 rounded-qz bg-qz-elevated/60 p-2">
-            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-qz bg-qz-surface text-2xl">{a.icon}</span>
+            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-qz bg-qz-surface text-qz-text"><Icon name={a.icon} size={22} /></span>
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm font-medium">{a.name}</div>
               {#if a.description}<div class="truncate text-xs text-qz-muted">{a.description}</div>{/if}
               {#if caps(a).length}
                 <div class="mt-0.5 flex flex-wrap gap-1">
-                  {#each caps(a) as c (c)}<span class="rounded bg-qz-surface px-1 text-[9px] text-qz-muted">{c}</span>{/each}
+                  {#each caps(a) as c (c)}<span class="rounded bg-qz-surface px-1 text-[10px] text-qz-muted">{c}</span>{/each}
                 </div>
               {/if}
             </div>

@@ -2,6 +2,7 @@
   import { schedules } from '../system/schedules.svelte';
   import { sys } from '../system/sys';
   import { windowVisible } from '../lib/winctx';
+  import Icon from '../lib/Icon.svelte';
 
   type Unit = 's' | 'm' | 'h' | 'd';
   let title = $state('');
@@ -35,11 +36,11 @@
     if (mode === 'datetime') {
       const ts = whenStr ? new Date(whenStr).getTime() : NaN;
       if (Number.isNaN(ts) || ts <= Date.now()) {
-        sys.notify('请选择一个将来的时间', { level: 'warn', timeout: 1800 });
+        sys.notify('请选择一个将来的时间', { level: 'warn', timeout: 1800, source: '提醒事项' });
         return;
       }
       sys.schedule.add({ title: t, in: ts - Date.now() });
-      sys.notify('已设定提醒', { body: `${t} · ${new Date(ts).toLocaleString()}`, level: 'success', timeout: 1500 });
+      sys.notify('已设定提醒', { body: `${t} · ${new Date(ts).toLocaleString()}`, level: 'success', timeout: 1500, source: '提醒事项' });
     } else {
       const ms = Math.max(1, Math.round(amount)) * UNIT_MS[unit];
       sys.schedule.add(mode === 'repeat' ? { title: t, every: ms } : { title: t, in: ms });
@@ -47,6 +48,7 @@
         body: `${t} · ${mode === 'repeat' ? '每隔 ' : ''}${amount} ${UNIT_LABEL[unit]}${mode === 'repeat' ? '' : '后'}`,
         level: 'success',
         timeout: 1500,
+        source: '提醒事项',
       });
     }
     title = '';
@@ -114,7 +116,7 @@
 
   {#if schedules.items.length === 0}
     <div class="grid flex-1 place-items-center px-6 text-center text-sm text-qz-muted">
-      <div><div class="mb-2 text-4xl">⏰</div>还没有提醒。到点会弹系统通知（由定时器服务 schedd 触发）。</div>
+      <div><div class="mb-2 flex justify-center"><Icon name="⏰" size={36} strokeWidth={1.5} /></div>还没有提醒。到点会弹系统通知（由定时器服务 schedd 触发）。</div>
     </div>
   {:else}
     <div class="flex-1 overflow-auto p-2">

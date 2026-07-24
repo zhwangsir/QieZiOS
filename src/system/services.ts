@@ -18,13 +18,13 @@ registerService({
     const offs = [
       // 任何地方 emit('notify', {...}) 或 sys.notify(...) → 弹一条
       on('notify', (p) => {
-        const n = (p ?? {}) as { title?: string; body?: string; level?: NoteLevel; timeout?: number };
-        pushNote({ title: n.title ?? '通知', body: n.body, level: n.level, timeout: n.timeout });
+        const n = (p ?? {}) as { title?: string; body?: string; level?: NoteLevel; timeout?: number; source?: string };
+        pushNote({ title: n.title ?? '通知', body: n.body, level: n.level, timeout: n.timeout, source: n.source });
       }),
       // 安全可见性：App 调用未声明能力被拒 → 弹警告（总线驱动真实行为）
       on('app.denied', (p) => {
         const tool = (p as { tool?: string })?.tool ?? '?';
-        pushNote({ title: '能力被拒绝', body: `App 调用了未声明的「${tool}」`, level: 'warn' });
+        pushNote({ title: '能力被拒绝', body: `App 调用了未声明的「${tool}」`, level: 'warn', source: '系统' });
       }),
     ];
     return () => offs.forEach((off) => off());

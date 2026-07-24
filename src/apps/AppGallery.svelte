@@ -4,6 +4,7 @@
   import { sys } from '../system/sys';
   import { CAPABILITIES } from '../system/appSdk';
   import { exportUserApp, importUserAppFile } from './appShare';
+  import Icon from '../lib/Icon.svelte';
 
   let fileInput = $state<HTMLInputElement>();
   async function onImport(e: Event) {
@@ -14,17 +15,16 @@
       sys.notify(id ? '已导入 App' : '导入失败', {
         body: id ? f.name : `${f.name} 不是有效的 .qzapp.json`,
         level: id ? 'success' : 'warn',
+        source: 'App Store',
       });
     }
     input.value = '';
   }
 
   // App 声明的能力 → 图标列表（未声明字段的旧 App 视作全部）
-  function capIcons(a: UserApp): string {
+  function capIcons(a: UserApp): string[] {
     const keys = a.caps ?? CAPABILITIES.map((c) => c.key);
-    return CAPABILITIES.filter((c) => keys.includes(c.key))
-      .map((c) => c.icon)
-      .join(' ');
+    return CAPABILITIES.filter((c) => keys.includes(c.key)).map((c) => c.icon);
   }
 
   // 用 App 自己的 id 当 appId 启动（first-class）；data.appId 让通用宿主知道渲染哪个
@@ -41,13 +41,13 @@
 
 <div class="flex h-full flex-col text-qz-text">
   <div class="flex shrink-0 items-center justify-between border-b border-qz-border px-3 py-2">
-    <span class="text-xs text-qz-muted">🧩 我的 App · {userApps.list.length}</span>
+    <span class="flex items-center gap-1 text-xs text-qz-muted"><Icon name="🧩" size={12} />我的 App · {userApps.list.length}</span>
     <div class="flex gap-1.5">
       <button class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110" onclick={() => fileInput?.click()}
-        >⬇ 导入</button>
+        ><span class="flex items-center gap-1"><Icon name="⬇" size={12} />导入</span></button>
       <button
         class="rounded-md bg-qz-accent px-2.5 py-1 text-xs font-medium text-qz-accent-contrast active:scale-95"
-        onclick={newApp}>＋ 新建</button>
+        onclick={newApp}><span class="flex items-center gap-1"><Icon name="➕" size={12} />新建</span></button>
     </div>
     <input bind:this={fileInput} type="file" accept=".json,application/json" multiple class="hidden" onchange={onImport} />
   </div>
@@ -55,7 +55,7 @@
   {#if userApps.list.length === 0}
     <div class="grid flex-1 place-items-center px-6 text-center text-sm text-qz-muted">
       <div>
-        <div class="mb-2 text-4xl">🛠️</div>
+        <div class="mb-2 flex justify-center"><Icon name="🛠️" size={36} strokeWidth={1.5} /></div>
         还没有装上的 App。去「开发者」里写一个，点「保存为 App」就会出现在这里。
       </div>
     </div>
@@ -66,10 +66,12 @@
     >
       {#each userApps.list as a (a.id)}
         <div class="group/app flex flex-col items-center gap-1 rounded-xl p-3 hover:bg-qz-elevated">
-          <button class="grid h-14 w-14 place-items-center text-4xl" title="启动" onclick={() => openApp(a)}
-            >{a.icon}</button>
+          <button class="grid h-14 w-14 place-items-center text-qz-text" title="启动" onclick={() => openApp(a)}
+            ><Icon name={a.icon} size={32} strokeWidth={1.5} /></button>
           <span class="line-clamp-1 w-full text-center text-xs" title={a.name}>{a.name}</span>
-          <span class="text-[10px] leading-none opacity-60" title="此 App 拥有的能力">{capIcons(a)}</span>
+          <span class="flex items-center gap-1 text-[10px] leading-none opacity-60" title="此 App 拥有的能力">
+            {#each capIcons(a) as ci, i (i)}<Icon name={ci} size={10} />{/each}
+          </span>
           <div class="flex gap-1 opacity-0 transition group-hover/app:opacity-100">
             <button
               class="rounded px-1.5 py-0.5 text-[10px] text-qz-accent hover:bg-qz-surface"

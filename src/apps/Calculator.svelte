@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { evalExpr } from '../lib/calc';
+  import Icon from '../lib/Icon.svelte';
 
   // ── 模式：标准（状态机）/ 科学（表达式 + 安全 parser） ──
   let mode = $state<'std' | 'sci'>('std');
@@ -312,7 +313,7 @@
       class:bg-qz-elevated={showHistory}
       title="计算历史"
       tabindex="-1"
-      onclick={() => { showHistory = !showHistory; rootEl?.focus(); }}>🕘 历史</button>
+      onclick={() => { showHistory = !showHistory; rootEl?.focus(); }}><span class="flex items-center gap-1"><Icon name="🕘" size={12} />历史</span></button>
   </div>
 
   <!-- 显示屏 -->
@@ -364,7 +365,7 @@
               ? 'background: color-mix(in srgb, var(--color-qz-text) 12%, transparent)'
               : ''}
             tabindex="-1"
-            onclick={() => onButton(key)}>{key}</button>
+            onclick={() => onButton(key)}>{#if key === '⌫'}<span class="flex items-center justify-center"><Icon name="⌫" size={16} /></span>{:else}{key}{/if}</button>
         {/each}
       {/each}
     </div>

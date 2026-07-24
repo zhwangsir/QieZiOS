@@ -3,12 +3,14 @@
   import { wallpapers } from '../system/wallpaper';
   import { putBlob, deleteBlob } from '../kernel/blobStore';
   import { themePresets, type ThemePreset } from '../system/themePresets.svelte';
-  import { aiConfig, AI_MODELS, AI_PRESETS, ENV_AI_KEY, type AiPreset } from '../system/aiConfig.svelte';
+  import { aiConfig, AI_MODELS, AI_PRESETS, applyAiPreset } from '../system/aiConfig.svelte';
   import { runAgent } from '../system/ai';
   import { pushSync, pullSync } from '../system/sync';
   import { account, loggedIn, register, login, logout } from '../system/account.svelte';
   import { soundPrefs, playSound } from '../system/sound';
+  import { sessionPrefs } from '../system/session.svelte';
   import { sys } from '../system/sys';
+  import Icon from '../lib/Icon.svelte';
 
   const modes: Array<[typeof settings.mode, string]> = [
     ['dark', '暗色'],
@@ -50,13 +52,7 @@
   let aiBusy = $state(false);
   let aiErr = $state('');
 
-  // 一键套用某个 AI 服务预设（provider+地址+模型；工作站预设还会从环境变量填 key）
-  function applyAiPreset(p: AiPreset) {
-    aiConfig.provider = p.provider;
-    aiConfig.baseURL = p.baseURL;
-    aiConfig.model = p.model;
-    if (p.useEnvKey && ENV_AI_KEY) aiConfig.apiKey = ENV_AI_KEY;
-  }
+  // 一键套用预设的逻辑已抽到 aiConfig.svelte.ts（applyAiPreset），与 Spotlight AI 面板共用
 
   // 账号（登录/注册）+ 云同步（需 npm run serve 部署 / dev 下本地后端在跑）
   let authUser = $state('');
@@ -69,7 +65,7 @@
     try {
       await (kind === 'register' ? register(authUser.trim(), authPass) : login(authUser.trim(), authPass));
       authPass = '';
-      sys.notify('账号', { body: `已${kind === 'register' ? '注册并登录' : '登录'}：${account.username}`, level: 'success' });
+      sys.notify('账号', { body: `已${kind === 'register' ? '注册并登录' : '登录'}：${account.username}`, level: 'success', source: '设置' });
     } catch (e) {
       authMsg = e instanceof Error ? e.message : String(e);
     }
@@ -84,7 +80,7 @@
     try {
       const n = await pushSync();
       syncMsg = `已上传 ${n} 项到云端`;
-      sys.notify('云同步', { body: syncMsg, level: 'success' });
+      sys.notify('云同步', { body: syncMsg, level: 'success', source: '设置' });
     } catch (e) {
       syncMsg = e instanceof Error ? e.message : String(e);
     }
@@ -176,7 +172,7 @@
       {#each AI_PRESETS as p (p.label)}
         <button
           class="rounded-md bg-qz-elevated px-2 py-1 text-[11px] transition hover:brightness-110"
-          onclick={() => applyAiPreset(p)}>{p.label}</button>
+          onclick={() => applyAiPreset(aiConfig, p)}>{p.label}</button>
       {/each}
     </div>
 
@@ -244,7 +240,7 @@
 
   <!-- AI 配色：一句话换肤（复用 set_theme 工具） -->
   <section class="flex flex-col gap-2">
-    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">🪄 AI 配色</h2>
+    <h2 class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-qz-muted"><Icon name="🪄" size={13} />AI 配色</h2>
     <div class="flex gap-2">
       <input
         class="min-w-0 flex-1 rounded-qz bg-qz-surface px-2 py-1.5 text-xs outline-none ring-1 ring-qz-border focus:ring-qz-accent disabled:opacity-50"
@@ -263,7 +259,7 @@
     {#if !aiConfig.apiKey}
       <p class="text-[11px] text-qz-muted">先在上面配置 AI 才能用。</p>
     {:else if aiErr}
-      <p class="text-[11px] text-red-400">⚠️ {aiErr}</p>
+      <p class="flex items-center gap-1 text-[11px] text-red-400"><Icon name="⚠️" size={12} />{aiErr}</p>
     {/if}
   </section>
 
@@ -282,9 +278,9 @@
     </div>
     {#if settings.mode === 'schedule'}
       <div class="flex items-center gap-2 text-xs text-qz-muted">
-        <span>☀️ 转明</span>
+        <span class="flex items-center gap-1"><Icon name="☀️" size={13} />转明</span>
         <input type="time" bind:value={settings.lightStart} class="rounded bg-qz-surface px-1.5 py-0.5 text-qz-text outline-none ring-1 ring-qz-border focus:ring-qz-accent" />
-        <span>🌙 转暗</span>
+        <span class="flex items-center gap-1"><Icon name="🌙" size={13} />转暗</span>
         <input type="time" bind:value={settings.darkStart} class="rounded bg-qz-surface px-1.5 py-0.5 text-qz-text outline-none ring-1 ring-qz-border focus:ring-qz-accent" />
       </div>
     {/if}
@@ -308,7 +304,7 @@
         class="ml-1 grid h-7 w-7 cursor-pointer place-items-center rounded-full border border-qz-border text-xs"
         title="自定义颜色"
       >
-        🎨
+        <Icon name="🎨" size={13} />
         <input type="color" bind:value={settings.accent} class="sr-only" />
       </label>
     </div>
@@ -343,6 +339,15 @@
       bind:value={settings.surfaceOpacity}
       class="w-full accent-qz-accent"
     />
+  </section>
+
+  <!-- 玻璃折射（U2，默认关）：给玻璃面板叠 SVG 位移滤镜，模拟光线穿过玻璃的扭曲。
+       backdrop-filter: url() 仅 Chromium 支持；其它浏览器开了也无效果（自动退回普通磨砂）。 -->
+  <section class="flex flex-col gap-1.5">
+    <label class="flex items-center justify-between gap-3 text-xs text-qz-muted">
+      <span>玻璃折射 <span class="text-[10px]">（实验 · 仅 Chromium 生效）</span></span>
+      <input type="checkbox" class="h-4 w-4 accent-qz-accent" bind:checked={settings.glassRefraction} />
+    </label>
   </section>
 
   <!-- 主色渗透：把主色调拌进面板/控件表面，整体配色更统一（0=纯中性表面） -->
@@ -490,7 +495,7 @@
 
   <!-- 账号 + 云同步（需 npm run serve 部署 / dev 下本地后端在跑） -->
   <section class="flex flex-col gap-2">
-    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">👤 账号 & 云同步</h2>
+    <h2 class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-qz-muted"><Icon name="👤" size={13} />账号 & 云同步</h2>
     {#if loggedIn()}
       <p class="text-[11px] leading-relaxed text-qz-muted">
         已登录：<b class="text-qz-text">{account.username}</b>。把桌面布局/文件/主题/已装 App 按账号同步到后端，多设备共享（不含 AI key）。
@@ -510,7 +515,7 @@
       </div>
     {:else}
       <p class="text-[11px] leading-relaxed text-qz-muted">
-        登录或注册一个账号，数据按账号隔离同步到自托管后端。⚠️ 需 <code>npm run serve</code> 部署（dev 下需本地后端在跑）。
+        登录或注册一个账号，数据按账号隔离同步到自托管后端。需 <code>npm run serve</code> 部署（dev 下需本地后端在跑）。
       </p>
       <div class="flex flex-wrap items-center gap-2">
         <input
@@ -538,7 +543,7 @@
 
   <!-- 全局自定义 CSS：深度换肤，注入 <style> 即时生效 -->
   <section class="flex flex-col gap-2">
-    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">🎨 自定义 CSS</h2>
+    <h2 class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-qz-muted"><Icon name="🎨" size={13} />自定义 CSS</h2>
     <p class="text-[11px] leading-relaxed text-qz-muted">
       粘 CSS 即时全局生效（持久化、随主题导出/同步）。覆盖 token 加 <code>!important</code>，如
       <code>html&#123;--color-qz-accent:#f06 !important&#125;</code>。
@@ -551,9 +556,18 @@
     ></textarea>
   </section>
 
+  <!-- 系统（M3/U7）：开机流程偏好。独立于主题白名单，不随主题导入/导出 -->
+  <section class="flex flex-col gap-2">
+    <h2 class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-qz-muted"><Icon name="⚙️" size={13} />系统</h2>
+    <label class="flex items-center justify-between gap-3 text-sm">
+      <span>跳过开机动画 <span class="text-[11px] text-qz-muted">（下次启动直进登录/锁屏）</span></span>
+      <input type="checkbox" class="h-4 w-4 accent-qz-accent" bind:checked={sessionPrefs.skipBoot} />
+    </label>
+  </section>
+
   <!-- 系统音效：WebAudio 合成，默认关；开/关窗、通知、删除等事件由 soundd 触发 -->
   <section class="flex flex-col gap-2">
-    <h2 class="text-xs font-semibold uppercase tracking-wider text-qz-muted">🔊 声音</h2>
+    <h2 class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-qz-muted"><Icon name="🔊" size={13} />声音</h2>
     <label class="flex items-center justify-between gap-3 text-sm">
       <span>系统音效 <span class="text-[11px] text-qz-muted">（开/关窗、通知、删除…）</span></span>
       <input type="checkbox" class="h-4 w-4 accent-qz-accent" bind:checked={soundPrefs.enabled} onchange={() => soundPrefs.enabled && playSound('open')} />

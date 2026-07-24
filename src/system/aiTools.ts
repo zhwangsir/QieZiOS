@@ -9,6 +9,15 @@ export function setShellRunner(fn: ShellRun): void {
   shellRun = fn;
 }
 
+// 跟踪 DND 状态（轻量布尔开关，持久化到 localStorage；通知中心读它决定是否弹 toast）
+const DND_KEY = 'qz.dnd';
+export function isDnd(): boolean {
+  try { return localStorage.getItem(DND_KEY) === '1'; } catch { return false; }
+}
+function setDnd(v: boolean): void {
+  try { localStorage.setItem(DND_KEY, v ? '1' : '0'); } catch { /* ignore */ }
+}
+
 // ───────────────────────────────────────────────────────────
 // AI 能力工具 · 把内核/VFS/设置的函数暴露给 AI 调用
 // 这就是「AI 底层驱动」的核心：AI 返回 tool_use → executeTool 执行到系统 → 回灌结果。
@@ -96,6 +105,70 @@ export const TOOL_DEFS = [
       required: ['command'],
     },
   },
+  // ── M15.2 新增工具：AI 工具箱补完 ──
+  {
+    name: 'read_file',
+    description: '读取一个文本文件的内容（按 list_files 返回的文件 id）',
+    input_schema: {
+      type: 'object' as const,
+      properties: { fileId: { type: 'string' } },
+      required: ['fileId'],
+    },
+  },
+  {
+    name: 'close_app',
+    description: '关闭一个正在运行的 App 窗口（按进程 id 或 pid）',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        processId: { type: 'string', description: '进程 id（如 "textedit-a1b2c3d4"）' },
+        pid: { type: 'number', description: '数字 PID（与 processId 二选一）' },
+      },
+    },
+  },
+  {
+    name: 'notify',
+    description: '发一条系统通知（弹 toast + 进通知中心）',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string' },
+        body: { type: 'string' },
+        level: { type: 'string', enum: ['info', 'success', 'warn', 'error'] },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'move_file',
+    description: '把文件/文件夹移动到另一个文件夹（按 id）',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        fileId: { type: 'string' },
+        destFolderId: { type: 'string' },
+      },
+      required: ['fileId', 'destFolderId'],
+    },
+  },
+  {
+    name: 'trash_file',
+    description: '把文件/文件夹移入回收站（软删除，可还原）',
+    input_schema: {
+      type: 'object' as const,
+      properties: { fileId: { type: 'string' } },
+      required: ['fileId'],
+    },
+  },
+  {
+    name: 'set_dnd',
+    description: '开关勿扰模式（Do Not Disturb）。开启后通知中心不弹 toast，只静默记录。',
+    input_schema: {
+      type: 'object' as const,
+      properties: { enabled: { type: 'boolean' } },
+      required: ['enabled'],
+    },
+  },
 ];
 
 // 执行一个工具调用，返回结果（会被序列化回灌给 AI）
@@ -147,6 +220,58 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       if (!shellRun) return { error: 'shell 未就绪' };
       const res = await shellRun(String(input.command ?? ''));
       return { stdout: res.out, stderr: res.err ?? '', exitCode: res.code };
+    }
+
+    // ── M15.2 新增工具执行 ──
+    case 'read_file': {
+      const n = sys.fs.read(String(input.fileId));
+      if (!n) return { error: '文件不存在' };
+      if (n.type !== 'file') return { error: '不是文件（是文件夹）' };
+      if (n.kind === 'binary') return { error: '二进制文件不可读（mime: ' + (n.mime ?? 'unknown') + '）' };
+      return { id: n.id, name: n.name, content: n.content };
+    }
+
+    case 'close_app': {
+      const procs = sys.proc.list();
+      let target = procs.find((p) => p.id === String(input.processId));
+      if (!target && typeof input.pid === 'number') target = procs.find((p) => p.pid === input.pid);
+      if (!target) return { error: '进程不存在（processId/pid 都不匹配）' };
+      sys.proc.close(target.id);
+      return { ok: true, closed: target.appId, pid: target.pid };
+    }
+
+    case 'notify': {
+      sys.notify(String(input.title), {
+        body: input.body ? String(input.body) : undefined,
+        level: (input.level as 'info' | 'success' | 'warn' | 'error') ?? 'info',
+        source: 'AI 助手',
+      });
+      return { ok: true };
+    }
+
+    case 'move_file': {
+      const fileId = String(input.fileId);
+      const destId = String(input.destFolderId);
+      const n = sys.fs.read(fileId);
+      const dest = sys.fs.read(destId);
+      if (!n) return { error: '文件不存在' };
+      if (!dest || dest.type !== 'dir') return { error: '目标不是文件夹' };
+      sys.fs.move(fileId, destId);
+      return { ok: true, moved: fileId, to: destId, newName: sys.fs.read(fileId)?.name };
+    }
+
+    case 'trash_file': {
+      const fileId = String(input.fileId);
+      const n = sys.fs.read(fileId);
+      if (!n) return { error: '文件不存在' };
+      sys.fs.trash(fileId);
+      return { ok: true, trashed: fileId };
+    }
+
+    case 'set_dnd': {
+      const enabled = Boolean(input.enabled);
+      setDnd(enabled);
+      return { ok: true, dnd: enabled };
     }
 
     default:

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getNode, readBlob, isVideo } from '../kernel/vfs.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   // data = 要播放的音/视频文件 id（Files 双击媒体文件时传入）
   let { data }: { data?: unknown } = $props();
@@ -50,7 +51,7 @@
 <div class="flex h-full flex-col bg-black/25">
   <!-- 信息条 -->
   <div class="flex shrink-0 items-center gap-2 border-b border-qz-border bg-qz-surface/60 px-3 py-1.5 text-xs">
-    <span class="shrink-0">{video ? '🎬' : '🎵'}</span>
+    <span class="shrink-0 text-qz-text"><Icon name={video ? '🎬' : '🎵'} size={14} /></span>
     <span class="min-w-0 flex-1 truncate" title={node?.name}>{node?.name ?? '未知'}</span>
     {#if node?.size}<span class="shrink-0 text-qz-muted">{fmtSize(node.size)}</span>{/if}
   </div>
@@ -70,7 +71,7 @@
       </video>
     {:else}
       <div class="flex w-full max-w-sm flex-col items-center gap-4">
-        <div class="text-6xl">🎵</div>
+        <div class="text-qz-muted"><Icon name="🎵" size={56} strokeWidth={1.5} /></div>
         <audio src={url} controls autoplay class="w-full"></audio>
       </div>
     {/if}

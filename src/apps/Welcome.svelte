@@ -1,6 +1,8 @@
 <script lang="ts">
   import { sys } from '../system/sys';
   import { openSpotlight } from '../shell/spotlightState.svelte';
+  import { viewport } from '../system/viewport.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   // 快速导览：点卡片直接开对应 App（替代原「点击计数」演示）
   const tour: { icon: string; title: string; desc: string; app: string }[] = [
@@ -13,7 +15,7 @@
 
 <div class="flex h-full flex-col gap-4 overflow-auto p-6">
   <div>
-    <h1 class="text-xl font-semibold">你好，QieZiOS 🍆</h1>
+    <h1 class="flex items-center gap-1.5 text-xl font-semibold">你好，QieZiOS <Icon name="🍆" size={20} /></h1>
     <p class="mt-1 text-sm leading-relaxed text-qz-muted">
       一个跑在浏览器里的桌面系统。这个窗口本身就是一个 App —— 被内核当成「进程」装进可拖拽的窗口里。挑一个开始：
     </p>
@@ -25,7 +27,7 @@
         class="flex items-start gap-3 rounded-qz bg-qz-elevated/60 p-3 text-left transition hover:brightness-110 active:scale-[0.98]"
         onclick={() => sys.openApp(t.app)}
       >
-        <span class="shrink-0 text-2xl">{t.icon}</span>
+        <span class="shrink-0 text-qz-text"><Icon name={t.icon} size={24} strokeWidth={1.5} /></span>
         <span class="flex min-w-0 flex-col">
           <span class="text-sm font-medium">{t.title}</span>
           <span class="text-xs text-qz-muted">{t.desc}</span>
@@ -38,12 +40,20 @@
     class="flex items-center gap-2 rounded-qz border border-qz-border px-3 py-2 text-left text-sm transition hover:bg-qz-elevated"
     onclick={openSpotlight}
   >
-    <span class="text-lg">🔍</span>
-    <span class="text-qz-muted"
-      >按 <kbd class="rounded bg-qz-elevated px-1 text-[11px]">Ctrl/⌘ K</kbd> 随时搜索启动一切 —— 点这里试试</span>
+    <span class="text-qz-muted"><Icon name="🔍" size={17} /></span>
+    {#if viewport.isMobile}
+      <span class="text-qz-muted">点这里搜索启动一切</span>
+    {:else}
+      <span class="text-qz-muted"
+        >按 <kbd class="rounded bg-qz-elevated px-1 text-[11px]">Ctrl/⌘ K</kbd> 随时搜索启动一切 —— 点这里试试</span>
+    {/if}
   </button>
 
   <p class="mt-auto text-xs leading-relaxed text-qz-muted">
-    窗口手感：拖标题栏移动 · 拖任意边/角缩放 · 拖到屏幕边缘吸附半屏 · 双击标题栏最大化 · 黄灯最小化后点 Dock 找回。
+    {#if viewport.isMobile}
+      移动手感：点图标开 App · 点底部横条回主屏 · 双击横条开任务视图 · 状态栏右侧点开控制中心。
+    {:else}
+      窗口手感：拖标题栏移动 · 拖任意边/角缩放 · 拖到屏幕边缘吸附半屏 · 双击标题栏最大化 · 黄灯最小化后点 Dock 找回。
+    {/if}
   </p>
 </div>

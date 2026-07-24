@@ -8,6 +8,7 @@
   import { windowVisible } from '../lib/winctx';
   import { appMeta } from './appList';
   import { userApps, getUserApp } from './userApps.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   // ⚠️ 不能 import registry/desktopApps（registry 会 import 本组件 → 成环）。
   // 图标改用纯数据的 appMeta + userApps，二者都不 import registry。
@@ -179,7 +180,7 @@
           <span class="w-10 tabular-nums text-qz-muted">{p.ppid ?? 0}</span>
           <span class="flex min-w-0 flex-1 items-center gap-1.5" style="padding-left: {depth * 14}px">
             {#if depth > 0}<span class="text-qz-muted/60">└</span>{/if}
-            <span>{iconFor(p.appId)}</span>
+            <span class="text-qz-text"><Icon name={iconFor(p.appId)} size={13} /></span>
             <span class="truncate" title={p.title}>{p.title}</span>
           </span>
           <span class="w-12 {st.cls}">{st.label}</span>
@@ -208,13 +209,13 @@
                 : 'text-qz-muted'}
         {@const label = s.status === 'running' ? '运行' : s.status === 'crashed' ? '崩溃' : s.status === 'disabled' ? '禁用' : '停止'}
         <div class="flex items-center gap-2 border-b border-qz-border/50 px-3 py-1.5 text-xs hover:bg-qz-elevated/50">
-          <span class="w-10 text-qz-muted">⚙</span>
+          <span class="grid w-10 place-items-center text-qz-muted"><Icon name="⚙" size={12} /></span>
           <span
             class="flex min-w-0 flex-1 items-center gap-1 truncate"
             title={s.after.length || s.requires.length ? `after:${s.after.join(',') || '-'} requires:${s.requires.join(',') || '-'}` : ''}
           >
             {s.name}
-            {#if s.restarts > 0}<span class="rounded bg-qz-surface px-1 text-[9px] text-amber-400">↻{s.restarts}</span>{/if}
+            {#if s.restarts > 0}<span class="flex items-center gap-0.5 rounded bg-qz-surface px-1 text-[10px] text-amber-400"><Icon name="↻" size={9} />{s.restarts}</span>{/if}
           </span>
           <span class="w-12 {color}">{label}</span>
           <span class="w-14 text-right tabular-nums text-qz-muted">{s.status === 'running' && s.startedAt ? fmtUptime(now - s.startedAt) : '—'}</span>

@@ -6,6 +6,7 @@
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
   import { sys } from '../system/sys';
+  import Icon from '../lib/Icon.svelte';
 
   let canvas = $state<HTMLCanvasElement>();
   let container = $state<HTMLElement>();
@@ -81,7 +82,7 @@
     } catch (e) {
       stopMouth();
       if (!(e instanceof Error && e.name === 'AbortError'))
-        reply = '⚠️ ' + (e instanceof Error ? e.message : String(e));
+        reply = e instanceof Error ? e.message : String(e);
     }
     busy = false;
   }
@@ -184,11 +185,11 @@
         class:text-qz-accent={chatting}
         class:text-qz-muted={!chatting}
         title="聊天"
-        onclick={() => (chatting = !chatting)}>💬</button>
+        onclick={() => (chatting = !chatting)}><Icon name="💬" size={10} /></button>
       <button
         class="grid h-4 w-4 place-items-center rounded text-[10px] text-qz-muted hover:bg-qz-elevated"
         title="隐藏桌宠"
-        onclick={() => (pet.enabled = false)}>✕</button>
+        onclick={() => (pet.enabled = false)}><Icon name="✕" size={10} /></button>
     </div>
 
     <div bind:this={container} class="relative h-[280px] w-[220px]">
@@ -196,7 +197,7 @@
       {#if status === 'loading'}
         <div class="pointer-events-none absolute inset-0 grid place-items-center text-xs text-qz-muted">召唤中…</div>
       {:else if status === 'error'}
-        <div class="absolute inset-0 grid place-items-center px-2 text-center text-[10px] text-red-400">⚠️ {errMsg}</div>
+        <div class="absolute inset-0 grid place-items-center px-2 text-center text-[10px] text-red-400"><span class="flex items-center gap-1"><Icon name="⚠️" size={11} />{errMsg}</span></div>
       {/if}
     </div>
   </div>

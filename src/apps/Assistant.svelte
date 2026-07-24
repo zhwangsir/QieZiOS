@@ -5,6 +5,7 @@
   import { renderMarkdown } from '../lib/markdown';
   import { imageFileToThumb } from '../lib/image';
   import { sys } from '../system/sys';
+  import Icon from '../lib/Icon.svelte';
 
   // data = 可选启动参数：{ ask: string } → 挂载后自动发这条（Spotlight「问 AI」用）
   let { data }: { data?: unknown } = $props();
@@ -111,7 +112,7 @@
         if (e.type === 'text') m.text += e.text;
         else if (e.type === 'reasoning') m.reasoning = (m.reasoning ?? '') + e.text;
         else if (e.type === 'tool') m.tools.push(e.name);
-        else if (e.type === 'error') m.text += (m.text ? '\n\n' : '') + '⚠️ ' + e.message;
+        else if (e.type === 'error') m.text += (m.text ? '\n\n' : '') + e.message;
       },
       ctrl.signal,
     );
@@ -122,7 +123,7 @@
 <div class="flex h-full flex-col text-qz-text">
   <!-- 顶栏：标题 + 清空 -->
   <div class="flex h-8 shrink-0 items-center justify-between border-b border-qz-border px-3">
-    <span class="text-xs text-qz-muted">🤖 助手</span>
+    <span class="flex items-center gap-1 text-xs text-qz-muted"><Icon name="🤖" size={12} />助手</span>
     {#if chat.msgs.length}
       <button
         class="rounded px-1.5 py-0.5 text-[11px] text-qz-muted hover:bg-qz-elevated disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
@@ -135,7 +136,7 @@
   {#if !aiReady}
     <button
       class="shrink-0 border-b border-qz-border bg-qz-accent/15 px-3 py-2 text-left text-xs hover:bg-qz-accent/25"
-      onclick={openSettings}>🔑 还没配置 AI——点这里去「设置 → AI」选模型 / 填 Key</button>
+      onclick={openSettings}><span class="flex items-center gap-1"><Icon name="🔑" size={12} />还没配置 AI——点这里去「设置 → AI」选模型 / 填 Key</span></button>
   {/if}
 
   <!-- 对话区 -->
@@ -143,9 +144,9 @@
     {#if chat.msgs.length === 0}
       <div class="grid h-full place-items-center px-6 text-center text-sm text-qz-muted">
         <div>
-          <div class="mb-2 text-4xl">🤖</div>
+          <div class="mb-2 flex justify-center text-qz-muted"><Icon name="🤖" size={36} strokeWidth={1.5} /></div>
           我是 QieZiOS 助手。试试「打开计算器」「新建一个叫 笔记 的文件夹」「把主题调成暗色、主色改成绿色」。
-          <div class="mt-2 text-xs opacity-70">📎 还能贴/传图片让我看图回答（需视觉模型，如本地 GLM-4.6V）。</div>
+          <div class="mt-2 flex items-center justify-center gap-1 text-xs opacity-70"><Icon name="📎" size={12} />还能贴/传图片让我看图回答（需视觉模型，如本地 GLM-4.6V）。</div>
         </div>
       </div>
     {/if}
@@ -162,7 +163,7 @@
           {#if m.tools.length}
             <div class="mb-1 flex flex-wrap gap-1">
               {#each m.tools as t, ti (ti)}
-                <span class="rounded bg-qz-surface/70 px-1.5 py-0.5 text-[10px] text-qz-muted">⚙ {t}</span>
+                <span class="flex items-center gap-0.5 rounded bg-qz-surface/70 px-1.5 py-0.5 text-[10px] text-qz-muted"><Icon name="⚙" size={10} />{t}</span>
               {/each}
             </div>
           {/if}
@@ -174,11 +175,11 @@
             </div>
           {:else if m.imageCount}
             <!-- 刷新后图片字节已不持久化，仅占位提示 -->
-            <div class="mb-1 text-[11px] text-qz-muted">🖼 {m.imageCount} 张附图（历史不保留原图）</div>
+            <div class="mb-1 flex items-center gap-1 text-[11px] text-qz-muted"><Icon name="🖼" size={11} />{m.imageCount} 张附图（历史不保留原图）</div>
           {/if}
           {#if m.role === 'assistant' && m.reasoning}
             <details class="mb-1 text-[11px] text-qz-muted">
-              <summary class="cursor-pointer select-none opacity-70 hover:opacity-100">💭 思考过程</summary>
+              <summary class="flex cursor-pointer select-none items-center gap-1 opacity-70 hover:opacity-100"><Icon name="💭" size={11} />思考过程</summary>
               <div class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap border-l-2 border-qz-border pl-2 opacity-80">{m.reasoning}</div>
             </details>
           {/if}
@@ -202,7 +203,7 @@
           <button
             class="absolute -right-1.5 -top-1.5 grid h-4 w-4 place-items-center rounded-full bg-qz-elevated text-[11px] leading-none ring-1 ring-qz-border hover:bg-qz-accent hover:text-qz-accent-contrast"
             title="移除"
-            onclick={() => pending.splice(pi, 1)}>×</button>
+            onclick={() => pending.splice(pi, 1)}><Icon name="✕" size={9} /></button>
         </div>
       {/each}
     </div>
@@ -215,7 +216,7 @@
       class="shrink-0 rounded-qz px-2 py-2 text-base ring-1 ring-qz-border hover:bg-qz-elevated disabled:opacity-40"
       title="附加图片（也可直接 Ctrl+V 粘贴）"
       disabled={busy}
-      onclick={() => fileInput.click()}>📎</button>
+      onclick={() => fileInput.click()}><Icon name="📎" size={16} /></button>
     <input
       class="min-w-0 flex-1 rounded-qz bg-qz-surface px-3 py-2 text-sm outline-none ring-1 ring-qz-border focus:ring-qz-accent"
       placeholder="让助手做点什么…（可贴图）"

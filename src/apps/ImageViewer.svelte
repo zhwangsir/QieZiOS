@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getNode, readBlob } from '../kernel/vfs.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   // data = 要看的图片文件 id（Files 双击图片时传入）
   let { data }: { data?: unknown } = $props();
@@ -126,14 +127,14 @@
   {#if status === 'ok'}
     <!-- 工具条：缩放 / 旋转 / 适应 -->
     <div class="flex shrink-0 items-center gap-1 border-b border-qz-border bg-qz-surface/60 px-2 py-1.5 text-xs">
-      <button class="rounded px-2 py-1 hover:bg-qz-elevated" title="缩小 (-)" onclick={() => zoom(1 / 1.2)}>➖</button>
+      <button class="grid place-items-center rounded px-2 py-1 hover:bg-qz-elevated" title="缩小 (-)" onclick={() => zoom(1 / 1.2)}><Icon name="➖" size={13} /></button>
       <button class="min-w-[3.5rem] rounded px-2 py-1 tabular-nums hover:bg-qz-elevated" title="适应窗口 (0)" onclick={reset}>{pct}%</button>
-      <button class="rounded px-2 py-1 hover:bg-qz-elevated" title="放大 (+)" onclick={() => zoom(1.2)}>➕</button>
+      <button class="grid place-items-center rounded px-2 py-1 hover:bg-qz-elevated" title="放大 (+)" onclick={() => zoom(1.2)}><Icon name="➕" size={13} /></button>
       <span class="mx-1 h-4 w-px bg-qz-border"></span>
-      <button class="rounded px-2 py-1 hover:bg-qz-elevated" title="逆时针旋转 (Shift+R)" onclick={() => rotate(-90)}>↺</button>
-      <button class="rounded px-2 py-1 hover:bg-qz-elevated" title="顺时针旋转 (R)" onclick={() => rotate(90)}>↻</button>
+      <button class="grid place-items-center rounded px-2 py-1 hover:bg-qz-elevated" title="逆时针旋转 (Shift+R)" onclick={() => rotate(-90)}><Icon name="↺" size={13} /></button>
+      <button class="grid place-items-center rounded px-2 py-1 hover:bg-qz-elevated" title="顺时针旋转 (R)" onclick={() => rotate(90)}><Icon name="↻" size={13} /></button>
       <span class="mx-1 h-4 w-px bg-qz-border"></span>
-      <button class="rounded px-2 py-1 hover:bg-qz-elevated" title="适应窗口 (0)" onclick={reset}>⤢ 适应</button>
+      <button class="flex items-center gap-1 rounded px-2 py-1 hover:bg-qz-elevated" title="适应窗口 (0)" onclick={reset}><Icon name="⤢" size={13} />适应</button>
       <span class="ml-auto truncate pl-2 text-qz-muted">{node?.name}</span>
     </div>
   {/if}

@@ -85,6 +85,11 @@ export function activeTokens(): Tokens {
     '--color-qz-accent-contrast': pickContrast(settings.accent),
     '--radius-qz': `${settings.radius}px`,
     '--qz-blur': `${settings.blur}px`,
+    // 玻璃背景链（U2）：开折射时前置 SVG 位移滤镜（App.svelte 内联 #qz-glass-refraction，
+    // backdrop-filter: url() 仅 Chromium 支持；其它浏览器整条无效 → 默认关，开关注明实验性）
+    '--qz-glass-backdrop': settings.glassRefraction
+      ? `url(#qz-glass-refraction) blur(${settings.blur}px) saturate(160%)`
+      : `blur(${settings.blur}px) saturate(160%)`,
     '--qz-surface-opacity': String(settings.surfaceOpacity),
     '--qz-font': fontStack(settings.fontFamily),
     '--qz-wallpaper': wallpaperCss(),
@@ -109,6 +114,14 @@ function wallpaperCss(): string {
 export function applyTokens(tokens: Tokens) {
   const root = document.documentElement;
   for (const key in tokens) root.style.setProperty(key, tokens[key]);
+}
+
+// M14.1 切换明暗主题——四处入口（Spotlight/TopBar/QuickSettings/registry App 菜单）共用。
+// 关键：用 resolvedMode() 判定当前实际态再翻 → auto/schedule 模式下也能正确切到反面
+// （若直接读 settings.mode，'auto' !== 'dark' 会落到 'dark'，用户在 auto+暗色下按了没反应）。
+// 落点在 theme 层（已有 resolvedMode），调用方零依赖判定。
+export function toggleTheme(): void {
+  settings.mode = resolvedMode() === 'dark' ? 'light' : 'dark';
 }
 
 // 按主色亮度自动选黑/白文字，保证主色按钮上的字始终清晰

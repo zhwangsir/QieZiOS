@@ -1,6 +1,7 @@
 <script lang="ts">
   import { webApps, addWebApp, removeWebApp, type WebApp } from './webApps.svelte';
   import { sys } from '../system/sys';
+  import Icon from '../lib/Icon.svelte';
 
   let name = $state('');
   let url = $state('');
@@ -23,7 +24,7 @@
 
 <div class="flex h-full flex-col text-qz-text">
   <div class="flex shrink-0 flex-col gap-2 border-b border-qz-border p-3">
-    <div class="text-xs text-qz-muted">🌐 网页 App —— 把任意网站固定成系统里的 App（iframe 嵌入）</div>
+    <div class="flex items-center gap-1 text-xs text-qz-muted"><Icon name="🌐" size={13} />网页 App —— 把任意网站固定成系统里的 App（iframe 嵌入）</div>
     <div class="flex gap-2">
       <input
         class="w-12 rounded-md bg-qz-surface px-2 py-1.5 text-center text-base outline-none ring-1 ring-qz-border focus:ring-qz-accent"
@@ -52,7 +53,7 @@
 
   {#if webApps.list.length === 0}
     <div class="grid flex-1 place-items-center px-6 text-center text-sm text-qz-muted">
-      <div><div class="mb-2 text-4xl">🌐</div>还没有网页 App。上面填个网址添加——它会像普通 App 一样开在窗口里。</div>
+      <div><div class="mb-2 flex justify-center"><Icon name="🌐" size={36} strokeWidth={1.5} /></div>还没有网页 App。上面填个网址添加——它会像普通 App 一样开在窗口里。</div>
     </div>
   {:else}
     <div
@@ -61,7 +62,7 @@
     >
       {#each webApps.list as a (a.id)}
         <div class="group/w flex flex-col items-center gap-1 rounded-xl p-3 hover:bg-qz-elevated">
-          <button class="grid h-14 w-14 place-items-center text-4xl" title={a.url} onclick={() => open(a)}>{a.icon}</button>
+          <button class="grid h-14 w-14 place-items-center text-qz-text" title={a.url} onclick={() => open(a)}><Icon name={a.icon} size={32} strokeWidth={1.5} /></button>
           <span class="line-clamp-1 w-full text-center text-xs" title={a.name}>{a.name}</span>
           <button
             class="rounded px-1.5 py-0.5 text-[10px] text-red-400 opacity-0 transition group-hover/w:opacity-100 hover:bg-qz-surface"

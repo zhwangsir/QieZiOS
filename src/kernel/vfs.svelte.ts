@@ -22,6 +22,7 @@ export interface VNode {
   prevParent?: string | null; // 进回收站前的父级（用于还原）
   mode?: number; // Unix 风格权限位（八进制，如 0o644）。缺省按类型取默认（见 DEFAULT_MODE）
   owner?: string; // 属主用户名。缺省视为 'qiezi'
+  linkTo?: string; // 软链接目标路径串（M53.7）。可相对（基于链接所在目录解析）、可悬空
   createdAt: number;
   updatedAt: number;
 }
@@ -113,6 +114,18 @@ export function createFile(parentId: string, name = '新建文本.txt', content 
   const finalName = uniqueName(parentId, name);
   vfs.nodes[id] = { id, name: finalName, type: 'file', parentId, content, mode: 0o644, owner: resolveOwner(), createdAt: t, updatedAt: t };
   emit('fs.create', { kind: '文件', name: finalName });
+  return id;
+}
+
+// 软链接节点（M53.7）：linkTo 存目标路径串。相对目标在 resolvePath 里基于链接所在目录解析；
+// 允许悬空（目标不存在也能建，跟真 Unix 一致）。权限按惯例 777（实际访问看目标节点权限）。
+// 注：VFS 树模型（单 parentId）表达不了硬链接共享，shell 的 ln 默认以同内容副本模拟。
+export function createSymlink(parentId: string, name: string, target: string): string {
+  const id = crypto.randomUUID();
+  const t = Date.now();
+  const finalName = uniqueName(parentId, name);
+  vfs.nodes[id] = { id, name: finalName, type: 'file', parentId, content: '', linkTo: target, mode: 0o777, owner: resolveOwner(), createdAt: t, updatedAt: t };
+  emit('fs.create', { kind: '链接', name: finalName });
   return id;
 }
 
@@ -347,7 +360,13 @@ export function pathSegments(id: string): VNode[] {
 
 // ── 路径字符串 ⇄ 节点 id（给 Shell / 终端 / 一切按路径操作的命令用）─────────
 // 把路径串解析成节点 id：支持 / 绝对、相对、`.`、`..`、root。找不到返回 undefined。
+// M53.7：途中遇到软链节点（linkTo）透明跟随，相对目标基于链接所在目录；
+// hop 上限 8 跳，链接环/悬空 → undefined（报错而非死循环）。
 export function resolvePath(cwd: string, path: string): string | undefined {
+  return resolvePathHops(cwd, path, 8);
+}
+
+function resolvePathHops(cwd: string, path: string, hops: number): string | undefined {
   const p = (path ?? '').trim();
   if (p === '' || p === '.') return cwd;
   if (p === '/' || p === '~') return 'root';
@@ -362,9 +381,43 @@ export function resolvePath(cwd: string, path: string): string | undefined {
     }
     const hit = children(curId).find((k) => k.name === part);
     if (!hit) return undefined;
-    curId = hit.id;
+    if (hit.linkTo !== undefined) {
+      if (hops <= 0) return undefined; // 链接环/嵌套过深
+      const base = hit.parentId && hit.parentId !== 'trash' ? hit.parentId : 'root';
+      const targetId = resolvePathHops(base, hit.linkTo, hops - 1);
+      if (!targetId) return undefined; // 悬空链接
+      curId = targetId;
+    } else {
+      curId = hit.id;
+    }
   }
   return curId;
+}
+
+// lstat 语义（M53.7）：与 resolvePath 相同，但最后一段是软链时不跟随（readlink / test -L 用）
+export function lresolvePath(cwd: string, path: string): string | undefined {
+  const p = (path ?? '').trim();
+  if (p === '' || p === '.') return cwd;
+  if (p === '/' || p === '~') return 'root';
+  const parts = p.split('/').filter((s) => s !== '' && s !== '.');
+  const last = parts.pop();
+  if (last === undefined) return p.startsWith('/') ? 'root' : cwd;
+  let curId = p.startsWith('/') ? 'root' : cwd;
+  for (const part of parts) {
+    if (part === '..') {
+      const n = vfs.nodes[curId];
+      curId = n?.parentId && n.parentId !== 'trash' ? n.parentId : 'root';
+      continue;
+    }
+    const nid = resolvePath(curId, part); // 中间段正常跟随软链
+    if (!nid) return undefined;
+    curId = nid;
+  }
+  if (last === '..') {
+    const n = vfs.nodes[curId];
+    return n?.parentId && n.parentId !== 'trash' ? n.parentId : 'root';
+  }
+  return children(curId).find((k) => k.name === last)?.id;
 }
 
 // 节点 → 绝对路径串（root = "/"）

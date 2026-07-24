@@ -26,7 +26,7 @@
       if (timerRunning && timerEnd - nowPerf <= 0) {
         timerRunning = false;
         timerRemain = 0;
-        sys.notify('⏲ 计时结束', { body: '倒计时到了', level: 'success' });
+        sys.notify('计时结束', { body: '倒计时到了', level: 'success', source: '时钟' });
         playSound('notify');
       }
     }, 50);

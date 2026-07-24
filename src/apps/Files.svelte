@@ -29,6 +29,9 @@
   import { aiConfig } from '../system/aiConfig.svelte';
   import { sys } from '../system/sys';
   import { pushNote } from '../system/notifications.svelte';
+  import Icon from '../lib/Icon.svelte';
+  import QuickLook from './QuickLook.svelte';
+  import { stepSelection } from '../lib/quicklook';
 
   // 删除后弹一条带「撤销」的 toast（撤销 = 从回收站还原）。trash 是软删除，6s 内可一键撤销。
   function trashWithUndo(ids: string[], label: string) {
@@ -38,6 +41,7 @@
       body: label,
       level: 'info',
       timeout: 6000,
+      source: '文件',
       action: { label: '撤销', run: () => undoIds.forEach((id) => restoreFromTrash(id)) },
     });
   }
@@ -57,6 +61,42 @@
   // 多选：选中的节点 id 列表 + 上次点击的锚点（给 Shift 范围选）
   let selected = $state<string[]>([]);
   let lastClicked = $state<string | null>(null);
+
+  // ── Quick Look（空格快速预览）────────────────────────────
+  // 面板开关态；预览对象 = 第一个选中项（多选时同 macOS 只看第一个）。
+  let quickLook = $state(false);
+  const qlNode = $derived(quickLook && selected.length ? getNode(selected[0]) : undefined);
+  // 选中被清空 / 选中项被删除（进回收站）时面板自动关（macOS 同款：没东西可看了就关）
+  $effect(() => {
+    if (quickLook && !qlNode) quickLook = false;
+  });
+  // 键盘：空格开关面板；开着时 Esc 关、←/→/↑/↓ 在可见 items 上步进选中（预览联动）。
+  // 仅拦「有选中 + 非输入态」的空格：焦点在输入框/按钮/媒体元素上时一律放行
+  // （重命名框本来 stopPropagation 不冒泡到这里；视频里的空格是播放控制）。
+  function onQuickLookKey(e: KeyboardEvent): void {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target as HTMLElement | null;
+    if (t?.closest('input, textarea, select, button, video, audio')) return;
+    if (e.key === ' ') {
+      if (!selected.length || renamingId) return;
+      e.preventDefault(); // 别让空格滚列表
+      if (!e.repeat) quickLook = !quickLook; // 按住不连闪
+      return;
+    }
+    if (!quickLook) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      quickLook = false;
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+      const next = stepSelection(items.map((i) => i.id), selected[0], delta);
+      if (next) {
+        selected = [next];
+        lastClicked = next;
+      }
+    }
+  }
 
   // 排序 + 视图（每窗口内存态）
   let sortBy = $state<'name' | 'type' | 'size' | 'mtime'>('name');
@@ -226,7 +266,7 @@ ${JSON.stringify(files)}`;
     }
     // 文件：受读权限约束（与终端 cat 一致）
     if (!permits(n, currentUser(), 4)) {
-      sys.notify('权限不够', { body: `${n.name}：当前用户无读权限`, level: 'warn' });
+      sys.notify('权限不够', { body: `${n.name}：当前用户无读权限`, level: 'warn', source: '文件' });
       return;
     }
     // 按类型分流：图片→图片查看器，音/视频→媒体查看器，其余→记事本
@@ -269,7 +309,7 @@ ${JSON.stringify(files)}`;
   }
   function commitRename() {
     if (renamingId && !rename(renamingId, renameText) && renameText.trim()) {
-      sys.notify('重命名失败', { body: '该目录下已有同名项', level: 'warn' });
+      sys.notify('重命名失败', { body: '该目录下已有同名项', level: 'warn', source: '文件' });
     }
     renamingId = null;
   }
@@ -401,6 +441,11 @@ ${JSON.stringify(files)}`;
     const suffix = tgts.length > 1 ? ` ${tgts.length} 项` : '';
     openMenu(e, [
       { label: '打开', icon: n.type === 'dir' ? '📂' : '↗', onClick: () => open(n) },
+      // 在终端打开：仅单选目录时出现（macOS Finder「New Terminal at Folder」同款），
+      // 经启动参数 data.cwd 把目录 id 传给 Terminal（icon 与注册表 terminal 一致）
+      ...(n.type === 'dir' && tgts.length === 1
+        ? [{ label: '在终端打开', icon: '🖥️', onClick: () => sys.openApp('terminal', { data: { cwd: n.id } }) }]
+        : []),
       {
         label: '重命名',
         icon: '✏️',
@@ -413,6 +458,8 @@ ${JSON.stringify(files)}`;
       { label: '剪切' + suffix, icon: '✂️', onClick: () => cutItem(n) },
       ...(clip && n.type === 'dir' ? [{ label: `粘贴到此（${clip.ids.length}）`, icon: '📥', onClick: () => paste(n.id) }] : []),
       { label: '复制名称', icon: '📋', onClick: () => sys.clipboard.copy(n.name) },
+      // 复制路径：所有类型可用；多选时逐行拼接（macOS 复制多个路径同款手感）
+      { label: '复制路径' + suffix, icon: '🔗', onClick: () => sys.clipboard.copy(tgts.map((id) => pathOf(id)).join('\n')) },
       {
         label: '显示简介',
         icon: 'ℹ️',
@@ -446,7 +493,7 @@ ${JSON.stringify(files)}`;
   }
 </script>
 
-<div class="flex h-full flex-col text-qz-text">
+<div class="relative flex h-full flex-col text-qz-text">
   <!-- 面包屑 + 工具栏 -->
   <div class="flex items-center gap-2 border-b border-qz-border px-3 py-2">
     <div class="flex flex-1 items-center gap-0.5 overflow-hidden text-xs text-qz-muted">
@@ -468,14 +515,16 @@ ${JSON.stringify(files)}`;
     <button
       class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110 disabled:opacity-50"
       disabled={uploading}
-      onclick={() => fileInput?.click()}>{uploading ? '上传中…' : '⬆上传'}</button>
+      onclick={() => fileInput?.click()}
+      >{#if uploading}上传中…{:else}<span class="flex items-center gap-1"><Icon name="⬆" size={12} />上传</span>{/if}</button>
     <input bind:this={fileInput} type="file" accept="image/*,audio/*,video/*" multiple class="hidden" onchange={onUpload} />
     {#if clip}
       <button
         class="rounded-md bg-qz-accent/80 px-2 py-1 text-xs text-qz-accent-contrast hover:brightness-110 disabled:opacity-50"
         title={`粘贴${clip.cut ? '（剪切）' : ''}到当前文件夹`}
         disabled={pasting}
-        onclick={() => paste()}>{pasting ? '粘贴中…' : clip.cut ? '📥 粘贴(剪)' : '📥 粘贴'}</button>
+        onclick={() => paste()}
+        >{#if pasting}粘贴中…{:else}<span class="flex items-center gap-1"><Icon name="📥" size={12} />{clip.cut ? '粘贴(剪)' : '粘贴'}</span>{/if}</button>
     {/if}
   </div>
 
@@ -495,11 +544,12 @@ ${JSON.stringify(files)}`;
         class="shrink-0 rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110 disabled:opacity-40"
         title="AI 语义搜索（按内容找）"
         disabled={aiBusy || !q.trim()}
-        onclick={aiSearch}>{aiBusy ? '搜索中…' : '🤖 AI 搜'}</button>
+        onclick={aiSearch}
+        >{#if aiBusy}搜索中…{:else}<span class="flex items-center gap-1"><Icon name="🤖" size={12} />AI 搜</span>{/if}</button>
     {/if}
     {#if q || aiHits}
       <button class="shrink-0 rounded-md px-2 py-1 text-xs text-qz-muted hover:bg-qz-elevated" onclick={clearSearch}
-        >✕</button>
+        ><Icon name="✕" size={11} /></button>
     {/if}
   </div>
 
@@ -518,32 +568,32 @@ ${JSON.stringify(files)}`;
     <button
       class="rounded px-1.5 py-0.5 text-qz-muted hover:bg-qz-elevated"
       title={sortDir === 'asc' ? '升序' : '降序'}
-      onclick={() => (sortDir = sortDir === 'asc' ? 'desc' : 'asc')}>{sortDir === 'asc' ? '↑' : '↓'}</button>
+      onclick={() => (sortDir = sortDir === 'asc' ? 'desc' : 'asc')}><Icon name={sortDir === 'asc' ? '↑' : '↓'} size={12} /></button>
     <div class="ml-auto flex gap-0.5">
       <button
         class="rounded px-1.5 py-0.5 hover:bg-qz-elevated"
         class:bg-qz-elevated={showInfo}
         title="详情面板"
-        onclick={() => (showInfo = !showInfo)}>ℹ</button>
+        onclick={() => (showInfo = !showInfo)}><Icon name="ℹ" size={12} /></button>
       <button
         class="rounded px-1.5 py-0.5 hover:bg-qz-elevated"
         class:bg-qz-elevated={view === 'grid'}
         title="网格视图"
-        onclick={() => (view = 'grid')}>▦</button>
+        onclick={() => (view = 'grid')}><Icon name="▦" size={12} /></button>
       <button
         class="rounded px-1.5 py-0.5 hover:bg-qz-elevated"
         class:bg-qz-elevated={view === 'list'}
         title="列表视图"
-        onclick={() => (view = 'list')}>☰</button>
+        onclick={() => (view = 'list')}><Icon name="☰" size={12} /></button>
     </div>
   </div>
 
   {#if aiHits}
     <div class="flex items-center gap-2 border-b border-qz-border bg-qz-accent/10 px-3 py-1 text-[11px] text-qz-muted">
-      🤖 AI 搜索结果 · {items.length} 个 · 点 ✕ 返回
+      <Icon name="🤖" size={12} /><span class="flex items-center gap-1">AI 搜索结果 · {items.length} 个 · 点 <Icon name="✕" size={11} /> 返回</span>
     </div>
   {:else if aiErr}
-    <div class="border-b border-qz-border px-3 py-1 text-[11px] text-red-400">⚠️ {aiErr}</div>
+    <div class="flex items-center gap-1 border-b border-qz-border px-3 py-1 text-[11px] text-red-400"><Icon name="⚠️" size={12} />{aiErr}</div>
   {/if}
 
   <!-- 多选操作条 -->
@@ -600,6 +650,8 @@ ${JSON.stringify(files)}`;
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected.length) {
         e.preventDefault();
         delTargets([...selected]);
+      } else {
+        onQuickLookKey(e); // Quick Look：空格/Esc/方向键
       }
     }}
   >
@@ -638,26 +690,26 @@ ${JSON.stringify(files)}`;
         }}
       >
         {#if view === 'grid'}
-          <div class="relative text-3xl">
-            {iconFor(n)}
-            {#if !readable}<span class="absolute bottom-0 right-0 text-[11px]" title="无读权限">🔒</span>{/if}
+          <div class="relative text-qz-text">
+            <Icon name={iconFor(n)} size={30} />
+            {#if !readable}<span class="absolute -bottom-1 -right-1 text-qz-muted" title="无读权限"><Icon name="🔒" size={11} /></span>{/if}
           </div>
           {#if renamingId === n.id}
             {@render renameBox('w-full text-center')}
           {:else}
             <span class="line-clamp-2 w-full text-center text-xs leading-tight">{n.name}</span>
-            <span class="w-full truncate text-center text-[9px] text-qz-muted">{n.owner ?? DEFAULT_OWNER} · {accessStr(n, currentUser())}</span>
+            <span class="w-full truncate text-center text-[10px] text-qz-muted">{n.owner ?? DEFAULT_OWNER} · {accessStr(n, currentUser())}</span>
           {/if}
           <!-- 悬停操作 -->
           <div class="absolute right-1 top-1 hidden gap-0.5 group-hover/item:flex">
-            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="重命名" onclick={(e) => startRename(n, e)}>✏️</button>
-            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="删除" onclick={(e) => del(n, e)}>🗑️</button>
+            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="重命名" onclick={(e) => startRename(n, e)}><Icon name="✏️" size={11} /></button>
+            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="删除" onclick={(e) => del(n, e)}><Icon name="🗑️" size={11} /></button>
           </div>
         {:else}
           <!-- 列表行：图标 + 名字 + 大小 + 修改时间 + 属主·权限 -->
-          <span class="relative shrink-0 text-xl">
-            {iconFor(n)}
-            {#if !readable}<span class="absolute -bottom-1 -right-1 text-[10px]" title="无读权限">🔒</span>{/if}
+          <span class="relative shrink-0 text-qz-text">
+            <Icon name={iconFor(n)} size={18} />
+            {#if !readable}<span class="absolute -bottom-1 -right-1 text-qz-muted" title="无读权限"><Icon name="🔒" size={10} /></span>{/if}
           </span>
           {#if renamingId === n.id}
             {@render renameBox('min-w-0 flex-1')}
@@ -669,8 +721,8 @@ ${JSON.stringify(files)}`;
           {/if}
           <!-- 悬停操作（行尾内联） -->
           <span class="hidden shrink-0 gap-0.5 group-hover/item:flex">
-            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="重命名" onclick={(e) => startRename(n, e)}>✏️</button>
-            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="删除" onclick={(e) => del(n, e)}>🗑️</button>
+            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="重命名" onclick={(e) => startRename(n, e)}><Icon name="✏️" size={11} /></button>
+            <button class="grid h-5 w-5 place-items-center rounded bg-qz-surface/90 text-[10px] hover:bg-qz-surface" title="删除" onclick={(e) => del(n, e)}><Icon name="🗑️" size={11} /></button>
           </span>
         {/if}
       </div>
@@ -678,12 +730,12 @@ ${JSON.stringify(files)}`;
 
     {#if items.length === 0}
       <div class="grid place-items-center gap-2 py-12 text-center {view === 'grid' ? 'col-span-full' : ''}">
-        <div class="text-4xl opacity-50">{aiHits || q.trim() ? '🔍' : '📂'}</div>
+        <div class="text-qz-muted opacity-50"><Icon name={aiHits || q.trim() ? '🔍' : '📂'} size={36} strokeWidth={1.5} /></div>
         <div class="text-sm text-qz-muted">{aiHits ? '没有命中' : q.trim() ? '没有匹配的文件' : '这个文件夹是空的'}</div>
         {#if !aiHits && !q.trim()}
           <div class="mt-1 flex gap-2">
             <button class="rounded-md bg-qz-accent/85 px-3 py-1 text-xs text-qz-accent-contrast transition hover:brightness-110" onclick={newFile}>＋ 新建文件</button>
-            <button class="rounded-md bg-qz-elevated px-3 py-1 text-xs transition hover:brightness-110 disabled:opacity-50" disabled={uploading} onclick={() => fileInput?.click()}>⬆ 上传</button>
+            <button class="rounded-md bg-qz-elevated px-3 py-1 text-xs transition hover:brightness-110 disabled:opacity-50" disabled={uploading} onclick={() => fileInput?.click()}><span class="flex items-center gap-1"><Icon name="⬆" size={12} />上传</span></button>
           </div>
         {/if}
       </div>
@@ -703,7 +755,7 @@ ${JSON.stringify(files)}`;
       <aside class="flex w-56 shrink-0 flex-col gap-3 overflow-auto border-l border-qz-border p-3 text-xs">
         <div class="flex items-center justify-between">
           <span class="font-medium text-qz-muted">详情</span>
-          <button class="rounded px-1 text-qz-muted hover:bg-qz-elevated" title="关闭" onclick={() => (showInfo = false)}>✕</button>
+          <button class="rounded px-1 text-qz-muted hover:bg-qz-elevated" title="关闭" onclick={() => (showInfo = false)}><Icon name="✕" size={11} /></button>
         </div>
         {#if infoNode}
           {@const n = infoNode}
@@ -712,7 +764,7 @@ ${JSON.stringify(files)}`;
             {#if thumbUrl}
               <img src={thumbUrl} alt={n.name} class="max-h-32 max-w-full rounded object-contain" />
             {:else}
-              <div class="text-5xl">{iconFor(n)}</div>
+              <div class="text-qz-text"><Icon name={iconFor(n)} size={44} strokeWidth={1.5} /></div>
             {/if}
           </div>
           <div class="break-words text-center text-sm font-medium text-qz-text">{n.name}</div>
@@ -732,4 +784,9 @@ ${JSON.stringify(files)}`;
       </aside>
     {/if}
   </div>
+
+  <!-- Quick Look 浮动预览：渲染在 Files 内部（absolute 相对本根），z-50 只压本窗内容 -->
+  {#if qlNode}
+    <QuickLook node={qlNode} onclose={() => (quickLook = false)} />
+  {/if}
 </div>

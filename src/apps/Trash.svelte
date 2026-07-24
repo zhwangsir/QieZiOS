@@ -8,6 +8,7 @@
     type VNode,
   } from '../kernel/vfs.svelte';
   import { onDestroy } from 'svelte';
+  import Icon from '../lib/Icon.svelte';
 
   const items = $derived(children(TRASH));
 
@@ -70,14 +71,14 @@
   <div class="flex-1 overflow-auto p-2">
     {#if items.length === 0}
       <div class="grid h-full place-items-center content-center gap-1 text-center text-qz-muted">
-        <div class="text-4xl opacity-50">🗑️</div>
+        <div class="flex justify-center opacity-50"><Icon name="🗑️" size={36} strokeWidth={1.5} /></div>
         <div class="text-sm">回收站是空的</div>
         <div class="text-xs">删除的文件会先到这里，可还原或彻底删除</div>
       </div>
     {:else}
       {#each items as n (n.id)}
         <div class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-qz-elevated">
-          <span class="text-xl">{iconFor(n)}</span>
+          <span class="text-qz-text"><Icon name={iconFor(n)} size={20} /></span>
           <span class="flex-1 truncate text-sm">{n.name}</span>
           <button
             class="rounded px-2 py-0.5 text-xs text-qz-accent hover:bg-qz-surface"

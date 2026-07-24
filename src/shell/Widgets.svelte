@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { widgets, removeWidget, cycleWidgetKind, type Widget } from './widgetState.svelte';
   import { sys } from '../system/sys';
+  import Icon from '../lib/Icon.svelte';
 
   // 单个每秒 tick 驱动时钟/日历；只在有小组件时跑，避免空转（读 list.length → 增删时自动重新武装）
   let now = $state(new Date());
@@ -89,8 +90,8 @@
         onpointermove={move}
         onpointerup={end}
       >
-        <button class="rounded px-1 text-[11px] text-qz-muted hover:bg-qz-elevated" title="切换类型" onclick={() => cycleWidgetKind(w.id)}>⟳</button>
-        <button class="rounded px-1 text-[11px] text-qz-muted hover:bg-qz-elevated" title="移除小组件" onclick={() => removeWidget(w.id)}>✕</button>
+        <button class="grid place-items-center rounded px-1 text-[11px] text-qz-muted hover:bg-qz-elevated" title="切换类型" onclick={() => cycleWidgetKind(w.id)}><Icon name="⟳" size={11} /></button>
+        <button class="grid place-items-center rounded px-1 text-[11px] text-qz-muted hover:bg-qz-elevated" title="移除小组件" onclick={() => removeWidget(w.id)}><Icon name="✕" size={11} /></button>
       </div>
       <div class="grid place-items-center p-3">
         {#if w.kind === 'clock'}

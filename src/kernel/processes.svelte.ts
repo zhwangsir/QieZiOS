@@ -39,6 +39,22 @@ for (const p of processes) {
 // 还原会话后，让 nextZ 从已有最大 z 之上接着发，新窗口才不会被压在底下。
 let nextZ = processes.reduce((m, p) => Math.max(m, p.z), 0) + 1;
 
+// z 值无上限递增会缓慢膨胀（focus/restore 每次都 ++）。超过阈值时按当前层级
+// 重新编号为 1..n —— 相对顺序不变，只是压缩数值，避免 z-index 无界增长。
+const Z_NORMALIZE_THRESHOLD = 500;
+function normalizeZ() {
+  if (nextZ < Z_NORMALIZE_THRESHOLD) return;
+  const sorted = [...processes].sort((a, b) => a.z - b.z);
+  sorted.forEach((p, i) => (p.z = i + 1));
+  nextZ = sorted.length;
+}
+
+// 分配新 z 值（聚焦/置顶前调用，自动触发规整化）
+function allocZ(): number {
+  normalizeZ();
+  return ++nextZ;
+}
+
 // 启动一个 App = 往进程表加一项（= 开一个窗口）
 export function launch(
   appId: string,
@@ -59,7 +75,7 @@ export function launch(
     y: 96 + offset,
     width: opts.width ?? 480,
     height: opts.height ?? 340,
-    z: ++nextZ,
+    z: allocZ(),
     minimized: false,
     maximized: false,
     startedAt: Date.now(),
@@ -79,7 +95,7 @@ export function close(id: string) {
 // 聚焦：提到最上层
 export function focus(id: string) {
   const p = byId(id);
-  if (p) p.z = ++nextZ;
+  if (p) p.z = allocZ();
 }
 
 export function minimize(id: string) {
@@ -96,7 +112,7 @@ export function restore(id: string) {
   if (p) {
     if (p.minimized) emit('proc.restore', { pid: p.pid, appId: p.appId });
     p.minimized = false;
-    p.z = ++nextZ;
+    p.z = allocZ();
   }
 }
 
@@ -106,7 +122,7 @@ export function toggleMaximize(id: string) {
   const p = byId(id);
   if (!p) return;
   p.maximized = !p.maximized;
-  p.z = ++nextZ;
+  p.z = allocZ();
 }
 
 // 设置窗口几何/最大化状态。窗口拖拽/缩放/吸附都走它 ——
@@ -140,7 +156,7 @@ export function cycleWindows() {
   const visible = processes.filter((p) => !p.minimized);
   if (visible.length < 2) return;
   const bottom = visible.reduce((b, p) => (p.z < b.z ? p : b));
-  bottom.z = ++nextZ;
+  bottom.z = allocZ();
 }
 
 // 关闭所有窗口
@@ -156,7 +172,7 @@ export function cascade() {
     p.maximized = false;
     p.x = 80 + i * 32;
     p.y = 60 + i * 32;
-    p.z = ++nextZ;
+    p.z = allocZ();
     i++;
   }
 }

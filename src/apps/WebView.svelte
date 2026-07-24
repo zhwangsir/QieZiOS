@@ -1,5 +1,6 @@
 <script lang="ts">
   // data = { url } —— 把外部网址嵌进 iframe 当窗口 App。
+  import Icon from '../lib/Icon.svelte';
   let { data }: { data?: unknown } = $props();
   const url = $derived(
     data && typeof data === 'object' && 'url' in data ? String((data as { url: unknown }).url) : '',
@@ -15,7 +16,7 @@
       <span class="min-w-0 flex-1 truncate text-[11px] text-qz-muted" title={url}>{url}</span>
       <button
         class="shrink-0 rounded-md bg-qz-elevated px-2 py-1 text-[11px] hover:brightness-110"
-        onclick={openTab}>↗ 新标签打开</button>
+        onclick={openTab}><span class="flex items-center gap-1"><Icon name="↗" size={11} />新标签打开</span></button>
     </div>
     <div class="relative min-h-0 flex-1">
       <iframe src={url} title="网页" class="absolute inset-0 h-full w-full border-0 bg-white"></iframe>

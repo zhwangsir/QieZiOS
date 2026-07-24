@@ -1,0 +1,1644 @@
+{
+  "project": "QieZiOS",
+  "updatedAt": "2026-07-24",
+  "currentMilestone": "M53",
+  "status": "done",
+  "milestones": [
+    {
+      "id": "M53",
+      "name": "文本处理 · 归档压缩 · 差异同步补全（grep -c/-E · sed · awk · join · tar · gzip/gunzip · ln/readlink · wget · strings · hexdump/od · diff · patch · sync）",
+      "status": "done",
+      "scope": "向真实 GNU 工具链补十三组命令：M53.1 grep 增强（-c 只输出匹配行数多文件逐行「文件:计数」无匹配输出 0 码 1、-E 扩展正则——JS 正则天然 ERE 仅兼容标志）；M53.2 sed 流编辑器（s/old/new/[g] 替换、d 删除、p 打印配 -n，地址 N 行号/$ 末行//re/ 正则/N,M 范围，GNU 语义：数字第二地址 ≤ 当前行为单行范围不进 inRange，d 立即进入下一周期）；M53.3 awk 极简模式扫描（-F 分隔符默认空白，BEGIN/END 块 + /re/ 与 NR==N 模式 + 仅 print 动作，$0 整行 $1..$N 字段 NR 行号 NF 字段数）；M53.4 join 关系连接（默认首字段空白分列空格输出，-t 分隔 -1/-2 字段 -a 1|2 附带未配对，右文件同键取首行简化不做多对多笛卡尔）；M53.5 tar USTAR 归档（c 创建目录递归条目名=所给路径、x 解压 -C 目标目录覆盖已存在按字节探测文本/二进制还原、t 列表，z gzip 过滤 t/x 按魔数自动识别，v 详细列表含权限串与大小，支持传统风格 tar cf，归档存二进制文件，含 ../绝对路径恶意条目跳过防 zip-slip）；M53.6 gzip/gunzip（RFC 1952 原生 CompressionStream，f→f.gz 删原文件 -k 保留，.gz 已存在不覆盖码 1，-d 解压 gunzip 等价复用，-l 列表压缩信息取尾部 ISIZE，gzipBytes 加 name 参数写 FNAME 头字段供 strings 找到内嵌原名）；M53.7 ln/readlink（-s 软链 linkTo 字段可悬空相对目标基于链接所在目录解析、cat/ls/test -e 透明跟随 test -L 识别链接本身，默认硬链 VFS 树模型模拟为同内容同权限副本，-f 强制覆盖，readlink 用 lresolvePath 最后一段不跟随）；M53.8 wget 下载（默认名=URL 末段重名自动 .1/.2，-O 指定输出覆盖，-c 断点续传发 Range 头拼接已有字节——关键修复：无 -O 时重名不再改 .1 而是基于已有文件续传，-q 静默，服务器错误码 1 不建文件）；M53.9 strings（0x20-0x7E 可打印串默认 ≥4 -n 调整）；M53.10 hexdump/od（hexdump 默认即 -C 规范格式地址+16字节hex+|ascii| 非打印显点，-A x|d|o|n 地址进制；od 默认 -A o -t x1 八进制地址+hex 字节，-t c 字符型 \\n\\t\\r\\0 转义其余 \\NNN 八进制——关键修复：补上缺失的 hex2/fmtAddr/dumpable 三辅助函数）；M53.11 diff（码 0 相同/1 不同/2 出错，默认 normal 格式 NcM/NaM/NdM，-u unified 格式 ---/+++ 头 + @@ hunk 上下文 3 行间隔>6 行分块——LCS 最小编辑块 diffBlocks + diffNormal + diffUnified，关键修复：pos=bl.aPos+bl.aCount 跳过已删行防上下文重复输出，-r 目录递归按相对路径对齐单侧独有报「仅在…中存在」，-q 只报不同，操作数 - 读 stdin，二进制只比较异同）；M53.12 patch（parsePatchText 解析 unified diff + applyPatchToLines 应用，-pN 剥路径前 N 段，--dry-run 只校验输出 checking file，--- /dev/null 新建文件 +++ /dev/null 删除文件移回收站，hunk 先按声明行号定位失配按 GNU 偏移扫描找唯一匹配，全部 hunk 命中才落盘原子失败报 Hunk FAILED 码 1 文件不变）；M53.13 sync（调 persist 层 flushPersisted() 把所有挂起的防抖写盘立即刷入 localStorage/IndexedDB，对标 sync(2) 码恒 0）。全程 TDD：109 例新测试先行，shell.test.ts 588→697 例 + 全量 1069→1178 例全绿。注：此 shell 的 > 重定向仅在退出码 0 时写入，diff 有差异码 1 → 补丁落盘测试用管道 diff -u a b | patch 与 tee 中转。",
+      "subtasks": [
+        { "id": "M53.1", "title": "grep 增强（-c 计数 / -E 扩展正则）+ TDD", "status": "done", "notes": "splitFlags 集加 c/E 标志（JS 正则天然 ERE，-E 仅兼容不报错）。-c 计数模式：单文件输出匹配行数，多文件逐行「文件:计数」，无匹配输出 0 且码 1；走 stdin 也支持。7 例测试：-c 基本/多文件/无匹配码 1/-ci 组合/-E 交替 a|b/-E 量词 + 与 -n 组合/stdin 管道。" },
+        { "id": "M53.2", "title": "sed 流编辑器 + TDD", "status": "done", "notes": "parseSedScript 解析脚本为命令列（地址 a1/a2 + op s/d/p）。逐行模式空间：地址命中判定 num/last（isLast）/re；范围 N,M 用 inRange 状态，GNU 语义——数字第二地址 ≤ 当前行视为单行范围不进 inRange；d 置 deleted 立即进入下一周期；p 输出模式空间；s 走 String.replace（g 标志全局）。-n 静默只在 p 命中时输出。12 例测试：s 首个/全局、stdin、Nd/N,Md/$d、-n Np/N,Mp//re/p、/re/d、地址+替换 2s/a/b/、无脚本码 2。" },
+        { "id": "M53.3", "title": "awk 极简模式扫描 + TDD", "status": "done", "notes": "parseAwkProgram 拆 BEGIN/END/规则三段。规则 = 可选模式（/re/ 或 NR==N）+ print 动作。awkPrintArgs 展开 $0/$1..$N/NR/NF 与字符串字面量拼接。-F/-Fxx 指定分隔符，默认 trim 后 \\s+ 分列。多文件顺序 feed 跨文件累计 NR；文件不存在已输出行保留码 1。11 例测试：print $1/-F/print $0/NR/NF/BEGIN/END（NR 总行数）//re/ 过滤/NR==N/stdin/无程序码 2。" },
+        { "id": "M53.4", "title": "join 关系连接 + TDD", "status": "done", "notes": "右文件按键建 Map 索引（同键取首行——简化，不做 GNU 多对多笛卡尔展开）。左文件逐行查键：命中输出 [键,...左余列,...右余列]，未命中且 -a 1 输出左行；-a 2 收尾输出右文件未配对行（matched2 集判定）。-t 指定分列与输出分隔符（默认空白分列空格输出）。7 例测试：默认首字段/-t 逗号/-1 -2 字段/-a 1/-a 2/键重复取首行/缺文件码 2。" },
+        { "id": "M53.5", "title": "tar USTAR 归档（+gzip 过滤）+ TDD", "status": "done", "notes": "ustarHeader/parseUstar 实现 USTAR 格式（512 头 + 数据 512 对齐 + 双零块结尾）。c：操作数去尾 / 与头 ./ 作条目名，目录递归 push 目录条目与子项；归档写二进制文件（覆盖语义旧档进回收站）。t：v 时「-rw-r--r-- size name」否则纯名（目录带 /）。x：-C 目标目录校验，ensureDir 建中间目录，已存在覆盖，isTextBytes 探测决定文本/二进制还原；含 ../绝对路径条目跳过防 zip-slip。z：创建走 gzipBytes，t/x 按 1f 8b 魔数自动识别无需 -z。传统风格首参数不带 - 自动补。13 例测试：cf+tf 往返、目录递归、子路径操作数、xf -C 还原、无 -C 覆盖、czf/tzf、xzf 自动识别、tv 权限串、cv 回显、t 缺档码 2、操作数不存在码 1、缺 -f/操作符码 2、zip-slip 跳过。" },
+        { "id": "M53.6", "title": "gzip/gunzip 压缩 + TDD", "status": "done", "notes": "gzipBytes/gunzipBytes 封装原生 CompressionStream（RFC 1952）。压缩 f→f.gz 删原文件（-k 保留），.gz 已存在码 1 不覆盖；-d 解压（gunzip 整条命令 = gzip(['-d',...args]) 复用）；-l 读尾部 ISIZE 算压缩率列表（原名去 .gz）；isTextBytes 探测还原文本/二进制。关键修复：gzipBytes 加 name 参数写 FNAME 头字段（CompressionStream 默认头不含 FNAME），strings 才能在 .gz 里找到内嵌原名。9 例测试：压缩原文件消失/-k 保留/gunzip round-trip 含中文/gzip -d 等价/-l 含原名/gunzip 非 .gz 码 1/缺文件码 1 缺操作数码 2/.gz 已存在码 1/二进制 .gz 进 tar 再解字节无损。" },
+        { "id": "M53.7", "title": "ln/readlink 链接 + TDD", "status": "done", "notes": "VFS 新增 linkTo 字段软链：createSymlink 建链，resolvePath 透明跟随（链接环检测报错不死循环），lresolvePath 最后一段不跟随（readlink/ls -l/test -L 用）。ln -s 可悬空、相对目标基于链接所在目录解析；默认硬链——树模型单 parentId 无法共享节点，模拟为同内容副本并 setMode 同步权限（目录/不存在目标码 1）。链接名缺省 basename(目标)，落点是目录放进其内；-f 先 trash 旧项。10 例测试：软链创建+readlink、cat 透读+test -L/-e 语义、ls -l 显示 lrwxrwxrwx 与 ->、相对目标解析、悬空链接（-e 假 -L 真 cat 报错 readlink 照输）、链接环报错、硬链副本、硬链目标不存在/目录码 1、链接名已存在码 1 + -f 覆盖、readlink 非链接码 1 缺参码 2。" },
+        { "id": "M53.8", "title": "wget 下载 + TDD", "status": "done", "notes": "fetch 下载 arrayBuffer，isTextBytes 探测存文本/二进制。默认名 = URL 末段（空则 index.html）；重名无 -O 无 -c 自动 .1/.2；-O 指定输出覆盖已存在（先 trash 再建）；-c 断点续传：已有字节数 >0 发 Range: bytes=N- 头，下载字节 concat 拼接整文件重写。关键修复：无 -O 时重名遇 -c 不再改 .1（否则永远找不到已存在文件续传）。非静默输出「'name' 已保存 [NB]」。服务器 !ok 码 1 不建文件；网络异常 catch 码 1；无效 URL 码 2。7 例测试：默认名可读/非静默+ -q/-O+重名 .1/404 码 1 不建文件+网络异常/-c Range 追加/二进制字节无损/缺 URL 码 2。测试用 vi.stubGlobal('fetch') mock。" },
+        { "id": "M53.9", "title": "strings 提取可打印串 + TDD", "status": "done", "notes": "扫字节：0x20-0x7E 累积入 cur，其余 flush（≥min 才输出 String.fromCharCode）。默认 min=4，-n/-nN 调整（下限 1）。4 例测试：默认 ≥4 短串滤掉/-n 调整/.gz 中找内嵌文件名（依赖 gzipBytes FNAME）/缺文件目录码 1 缺操作数码 2。" },
+        { "id": "M53.10", "title": "hexdump/od 字节转储 + TDD", "status": "done", "notes": "关键修复：补上此前缺失的 hex2/fmtAddr/dumpable 三辅助函数（命令抛异常）。dumpable 统一「解析路径 + 读字节」错误出口。hexdump：默认即 -C 规范格式「addr  hex×16  |ascii|」，短行 hex 截断 ascii 区点填充对齐，非打印显点；-A x/d/o/n 地址进制（n 不显示地址与结束行）。od：默认 -A o -t x1；-t c 字符型（\\0 \\n \\t \\r 转义、可打印原样、其余 \\NNN 八进制）；共用 fmtAddr 结束行。8 例测试：-C 整行精确/短行截断/非打印点/-A d 十进制/od 默认八进制地址+hex/-t c 转义/-A x/缺文件目录码 1 缺操作数与非法进制/类型码 2。" },
+        { "id": "M53.11", "title": "diff 文件比较（-u/-r/-q）+ TDD", "status": "done", "notes": "LCS 最小编辑块 diffBlocks（aPos/aCount/bPos/bCount 段）→ diffNormal（NcM 改/NaM 增/NdM 删 + 「<」「>」行）/diffUnified（---/+++ 头 + @@ -a,c +b,c @@ hunk，上下文 3 行，相邻 hunk 间隔 ≤6 行合并）。关键修复：每 hunk 处理后置 pos=bl.aPos+bl.aCount，否则已删行被重复当上下文输出。-r 目录递归：walk 两侧按相对路径对齐，差异文件逐个报，单侧独有报「仅在 … 中存在」；-r 配 -u 头部带全路径。-q 只报「文件 X 和 Y 不同」。操作数 - 读 stdin。二进制文件（isTextBytes 假）只比较异同报「二进制文件…不同」。目录不带 -r 码 2。10 例测试：相同码 0/2c2+1a2+2d1/多行块/-u 单 hunk 精确输出/-u 双 hunk 分块/-q+stdin/-r 差异+单侧存在/-r 全同码 0+-u 全路径/目录无 -r 等码 2/二进制异同。" },
+        { "id": "M53.12", "title": "patch 应用补丁（-pN/--dry-run）+ TDD", "status": "done", "notes": "补丁来源 stdin 或 -i 文件（皆空码 2）。parsePatchText 解析 ---/+++/@@ 头为文件补丁列（hunk = 声明起始行 + 上下文/删/增行序）。applyPatchToLines：每 hunk 先按声明行号（+累计偏移）定位，上下文与删除行失配时按 GNU 偏移扫描（-len..+len 找唯一匹配）；全部 hunk 命中才一次性落盘（原子），任一失败报 Hunk FAILED 码 1 且文件不变。-pN 剥掉补丁路径前 N 段（-p1 剥 a/ b/）；--dry-run 输出 checking file 不写盘码 0/1 同真实。--- /dev/null → 新建文件（父目录须存在）；+++ /dev/null → 删除文件（trash 回收站）。10 例测试：管道 diff -u a b | patch/-i 文件（tee 中转，因 > 重定向仅码 0 写入）/-p1 剪裁/--dry-run 不改内容/新建/删除/hunk 失配 FAILED 原子不变/行号偏移定位/多文件补丁一次应用/无输入+补丁不存在+非法选项码 2。" },
+        { "id": "M53.13", "title": "sync 同步刷盘 + TDD", "status": "done", "notes": "导入 kernel/persist 的 flushPersisted()（await tick 跑完挂起 effect 再刷所有 flusher——取消防抖计时器立即写 localStorage/IDB）。对标 sync(2)：无输出码恒 0。1 例测试：码 0 无输出且数据语义不受影响。" },
+        { "id": "M53.14", "title": "man 同步 + STATE/TEST_LOG 登记 + 全量回归", "status": "done", "notes": "man.ts：grep 条目补 -c/-E；新增「M53.1-10：文本处理与归档压缩」区块 12 条目（sed/awk/join/tar/gzip/gunzip/ln/readlink/wget/strings/hexdump/od）放在 M52 区块后；M53.11-13（diff/patch/sync）区块此前已随实现写入。全量回归 vitest 26 文件 1178 例全绿（shell.test.ts 697 例，M53 +109：grep 7 + sed 12 + awk 11 + join 7 + tar 13 + gzip 9 + ln/readlink 10 + wget 7 + strings 4 + hexdump/od 8 + diff 10 + patch 10 + sync 1）；build 成功（680ms，index 555.98kB gzip 187.62kB）。" }
+      ]
+    },
+    {
+      "id": "M49",
+      "name": "条件判断收尾 + 文本处理补全（expr · test/[[ ]] 增强 · tac · rev · nl · column）",
+      "status": "done",
+      "scope": "向真实 bash 条件判断与文本处理补六个未实现项：M49.1 expr（POSIX 风格表达式求值器，递归下降语法分析——parseOr/parseAnd/parseCmp/parseAdd/parseMul/parseMatch/parsePrimary 七层优先级，算术 + - * / % 整除取整、比较 < <= = == != >= > 返回 1/0、逻辑 | 短路或 & 短路与、括号分组、length/substr/index 字符串函数、: 正则匹配 anchored 无捕获组返回匹配长度有 \\( \\) 返回捕获内容；运算符裸现无左操作数报错码 2，结果空或 0 码 1 否则 0）；M49.2 test/[[ ]] 选项增强（-v 变量已设查 ctx.env、-s 文件非空查 content 长度、-nt/-ot 新旧按 VNode.updatedAt 比较、-L 符号链接当前 VFS 无软链恒假，COND_UNARY/COND_BINARY 集扩充 + condUnary/condBinary 增分支，condBinary 传 ctx 访问文件系统）；M49.3 tac（stdin 按行分割逆序输出）；M49.4 rev（每行字符按码点反转，中文按码点）；M49.5 nl（行号标注，空行不显号但占逻辑行号递增）；M49.6 column（-t 表格模式按分隔符切列列间两空格拼接，-s 指定分隔符，非 -t 原样输出）。全程 TDD：33 例新测试先行，shell.test.ts 467 例 + 全量 948 例全绿。",
+      "subtasks": [
+        {
+          "id": "M49.1",
+          "title": "expr 内建",
+          "status": "done",
+          "notes": "COMMANDS.expr：递归下降语法分析器，pos/peek/next 游标 + isInt 数字判定。七层优先级 parseOr(|)→parseAnd(&)→parseCmp(< <= = == != >= >)→parseAdd(+ -)→parseMul(* / %)→parseMatch(:)→parsePrimary(值/括号/length/substr/index/match)。parseCmp 两操作数皆整数走数值比较否则字符串字典序。parseMatch 把 bash \\( \\) 转成 JS ( )，构造 ^(re) 正则，无捕获组返回匹配长度、有捕获组返回捕获内容。parsePrimary 检测运算符裸现（+ - * / % | & < <= = == != >= > :）抛「语法错误」→ 退出码 2；undefined 抛「参数不足」。结果空串或 0 → 码 1，否则码 0。10 例测试覆盖：四则/优先级括号/逻辑短路/比较算符/字符串非空判断/length/substr/index/: 正则匹配有捕获/无匹配返回 0/参数不足报错码 2。"
+        },
+        {
+          "id": "M49.2",
+          "title": "test/[[ ]] 选项增强",
+          "status": "done",
+          "notes": "COND_UNARY 集加 -v/-s/-L，COND_BINARY 集加 -nt/-ot。condUnary 增分支：-v 查 ctx.env[name] !== undefined（注意 newCtx 自带 HOME/USER 等故 [ -v HOME ] 真）；-s 查文件节点 content.length > 0；-L 当前 VFS 无符号链接机制恒返回 false。condBinary 增分支：-nt/-ot 取两路径节点比 updatedAt 数值（新于 a.updatedAt > b.updatedAt）。关键修复：condBinary 原签名未带 ctx 无法访问文件系统，改为调用处传 ctx。10 例测试覆盖：-v 已设/未设/export 后真/unset 后假、-s 空文件假/非空真、-nt 新旧/反向 -ot、[[ ]] 也支持 -v/-s。"
+        },
+        {
+          "id": "M49.3",
+          "title": "tac 内建",
+          "status": "done",
+          "notes": "COMMANDS.tac：stdin split('\\n')，剥尾随空行（printf 不带 \\n 时 split 会产生末尾空串），reverse 后 join('\\n')。4 例测试覆盖：基本反向 a/b/c→c/b/a、seq 3 管道、单行原样、空输入空输出。"
+        },
+        {
+          "id": "M49.4",
+          "title": "rev 内建",
+          "status": "done",
+          "notes": "COMMANDS.rev：stdin split('\\n') 剥尾随空行，每行用 Array.from(l).reverse().join('')（按码点反转，中文「你好」→「好你」而非按 UTF-16 单元乱序）。4 例测试覆盖：单行反转 hello→olleh、多行逐行反转、中文按码点反转、空输入空输出。"
+        },
+        {
+          "id": "M49.5",
+          "title": "nl 内建",
+          "status": "done",
+          "notes": "COMMANDS.nl：行号从 1 起，每行格式 `  ${n}  ${line}`（前缀两空格 + 行号 + 两空格）。关键修复：空行不显示行号但占用逻辑行号——始终递增 n，空行时返回空串（不拼接行号前缀），后续非空行号继续递增。4 例测试覆盖：基本行号、seq 管道、空行占逻辑行号（printf a\\n\\nb → 1 a/空行/3 b）、空输入空输出。"
+        },
+        {
+          "id": "M49.6",
+          "title": "column 内建",
+          "status": "done",
+          "notes": "COMMANDS.column：参数解析 -t 表格模式标志、-s 分隔符（默认 \\s+）。非 -t 原样返回 stdin。表格模式：stdin split('\\n') 剥尾随空行，每行按 sep 切列（默认空白先 trim 再 split/\\s+/.filter(Boolean)，指定分隔符直接 split），列间以两空格 join 输出。4 例测试覆盖：-t 表格对齐 a b c/1 22 333、-t -s 指定逗号分隔、单行原样、空输入空输出。"
+        },
+        {
+          "id": "M49.7",
+          "title": "man 同步 + 全量回归",
+          "status": "done",
+          "notes": "man.ts 在 shift 之后新增 5 条目（expr/tac/rev/nl/column），全部放在文本处理区块末尾保持聚类；test 与 [[ ]] 两条目更新 desc 补 -v/-s/-L/-nt/-ot 新选项说明。全量回归：vitest 26 文件 948 例全绿（shell.test.ts 467 例，M49 +33：expr 10 + test 增强 10 + tac 4 + rev 4 + nl 4 + column 4 [部分测试一例多断言]）；build 成功（617ms，index 500.83kB gzip 167.54kB）。修复两处：expr 运算符裸现未报错码 2（parsePrimary 增运算符裸现检测抛语法错误）、column 末列 padEnd 产生尾随空格与测试期望不符（简化为列间两空格 join 无宽度填充，匹配测试套件定义的对齐语义）。"
+        }
+      ]
+    },
+    {
+      "id": "M50",
+      "name": "文本处理与系统工具补全（sleep · yes · shuf · paste · comm · expand/unexpand · base64 · type）",
+      "status": "done",
+      "scope": "M50.1 sleep（延时执行，秒/分/时后缀 s/m/h，0 立即返回，缺参数码 2、非数字码 1，先剥后缀再 Number 防 '0s' NaN）；M50.2 yes（重复输出，管道快照模型无 SIGPIPE → 内部封顶 1000 行）；M50.3 shuf（随机排列行，-n N 采样、-e 参数作行、-i M-N 区间）；M50.4 paste（按行合并多文件，-d 分隔符、-s 串行，`-` 从 stdin 读且多个 `-` 时按 round-robin 轮流分配 stdin 行，不等长补空串）；M50.5 comm（有序文件三列对比，支持合并标志 -12/-23/-123，隐藏列后对应 tab 消失：每列前导 tab 数 = 该列之前未隐藏列数）；M50.6 expand/unexpand（tab↔空格互换，按列位置动态追踪 tab 边界，unexpand 空格组每跨越一个 tab 边界转一个 tab）；M50.7 base64（编解码，-d 解码，btoa/atob + UTF-8 encodeURIComponent/decodeURIComponent，解码忽略换行）；M50.8 type（命令类型查询，-t 简洁模式，alias/builtin/keyword 三类，未找到码 1）。",
+      "subtasks": [
+        { "id": "M50.1", "title": "sleep 内建 + TDD", "status": "done", "notes": "async 命令，setTimeout 延时；修复后缀处理：先剥 s/m/h 再 Number，避免 Number('0s')=NaN 误报错。" },
+        { "id": "M50.2", "title": "yes 内建 + TDD", "status": "done", "notes": "封顶 1000 行防管道快照模型挂死；默认 'y'，参数拼成输出行。" },
+        { "id": "M50.3", "title": "shuf 内建 + TDD", "status": "done", "notes": "Fisher-Yates 打乱；-n N slice 截取；-e 参数作行；-i M-N 区间生成。" },
+        { "id": "M50.4", "title": "paste 内建 + TDD", "status": "done", "notes": "修复多 `-` round-robin：dashIndices 记录 `-` 位置，第 k 个 `-` 取 stdin 第 k, k+numDash, ... 行；并行合并按最大行数对齐。" },
+        { "id": "M50.5", "title": "comm 内建 + TDD", "status": "done", "notes": "修复合并标志解析（-12 等用 /^[0-9]+$/ 拆字符）；修复 tab 消除（tab2=hide1?0:1, tab3=(hide1?0:1)+(hide2?0:1)）；同步修正测试 1/3 期望匹配 GNU comm 标准。" },
+        { "id": "M50.6", "title": "expand/unexpand 内建 + TDD", "status": "done", "notes": "重写 unexpand：按列位置 col 动态追踪 tab 边界，空格组每跨越一个 tab 边界转一个 tab，剩余原样；修复旧实现按固定 tab 段切分导致 a 后 7 空格无法转换的问题。" },
+        { "id": "M50.7", "title": "base64 内建 + TDD", "status": "done", "notes": "btoa(unescape(encodeURIComponent(input))) 编码；atob + decodeURIComponent 解码；解码前 replace(/\\s+/g,'') 忽略换行。" },
+        { "id": "M50.8", "title": "type 内建 + TDD", "status": "done", "notes": "查询 aliases.map / COMMAND_NAMES / CTRL_KW 三类；-t 简洁输出类型名；全部找到码 0，任一未找到码 1。" },
+        { "id": "M50.9", "title": "man 同步 + 全量回归", "status": "done", "notes": "man.ts 在 column 之后新增 8 条手册（sleep/yes/shuf/paste/comm/expand/unexpand/base64/type）；全量回归 vitest 26 文件 988 例全绿（shell.test.ts 507 例，M50 +40：sleep 4 + yes 3 + shuf 4 + paste 5 + comm 5 + expand/unexpand 6 + base64 5 + type 4 + 其他边界）；build 成功（645ms，index 507.53kB gzip 169.99kB）。" }
+      ]
+    },
+    {
+      "id": "M52",
+      "name": "Shell 常用命令补全（exit · history · df · du · free · pushd/popd/dirs · pgrep/pkill · timeout · file · command/builtin）",
+      "status": "done",
+      "scope": "向真实 bash shell 补十组常用命令：M52.1 exit（退出 shell 会话，返回 exit:true 标志让 Terminal 调 sys.proc.close 关窗，退出码默认 0 非数字也默认 0；exit 标志三层传播 runPipeline→runLine→runLeaf→run 聚合层，execNodes 检测 exit 立即停后续语句）；M52.2 history（命令历史，-c 清空、-d N 删除 1-based 超范围码 1、带数字只显示最近 N 条；run() 内调 addHistory 保证脚本/测试入口也能记录历史，Terminal 调用前已 addHistory 靠 dedup 守卫防重复）；M52.3 df（虚拟磁盘 qzfs 报告，基于 VFS 节点统计容量/已用/可用/使用率）；M52.4 du（递归目录大小，文本按 content.length 二进制按 size，-s 仅总计）；M52.5 free（navigator.deviceMemory + performance.memory 估算 Mem，Swap 恒 0）；M52.6 pushd/popd/dirs（目录栈管理，pushd 无参交换栈顶两项 bash 语义、有参压栈切目录，popd 弹栈切回栈仅 1 项码 1，dirs 显示栈 -c 清空保留当前；dirStackLines 用 pathOf 渲染人类可读路径）；M52.7 pgrep/pkill（进程表查询/关闭，子串匹配大小写不敏感，pgrep 无模式码 2 无匹配码 1，pkill 返回被杀进程数）；M52.8 timeout（超时执行，setTimeout+Promise.race，超时置 ctx.intr.flag 协作式中断码 124，秒数 0 立即超时）；M52.9 file（文件类型检测，可打印字符占比 ≥80% 报 ASCII text 否则 data，目录报 directory）；M52.10 command/builtin（command 绕过别名/函数直接执行 -v 打印路径，builtin 强制内建绕过同名函数/别名）。全程 TDD：52 例新测试先行，shell.test.ts 588 例 + 全量 1069 例全绿。",
+      "subtasks": [
+        { "id": "M52.1", "title": "exit 内建 + exit 标志三层传播 + TDD", "status": "done", "notes": "exit 命令返回 {exit:true, code}。关键修复：exit 标志需穿透 runPipeline→runLine→runLeaf→run 四层聚合返回值。每层添加 let exit=false + if(res.exit) exit=true + 返回值含 exit 字段。execNodes 检查 exit 立即停后续语句。Terminal.svelte 检测 res.exit 调 sys.proc.close(ctx.pid) 关窗。Ctrl_KW 不含 exit 确保路由到命令实现。" },
+        { "id": "M52.2", "title": "history 内建 + run() 内 addHistory + TDD", "status": "done", "notes": "关键修复：shell.ts 导入 cmdHistory + addHistory（原仅导 aliases/setAlias/removeAlias）。run() 函数开头调 addHistory(t) 保证脚本/测试直接调 run 也能记录历史；Terminal 调用前已 addHistory 靠 dedup 守卫（list[list.length-1]===t 跳过）防重复。-c 清空 list=[]；-d N 删除 1-based 超范围码 1；带数字参数只显示最近 N 条（slice(start)）。行号右对齐 4 位 padStart(4)。" },
+        { "id": "M52.3", "title": "df 内建 + TDD", "status": "done", "notes": "遍历 VFS 根节点递归统计文件数与总大小（文本 content.length + 二进制 size）。sizeM=max(1, round(bytes/1M))，usedM=max(1, round(files/10))，availM=sizeM-usedM，pct=round(usedM/sizeM*100)。表头 Filesystem/1M-blocks/Used/Available/Use%/Mounted on + qzfs 数据行。" },
+        { "id": "M52.4", "title": "du 内建 + TDD", "status": "done", "notes": "递归 calc(nodeId, rel)：文件 push {path:rel, size:s}（文本 content.length 二进制 size）；目录 sum 子项再 push 自身。无路径默认当前目录。-s 仅返回总计。输出格式 padStart(4)+tab+路径。测试期望修正：QieZiOS echo 不附加尾换行（与 bash 差异），'hello' = 5 字节非 6。" },
+        { "id": "M52.5", "title": "free 内建 + TDD", "status": "done", "notes": "navigator.deviceMemory（兜底 8GB）→ totalM。performance.memory（Chromium 专有）→ usedM/limitM，否则 usedM=0。freeM=max(0,totalM-usedM)。Swap 恒 0（浏览器无交换）。格式对齐 bash free：表头 + Mem 行 + Swap 行，padStart(12) 列对齐。" },
+        { "id": "M52.6", "title": "pushd/popd/dirs 内建 + 目录栈 + TDD", "status": "done", "notes": "ctx.dirStack 存 node ID（与 cd 命令一致）。dirStackLines(stack) 用 pathOf(id) 渲染人类可读路径。pushd 无参交换栈顶两项（bash 语义），有参 resolvePath+getNode 校验目录后 stack.push。popd stack.pop 后 cd=新栈顶。dirs 显示栈 -c 清空保留当前。测试修正：cd 字段是 node ID，比较 pathOf(cd) 与 out 末尾路径而非直接比较 cd 与路径字符串。" },
+        { "id": "M52.7", "title": "pgrep/pkill 内建 + TDD", "status": "done", "notes": "processes.svelte 进程表查询。pgrep 无模式码 2；遍历 processes，p.name.includes(pattern)（大小写不敏感 toLowerCase）收集 pid；无匹配码 1。pkill 同理匹配后调 close(p.id) 关闭进程，返回被杀数；无模式码 2。" },
+        { "id": "M52.8", "title": "timeout 内建 + TDD", "status": "done", "notes": "async 命令。args[0]=秒数 Number 校验（NaN/负数码 2），args.slice(1).join(' ') 拼命令。setTimeout(ms) 触发时置 ctx.intr.flag=true 协作式中断 + 返回码 124。Promise.race([runP, timeoutP]) 竞速，finally clearTimeout。秒数 0 立即超时不执行。" },
+        { "id": "M52.9", "title": "file 内建 + TDD", "status": "done", "notes": "getNode 判断类型：dir → 'directory'；file 读 content，可打印字符（\\x20-\\x7e + \\t\\n\\r\\f）占比 ≥80% → 'ASCII text'，否则 'data'。多文件逐行输出「路径: 类型」。" },
+        { "id": "M52.10", "title": "command/builtin 内建 + TDD", "status": "done", "notes": "command：-v 打印命令名（内建直接输出、别名输出别名定义），不执行；无 -v 绕过别名/函数直接查 COMMAND_NAMES 执行，未找到码 127。builtin：强制内建执行，COMMAND_NAMES 不含报错码 1。" },
+        { "id": "M52.11", "title": "man 同步 + 全量回归", "status": "done", "notes": "man.ts 在 printenv 之后新增 14 条手册（exit/history/df/du/free/pushd/popd/dirs/pgrep/pkill/timeout/file/command/builtin）。全量回归 vitest 26 文件 1069 例全绿（shell.test.ts 588 例，M52 +52：exit 3 + history 5 + df 2 + du 3 + free 2 + pushd/popd/dirs 6 + pgrep/pkill 4 + timeout 4 + file 3 + command/builtin 6 + 其他边界）；build 成功（631ms，index 523.68kB gzip 175.96kB）。" }
+      ]
+    },
+    {
+      "id": "M51",
+      "name": "系统信息与时间工具补全（date · time · uname · uptime · cal · nproc · mktemp · realpath · printenv）",
+      "status": "done",
+      "scope": "向真实 bash 系统信息与时间工具补九个未实现项：M51.1 date 增强（无格式串输出本地时间字符串、+FORMAT 按 strftime 展开 %Y/%y/%m/%d/%H/%M/%S/%j/%s/%w/%A/%a/%B/%Z/%z/%%、-u 用 UTC、-d 解析时间串 YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS 纯日期当本地时间，字段一致性校验防 2023-02-29 误报有效）；M51.2 time（命令计时，args join 成命令字符串调 run 执行支持管道/重定向，real 用 performance.now、user/sys 无法区分均报 0 兼容 bash 格式，计时信息走 stderr 子命令 stdout/err 透传，退出码取子命令码）；M51.3 uname（-s 内核名 QieZiOS 默认、-n 节点名 qiezios、-r 版本 1.0.0、-m 机器 x86_64、-a 全部，合并标志拆字符）；M51.4 uptime（模拟：当前时间 + 系统已运行时长 + 1 user + load average 0.00）；M51.5 cal（日历，无参当月、单参数 >31 当年份显示全年 12 个月、≤31 当月份显示同年该月、双参 月 年，中文月名 N月、星期表头 日一二三四五六，非法月年报错码 1）；M51.6 nproc（取 navigator.hardwareConcurrency 兜底 8）；M51.7 mktemp（/tmp 下创建唯一命名临时文件默认或目录 -d，命名 .tmp_+随机串+时间戳防冲突，/tmp 不存在自动创建，返回绝对路径）；M51.8 realpath（消解 . 和 .. 根目录 .. 不上溢，相对路径基于 cwd）；M51.9 printenv（无参列全部 KEY=VALUE 逐行、带参逐行打印指定变量值任一未定义码 1）。全程 TDD：43 例新测试先行，shell.test.ts 550 例 + 全量 1031 例全绿。",
+      "subtasks": [
+        { "id": "M51.1", "title": "date 增强 + TDD", "status": "done", "notes": "parseDateStr 支持 YYYY-MM-DD 与 YYYY-MM-DD HH:MM:SS，纯日期当本地时间（new Date(Y, Mo-1, D)）。关键修复：JS Date 自动调整非法日期（2023-02-29 → 2023-03-01），加字段一致性校验 isNaN/getFullYear/getMonth/getDate 对比输入，不匹配返回 null → 退出码 1。fmtDate 实现 strftime：%Y 4位年、%y 2位年补零、%m/%d/%H/%M/%S 补零、%j 年中第几天补零至 3 位、%s Unix 时间戳、%w 数字星期 0-6、%A/%a 星期全名/缩写、%B 月名、%Z 时区名（Intl dateTimeFormat）、%z 时区偏移、%% 百分号。-u 用 UTC：把 UTC 字段塞进一个用本地时区表示相同时刻的 Date（shifted = new Date(ud.getTime() + ud.getTimezoneOffset()*60000)）后 fmtDate。" },
+        { "id": "M51.2", "title": "time 内建 + TDD", "status": "done", "notes": "async 命令，args join 成命令字符串调 run 执行（故支持管道/重定向）。performance.now 计时，real = (t1-t0)/1000 秒，mins=floor(dt/60)、secs=(dt-mins*60).toFixed(3)，格式 `real\\t${mins}m${secs}s\\nuser\\t0m0.000s\\nsys\\t0m0.000s`。计时信息走 stderr（res.err 非空则前置 timing 再拼原 err），退出码取子命令码。无参数码 2。" },
+        { "id": "M51.3", "title": "uname 内建 + TDD", "status": "done", "notes": "合并标志拆字符（-a → flags.add('a')）。常量 kernel='QieZiOS'/node='qiezios'/release='1.0.0'/machine='x86_64'。-a 全部输出 `${kernel} ${node} ${release} #1 SMP ${machine} GNU/Linux`。无标志默认 -s。按 s/n/r/m 顺序拼 parts.join(' ')。" },
+        { "id": "M51.4", "title": "uptime 内建 + TDD", "status": "done", "notes": "模拟：当前时间 HH:MM:SS + ' up ' + 运行时长 + ', 1 user, load average: 0.00, 0.00, 0.00'。" },
+        { "id": "M51.5", "title": "cal 内建 + TDD", "status": "done", "notes": "renderMonth(y, m)：月名「N月」居中、星期表头「日 一 二 三 四 五 六」、按当月 1 号 getDay() 定位起始列、逐日填格右对齐 2 位。renderYear(y)：3 列 × 4 行排 12 个月，月间空格分隔。单参数 >31 当年份（renderYear）、≤31 当月份（同年 renderMonth）；双参 月 年。非法月（非整数或 <1/>12）或年（非整数或 <1）报错码 1。" },
+        { "id": "M51.6", "title": "nproc 内建 + TDD", "status": "done", "notes": "取 navigator.hardwareConcurrency（兜底 8，防止 SSR/非浏览器环境 undefined）。" },
+        { "id": "M51.7", "title": "mktemp 内建 + TDD", "status": "done", "notes": "/tmp 不存在时 mkdir 自动创建。命名 `.tmp_${Math.random().toString(36).slice(2,10)}_${Date.now()}`。-d 创建目录（mkdir）否则 touch 创建文件，返回绝对路径 `/tmp/...`。" },
+        { "id": "M51.8", "title": "realpath 内建 + TDD", "status": "done", "notes": "toAbsPath(ctx, path)：相对路径基于 ctx.cwd 拼，绝对路径直接用。split('/').reduce 消解 . 和 ..（.. 弹栈，根目录 .. 不上溢即栈空时忽略）。关键修复：测试用唯一路径 /qz_m51_rp_test 避免 VFS 状态污染（原 /a 可能被其他测试修改）。" },
+        { "id": "M51.9", "title": "printenv 内建 + TDD", "status": "done", "notes": "无参 Object.entries(ctx.env).map([k,v]=>`${k}=${v}`).join('\\n')。带参遍历，ctx.env[k] !== undefined 收集值，任一未定义 allFound=false → 退出码 1，outs.join('\\n')。" },
+        { "id": "M51.10", "title": "man 同步 + 全量回归", "status": "done", "notes": "man.ts 在 type 之后新增 9 条手册（date/time/uname/uptime/cal/nproc/mktemp/realpath/printenv），全部放在文本处理区块末尾保持聚类。全量回归 vitest 26 文件 1031 例全绿（shell.test.ts 550 例，M51 +43：date 8 + time 5 + uname 4 + uptime 3 + cal 5 + nproc 2 + mktemp 4 + realpath 4 + printenv 4 + 其他边界）；build 成功（611ms，index 515.06kB gzip 173.04kB）。" }
+      ]
+    },
+    {
+      "id": "M48",
+      "name": "管道终端命令六件套（xargs · tee · tr · seq · basename/dirname · shift）",
+      "status": "done",
+      "scope": "向真实 bash 管道终端常用命令补六个未实现项：M48.1 xargs（从 stdin 按空白分词拼到命令后执行，-n N 分批、-I STR 占位符、默认 echo、仅内建命令外部 → 127、空输入不调用码 0、退出码取最后一次）；M48.2 tee（stdin 同时写 stdout 与多文件，-a 追加，写文件补尾随换行匹配 bash 命令输出天然带 \\n 手感）；M48.3 tr（字符映射/删除/压缩/补集，区间 a-z、字符类 [:upper:]/[:lower:]/[:digit:]/[:alpha:]/[:alnum:]/[:space:]、-d/-s/-c、\\n \\t \\\\ 转义）；M48.4 seq（数字序列 1-3 参形态、-w 等宽补零、浮点步长、负数识别修复）；M48.5 basename/dirname（路径拆分，basename 支持去后缀，dirname 根路径返回 /、无目录返回 .）；M48.6 shift（参数移位，funcDepth/sourceDepth 检查与 return 一致、N 移位、超参码 1、shift 0 码 0、直接改 ctx.positional）。全程 TDD：49 例新测试先行（含 1 例 seq|tr 管道验证，命令替换无 word splitting 是已知限制记录在案），shell.test.ts 431 例 + 全量 912 例全绿。",
+      "subtasks": [
+        {
+          "id": "M48.1",
+          "title": "xargs 内建",
+          "status": "done",
+          "notes": "COMMANDS.xargs：async，从 stdin 按空白分词得 words。参数解析：-n N（每批 N 个词）、-I STR（占位符，每词一次调用，命令中 STR 处替换为该词）。命令名取 -n/-I 之后的第一个参数，余下为固定参数。默认命令 echo。仅支持内建命令（COMMANDS 表命中），外部命令退出码 127。空输入不调用命令直接码 0。无 -n/-I 时一次传入全部词；有 -n 时按 N 分批；有 -I 时每词一次。退出码取最后一次调用的结果。10 例测试覆盖：基本/默认 echo/-n 1/-n 2/-I {}/多行分词/find|xargs/空输入/退出码。"
+        },
+        {
+          "id": "M48.2",
+          "title": "tee 内建",
+          "status": "done",
+          "notes": "COMMANDS.tee：-a 追加标志，余下参数为文件列表。把 stdin 原样写到 stdout（返回 out=stdin）+ 同时写到所有文件。关键修复：写文件时补尾随换行 fileContent = text && !text.endsWith('\\n') ? text + '\\n' : text——bash 命令输出天然带 \\n，echo hi | tee f 后 cat f 应见 hi+换行；不补则 echo 无尾随换行时文件内容缺换行。5 例测试覆盖：基本/-a 追加/多文件/管道中间/多行。"
+        },
+        {
+          "id": "M48.3",
+          "title": "tr 内建",
+          "status": "done",
+          "notes": "COMMANDS.tr：参数解析 -d/-s/-c 标志（可组合如 -dc），余下为 SET1/SET2。unescape 先处理 \\n \\t \\\\；expand 展开区间 a-z 与字符类 [:upper:]/[:lower:]/[:digit:]/[:alpha:]/[:alnum:]/[:space:] 为码点数组。complement 时 SET1 取补集（0-127 内非 SET1 字符）。映射：SET1[i] → SET2[min(i, SET2.length-1)]（SET2 不足取末字符，bash 同款）。-d 删除 SET1 字符；-s 压缩连续重复（映射后或删除后判定 lastPushed）。8 例测试覆盖：映射/单字符/-d/-s/删换行/字符类/旋转/-dc 补集。"
+        },
+        {
+          "id": "M48.4",
+          "title": "seq 内建",
+          "status": "done",
+          "notes": "COMMANDS.seq：-w 等宽标志，余下为数字参数。参数解析关键：识别负数 !a.startsWith('-') || /^-??\\d+(\\.\\d+)?$/.test(a)——否则 -1 被当 flag 跳过导致 seq 5 -1 1 解析失败。1 参 END（START=1 STEP=1）、2 参 START END（STEP=1）、3 参 START STEP END。浮点步长支持，decimals 取三参小数位最大值，fmt 按精度格式化后剥尾随 0。step>0 递增、step<0 递减，1e-9 容差防浮点累积。nums 为空（如 seq 5 1）返回空串。-w 按最大位数 padStart 补零。10 例测试覆盖：单参/两参/三参/负步长/浮点/-w/for 循环（改 seq|tr 管道验证，命令替换无 word splitting 已知限制）/空范围/单值。"
+        },
+        {
+          "id": "M48.5",
+          "title": "basename/dirname 内建",
+          "status": "done",
+          "notes": "COMMANDS.basename：剥尾随斜杠后取末段；有第二参数且末段以该后缀结尾则剥后缀。COMMANDS.dirname：剥尾随斜杠后取最后斜杠前部分；无斜杠返回 .，根路径 / 返回 /。9 例测试覆盖：basename 取末段/去后缀/末段无斜杠/尾随斜杠、dirname 取目录/相对/无目录/根、管道组合 echo /a/b/c.txt | xargs dirname。"
+        },
+        {
+          "id": "M48.6",
+          "title": "shift 内建",
+          "status": "done",
+          "notes": "COMMANDS.shift：funcDepth/sourceDepth 检查（与 return 一致——函数外且非 source 报错码 1）。N 参数解析（默认 1），非数字码 1。N 超过当前 positional 长度码 1 不移位；N===0 码 0 不移位；否则 ctx.positional = pos.slice(N) 直接改共享引用让 $@/$1 立即反映。7 例测试覆盖：默认移 1/N 移多位/超参码 1/函数外报错/$@ 反映/shift 0 码 0/脚本内 shift。"
+        },
+        {
+          "id": "M48.7",
+          "title": "man 同步 + 全量回归",
+          "status": "done",
+          "notes": "man.ts 在 cut 之后新增 7 条目（tr/seq/basename/dirname/xargs/tee/shift），全部放在文本处理区块末尾保持聚类。全量回归：vitest 26 文件 912 例全绿（shell.test.ts 431 例，M48 +49：xargs 10 + tee 5 + tr 8 + seq 10 + basename/dirname 9 + shift 7）；svelte-check 0 错（5 条存量 tsconfig 警告）；build 成功（585ms，index 495.27kB gzip 165.66kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M47",
+      "name": "命令分组三件套（((expr)) · { } · ( )）",
+      "status": "done",
+      "scope": "向真实 bash 命令分组语义补三个未实现项：M47.1 ((expr)) 算术命令（独立形态，与 $((expr)) 展开对照——是命令非展开，退出码 expr≠0?0:1，无 stdout，复用 arith.ts 含赋值/自增副作用，常作 if/while 条件或 && || 串联；runPipeline 层加通道，for ((init;cond;step)) 不走此通道由 parseFor 拦截）；M47.2 { } 命令分组（当前 shell 执行，cd/export/赋值影响当前环境，区别于 ( ) 子 shell；SNode group 变体 + parseGroup 用 reinject 策略让首条 stmt 的 xxx 回流 parseSeq 自然解析含控制结构头 + parseSeq(new Set(['}'])) 收集体到 } 闭合）；M47.3 ( ) 子 shell（fork ctx 执行，cd/export/赋值不回流父 shell，stdout/stderr 流回父、退出码回流父；splitStatements 单括号跨度跳过 matchParen 配对 + SNode subshell 变体 body 存文本 + parseSubshell + executor fork subCtx 复用 $(…) 的 fork ctx 模式调 run() 重新解析执行 + intr 130 抛 ShellInterrupt）。全程 TDD：39 例新测试先行，shell.test.ts 382 例 + 全量 863 例全绿。",
+      "subtasks": [
+        {
+          "id": "M47.1",
+          "title": "((expr)) 算术命令",
+          "status": "done",
+          "notes": "runPipeline 内 [[ ]] 通道之后新增 ((expr)) 通道：正则 /^\\(\\(([\\s\\S]*)\\)\\)\\s*$/ 命中 → 调 evalArith 求值 → 退出码 v!==0?0:1、无 stdout（stdin/pipedOut 置空串让管道下游收空输入 ((5)) | cat → 空）。与 $((expr)) 展开区别：((expr)) 是命令（退出码回流、无输出），$((expr)) 是展开（值替换进命令）。复用 arith.ts（含 M46.3 赋值/自增副作用，副作用写当前 ctx.env）。for ((init;cond;step)) 不会走到这里——parseFor 在 parseStatements 层已拦截。12 例测试覆盖：非零→码0/零→码1/副作用 ((i++))/比较真假/if 条件/&& || 串联/除零报错/语法错误报错/while 条件驱动计数/((5))|cat 无输出。"
+        },
+        {
+          "id": "M47.2",
+          "title": "{ } 命令分组",
+          "status": "done",
+          "notes": "SNode 新增 group 变体 { t:'group'; body:SNode[] }。parseSeq 检测首词 '{' 调 parseGroup。parseGroup 用 reinject 策略：剥首 { 后剩余 after（{ echo a → echo a；{ 单独 → ''），after 非空则 splice 回 stmts 让 parseSeq 自然解析（含控制结构头 { if true），体用 parseSeq(new Set(['}'])) 收集到 } 闭合（嵌套 { } 递归自然生效）。} 后有内容（} > f / } && cmd）报错——已知限制：未做 splitStatements 跨度改造。executor group 分支：当前 shell 执行分组体（execNodes），赋值/cd 生效，退出码 = 最后一条命令的码。12 例测试覆盖：基本分组/单条/赋值回流/cd 回流/退出码最后一条/嵌套/内含控制结构/内含 for/变量后续可用/多行/分组后继续执行。"
+        },
+        {
+          "id": "M47.3",
+          "title": "( ) 子 shell",
+          "status": "done",
+          "notes": "splitStatements 新增单括号跨度跳过：c==='(' 且 text[i+1]!=='('（区别 (( 算术）且前字符是命令起始边界（行首/空白/;/&/|）→ matchParen 配对跳到 )，内部 ; 换行不切断。SNode 新增 subshell 变体 { t:'subshell'; body:string }。parseSeq 检测首词 '(' 调 parseSubshell：用 matchParen 提取括号内文本作 body（存文本，executor fork 后调 run() 重新解析执行，复用 $(…) 的 fork ctx 模式），) 后剩余报错。executor subshell 分支：fork subCtx（复用 execCmdSubst 模式——env/funcs/positional 副本、intr 共享引用 Ctrl+C 能断子 shell 内循环、loopDepth=0、traps 不带 bash 子 shell 重置陷阱）→ run(body, subCtx) → res.code===130 && intr.flag 抛 ShellInterrupt 向上 unwind → 剥尾随换行 collect(outs)/collect(errs) 让子 shell stdout/stderr 流回父 → 更新 lastCode/ctx.code 退出码回流。15 例测试覆盖：基本子 shell/赋值不回流/父变量可见/修改不回流/cd 不回流/export 继承/退出码回流/嵌套/内含控制结构/内含 for/Ctrl+C 断失控循环。"
+        },
+        {
+          "id": "M47.4",
+          "title": "man 同步 + 全量回归",
+          "status": "done",
+          "notes": "man.ts 新增三条目（放在 return 之后 theme 之前）：(( 算术命令（强调是命令非展开、退出码语义、赋值副作用、for 不走此通道）、{ 命令分组（强调当前 shell 执行影响环境、与 ( ) 对照、} 后重定向/连接符限制暂不支持）、( 子 shell（fork 语义 cd/export 不回流、stdout/stderr/退出码回流、Ctrl+C 可中断、与 { } 对照、) 后限制）。全量回归：vitest 26 文件 863 例全绿（shell.test.ts 382 例，M47 +39：12+12+15）；svelte-check 0 错（5 条存量 tsconfig 警告）；build 成功（576ms，index 488.31kB gzip 163.21kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M46",
+      "name": "POSIX 文本处理三件套（read · printf · 算术 for）",
+      "status": "done",
+      "scope": "向真实 bash 文本处理能力补三个常用未实现项：M46.1 read 内建（从 stdin 读一行切分赋变量，-r/-p 选项，IFS 切分，剩余字段并入末变量，无输入码非 0）；M46.2 printf 内建（C 风格格式化输出 %s %d %f %x %o %c %% 与 \\n \\t \\\\ \\r 转义，格式串循环消费参数）；M46.3 算术 for ((init; cond; step))（C 风格 for 循环，arith.ts 扩展赋值类副作用 = += -= ... 与前置/后置 ++ --，shell.ts 新增 SNode forArith + parseFor 分支 + executor 分支 + splitStatements 跨度跳过 + splitArithFor 工具）。全程 TDD：39 例新测试先行，shell.test.ts 824 例全绿。",
+      "subtasks": [
+        {
+          "id": "M46.1",
+          "title": "read 内建",
+          "status": "done",
+          "notes": "COMMANDS.read：从 stdin 读一行（按 \\n 切，剥尾随 \\r），按 IFS（默认空白）切分依次赋给变量；变量数少于字段时剩余字段并入末变量；多于字段时多余变量置空串。-r 不处理反斜杠转义（默认反斜杠是行延续，\\<换行> 拼接下一行）；-p 提示串先写 stderr 再读；无变量参数时整行丢入 REPLY；无输入（空 stdin）退出码 1，有输入码 0。9 例测试覆盖：基本切分/剩余并入末变量/-r 反斜杠字面/-p 提示/无输入码 1/单变量整行/REPLY 兜底/多字段变量不足/管道喂入。已知限制：cmd 收到的 stdin 是整段字符串快照非流式，while read line; do …; done < file 无法逐行消费（记录在案）。"
+        },
+        {
+          "id": "M46.2",
+          "title": "printf 内建",
+          "status": "done",
+          "notes": "COMMANDS.printf：第一参数为格式串，余下为参数。格式符：%s 字符串、%d/%i 整数、%f 浮点（默认 6 位小数）、%x/%X 十六进制、%o 八进制、%c 单字符（取参数首字符）、%% 百分号字面。转义：\\n \\t \\\\ \\r \\0（空字符）。格式串会循环消费参数直到用尽（多参数重复打印整段格式，bash 同款）；无参数时格式串只打印一次。整数/浮点参数非法时按 0。13 例测试覆盖：%s/%d/%f/%x/%o/%c/%% 全格式符、\\n \\t 转义、格式串循环消费、无参数单次、重定向到文件保尾随换行（与 echo 同款 runLeaf 剥尾随换行，重定向用 CmdResult.out 原始值不剥）。"
+        },
+        {
+          "id": "M46.3",
+          "title": "算术 for ((init; cond; step)) + arith.ts 赋值/自增副作用扩展",
+          "status": "done",
+          "notes": "arith.ts 扩展：①新增 numVal(name) 辅助（统一变量取整，未定义/非数值按 0）；②ident() 后置 ++/--（返回旧值，变量自增/自减写入 env）；③unary() 前置 ++/--（仅当后跟变量时是自增自减，否则回退当两个一元 +/-——bash：--5 当两个一元负号结果 5、--x 当前置自减，常量/括号不算自减操作数）；④新增 assign() 函数（最低优先级，右结合）：支持 = += -= *= /= %= <<= >>= &= |= ^=，rhs 递归 assign 实现 a=b=7；= 排除 ==（相等比较由 eq 层处理）；短路 dead 分支内不执行副作用（语法仍解析）。入口从 ternary() 改为 assign()。shell.ts：①SNode 新增 forArith 变体 {init, cond, step, body}；②splitStatements 新增 (( … )) 跨度跳过（紧邻双左括号且前字符是命令起始边界——区别于 ( (cmd) ) 子 shell 嵌套）；③新增 splitArithFor(s) 工具：按顶层 ; 切三段（尊重括号嵌套与引号），缺项补空串；④parseFor 改造：正则 /^for\\s*\\(\\(([\\s\\S]*)\\)\\)\\s*$/ 检测算术 for 命中走 forArith 分支，否则走经典 for-in；⑤executor 新增 forArith 分支：arithFailed 标志 + evalNoErr/evalCond 闭包，init → 循环(cond → body → step)，break/continue 同 for-in，算术错误（除零/语法错）推 errs + lastCode=1 终止循环。17 例测试覆盖：基本递增/条件初始为假/累加求和/递减 step/break/continue/嵌套/复合赋值 i+=2/init 为空/step 为空/Ctrl+C 中断 + 算术展开内赋值副作用 6 例（$((x=5))/$((x+=3))/后置 x++/前置 ++x/右结合 a=b=7/赋值 rhs 含三元）。回归修复 arith.test.ts「--5 → 5」前置 -- 边界。"
+        },
+        {
+          "id": "M46.4",
+          "title": "man 同步 + 全量回归",
+          "status": "done",
+          "notes": "man.ts：新增 read（放在 sh 之后，与脚本/输入语义同区块）、printf（放在 echo 之后，与输出语义同区块）；for 条目改写为双形式「for 变量 in 词… | for ((init; cond; step))」描述两种形态。全量回归：vitest 26 文件 824 例全绿（shell.test.ts M46 +39：read 9 + printf 13 + 算术 for 17）；svelte-check 0 错（5 条存量 tsconfig 警告）；build 成功（595ms，index 484.58kB gzip 161.84kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M45",
+      "name": "readline 补全与进程替换（emacs 键位 · <(cmd)）",
+      "status": "done",
+      "scope": "向真实 bash 终端体验再进两层：M45.1 readline emacs 键位补全（Ctrl+B/F 字符移动 + Ctrl+D delete-char + Ctrl+T transpose-chars + Alt+D kill-word，lineedit 纯函数 + Terminal 接线，18 例测试）；M45.2 进程替换 <(cmd)（内部命令 stdout 落 /tmp 临时文件、路径作参数传外层命令，9 例测试）。全程 TDD：27 例新测试先行，lineedit 55 例 + shell 304 例全绿。",
+      "subtasks": [
+        {
+          "id": "M45.1",
+          "title": "readline emacs 键位补全",
+          "status": "done",
+          "notes": "lineedit.ts 新增三个纯函数：transposeChars（Ctrl+T，交换光标前一字符与光标处字符，行尾交换末两字符）、killWordForward（Alt+D，删光标→词尾，进 kill ring，与 killWordBack 对称）、deleteCharForward（Ctrl+D，删光标处一字符不进 kill ring，行尾不动）。Terminal.svelte 接线：ctrlChord 新增 case b/f（字符移动）、case t（transposeChars）、case d 改为空行 eofExit + 非空行 deleteCharForward；onKey 新增 Alt+D 分支（用 e.code==='KeyD' 绕过 macOS Option+d 产出 '∂'）。lineedit.test.ts 新增 18 例测试（transpose 7 + killWordForward 6 + deleteCharForward 5），共 55 例全绿。"
+        },
+        {
+          "id": "M45.2",
+          "title": "进程替换 <(cmd)",
+          "status": "done",
+          "notes": "shell.ts 新增 execProcSubst 函数：复用 execCmdSubst 的 fork ctx + run + intr 抛 ShellInterrupt 语义（cd/export 不回流、Ctrl+C 能断内循环），懒创建 /tmp 目录（VFS seed 无），createFile 落 .psub_<random> 临时文件，返回 /tmp/.psub_xxx 路径。subst 扫描循环识别 <(cmd)（matchParen 配对 ）），调 execProcSubst 替换为路径字符串。五处跨度跳过 <(…)/>(…)：tokenize（裸词状态，内部空白不分词）、splitRedirToks（整体不拆 < />）、splitStatements/splitConnectors/splitTopLevel（内部 ; && || | 不当分隔符）。取舍：文件内容 = execCmdSubst 返回值（已剥尾随换行，与 $(cmd) 语义一致），避免 cat 多文件 join('\\n') 多出空行；>(cmd) 未实现留作字面参数；临时文件不自动清理。shell.test.ts 9 例红测全转绿（基本/双进程替换/内部管道/变量展开/多行输出/普通参数混用/grep/嵌套命令替换/Ctrl+C 中断）。"
+        },
+        {
+          "id": "M45.3",
+          "title": "man 同步 + 全量回归",
+          "status": "done",
+          "notes": "man.ts 新增 <( 进程替换条目（语法算符类，同 [[ 条目风格，放在 clear 后）。readline 键位为交互特性不加 man（归 TEST_LOG 记录）。全量回归：vitest 26 文件 785 例全绿（lineedit 55 + shell 304，M45 +27）；svelte-check 0 错（5 条存量 tsconfig 警告）；build 成功（632ms，index 479.89kB gzip 160.32kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M44",
+      "name": "脚本健壮性与作用域（local · set -e · eval）",
+      "status": "done",
+      "scope": "向真实 bash 脚本语义再进三层：M44.1 local 函数局部变量（帧栈遮蔽/恢复）；M44.2 set -e 严格模式（errexit + ShellExit + noErrExit 豁免深度）；M44.3 eval 内建（二次执行 + 25 层递归上限）。附带增强：变量展开支持 ${VAR:-word} 默认值。全程 TDD：37 例新测试先行，shell.test.ts 295 例全绿。",
+      "subtasks": [
+        {
+          "id": "M44.1",
+          "title": "local 函数局部变量",
+          "status": "done",
+          "notes": "ShellCtx 扩 locals 帧栈（Map<名, {existed, value}>[]）。local 命令：函数外调用码 1；帧内首次声明记录原状态（existed/value），有 = 赋新值、无 = 置空串；同帧重复声明只更新值不覆盖原记录。函数调用边界 push 帧、finally pop 帧逐条恢复——existed 则还原原值、否则 delete，嵌套函数各帧独立互不污染。附带：变量展开支持 ${VAR:-word}（变量未设或空串用 word，word 递归展开）。12 例红测转绿。"
+        },
+        {
+          "id": "M44.2",
+          "title": "set -e 严格模式",
+          "status": "done",
+          "notes": "ShellCtx 扩 errexit/noErrExit；新增 ShellExit 异常（携带 code/out/err）。set 命令：-e/+e 开关、无参列变量、其他选项码 2。runLine 末段失败 + errexit + 非豁免 → 抛 ShellExit；run 捕获后保留已产出输出按携带码静默收尾。豁免上下文（noErrExit 深度计数）：if/while/until 条件求值期、&& || 非末段（末段判定：最后一个非空段索引）、! 取反。脚本边界保存/恢复父 shell errexit 不泄漏；子 shell $(…) 继承当前状态。16 例红测转绿。"
+        },
+        {
+          "id": "M44.3",
+          "title": "eval 内建",
+          "status": "done",
+          "notes": "COMMANDS.eval：参数 join(' ') 后走 run() 二次执行，共享 ctx（export/cd 生效）；空串直接码 0。模块级 evalDepth 计数、上限 25 层，自引用 x='eval $x'; eval $x 触发「嵌套过深」码 1；finally 递减防泄漏。9 例红测转绿。"
+        },
+        {
+          "id": "M44.4",
+          "title": "man/help 同步 + 全量回归",
+          "status": "done",
+          "notes": "man.ts 新增 local/set/eval 三条目（放在 export/unset 后的变量区块）。全量回归：vitest 26 文件 758 例全绿（shell.test.ts 295 例，M44 +37）；svelte-check 0 错（5 条存量警告）；build 成功（631ms，index 477.40kB gzip 159.33kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M43",
+      "name": "真实 Shell 深水区（[[ ]] · 可执行权限位 · trap）",
+      "status": "done",
+      "scope": "向真实 bash 语义再进三层：M43.1 [[ ]] 扩展条件命令（模式/正则/逻辑组合）；M43.2 可执行权限位消费（./script.sh 查 x 位，126）+ chmod 符号模式 + -r/-w/-x 测试算符；M43.3 trap 内建（INT/EXIT 陷阱注册/触发/重置）。全程 TDD：61 例新测试先行，shell.test.ts 250 例全绿。",
+      "subtasks": [
+        {
+          "id": "M43.1",
+          "title": "[[ ]] 扩展条件命令",
+          "status": "done",
+          "notes": "isCondStart/condSpanEnd 跨度识别（[[ 与 ]] 独立成词判定），分句/分管/分连接符把内部文本整体跳过——&& || | ; < > 在 [[ ]] 内是条件算符而非语法符。evalCond 求值器：==/!= 右侧通配模式、=~ 正则（非法正则码 2）、< > 字典序、-eq 等数值、-f/-d/-e 文件、-z/-n 空串、&& || ! 组合（! 仅前导一元）。runPipeline 拦截 [[ ]] 独立处理返回退出码。25 例红测转绿。"
+        },
+        {
+          "id": "M43.2",
+          "title": "可执行权限位 + chmod 符号模式 + -x/-r/-w 算符",
+          "status": "done",
+          "notes": "applySymbolicMode 纯函数（[ugoa][+-=][rwx] 逗号多子句、省略 who=a）接入 chmod；./script.sh 执行路径消费 x 位（permits 按当前用户），无权限退出码 126；evalTest 与 condUnary 同补 -r/-w/-x 权限测试。19 例红测转绿（含 if [ -x s.sh ] 门控执行实战形态）。"
+        },
+        {
+          "id": "M43.3",
+          "title": "trap 内建（INT/EXIT）",
+          "status": "done",
+          "notes": "COMMANDS.trap：无参列举（trap -- 'cmd' SIG 格式）、cmd+信号设置、trap - SIG / trap '' SIG 重置、信号归一（SIGINT/2→INT、0→EXIT）、不支持信号码 1、单参码 2。ShellCtx 扩 traps/runDepth{n}/exitFiring；子 shell（$(…)/后台）不继承 traps（bash 重置语义）。INT trap 在最外层 run 边界触发一次（暂清 flag 让 handler 跑完再恢复置位）；fireExitTrap 在最外层脚本边界（sourceDepth===1，source 走 fn 分支天然不触发）触发、exitFiring 防 handler 内脚本递归、trap 不改写脚本退出码。顺手补 POSIX true/false 内建（恒 0/恒 1）。17 例红测转绿。"
+        },
+        {
+          "id": "M43.4",
+          "title": "man/help 同步 + 全量回归",
+          "status": "done",
+          "notes": "man.ts：chmod 补符号模式用法、test 补 -r/-w/-x、新增 [[（扩展条件）/trap/true/false 四条目、sh 条目注明 ./文件 需 x 位（126）与 EXIT 陷阱；help 控制流行同步 [[ ]] 与 trap。全量回归：vitest 26 文件 713 例全绿；svelte-check 0 错（5 条存量警告）；build 成功（624ms）。"
+        }
+      ]
+    },
+    {
+      "id": "M42",
+      "name": "待真机验证项清账（锁屏/首秀/移动外壳全链路）",
+      "status": "done",
+      "scope": "清 DEVPLAN-UIUX 全部「待真机验证」余项：M3 锁屏/关机黑屏、M4 首秀引导三页、M5 移动端外壳全链路。Chrome DevTools MCP 仿真 iPhone 14 Pro 视口（393×852@3, mobile+touch）逐项实测：上滑解锁手势（rubber band 跟手 + 阈值飞出）、MobileHome 4 列网格 + Dock 托盘 + 运行小圆点、窗口全屏 + 20px 红绿灯触控热区、Home Indicator 单击回主屏（全部最小化）/ 双击开 Exposé、状态栏右侧开控制中心（四 toggle + 双滑块 + 七主色）。查获并修复 Welcome App 移动端误导文案：「窗口手感：拖标题栏移动…」与 kbd「Ctrl/⌘K」提示在手机端无意义，按 viewport.isMobile 分支为移动手势文案。至此 DEVPLAN-UIUX 待真机项全部清账完毕。",
+      "subtasks": [
+        {
+          "id": "M42.1",
+          "title": "锁屏/关机黑屏真机验证",
+          "status": "done",
+          "notes": "session.lock() → 锁屏界面正常（壁纸 + 大时钟 + 用户胶囊 + 解锁提示）；session.shutdown() → 关机黑屏正常（纯黑 + 暗色 logo +「已关机/点击重启」）；任意键触发重启回登录屏 ✅。"
+        },
+        {
+          "id": "M42.2",
+          "title": "首秀引导三页排版验证",
+          "status": "done",
+          "notes": "动态 import onboarding 模块重开引导，逐页截图：页1 Logo + 三卡片、页2 Bot + 三横条、页3 快捷键表 kbd 右对齐，排版全部正常 ✅。"
+        },
+        {
+          "id": "M42.3",
+          "title": "M5 移动端外壳全链路真机验证",
+          "status": "done",
+          "notes": "iPhone 14 Pro 仿真六项全过：①MobileLockScreen 上滑解锁（PointerEvent 序列模拟：700→300px 五帧跟手 + pointerup 阈值判定 → 飞出解锁）；②MobileHome 17 图标 4 列网格 + 4 图标 Dock 托盘 + 运行小圆点；③文件 App 全屏 + 红绿灯实测 20×20px（M5.8 触控热区）；④Home Indicator 单击 → files:min=true 回主屏；⑤状态栏右侧「打开控制中心」→ 面板四 toggle（暗色激活/勿扰/声音/AI）+ 音量/缩放滑块 + 七主色 swatch；⑥双击 Indicator → expose.open=true 任务视图（窗口卡片 + 顶部提示）。"
+        },
+        {
+          "id": "M42.4",
+          "title": "修复 Welcome 移动端误导文案 + 全量回归",
+          "status": "done",
+          "notes": "查获：Welcome「窗口手感：拖标题栏移动·拖边/角缩放…」与 kbd Ctrl/⌘K 在移动端是错误引导。修复 Welcome.svelte：viewport.isMobile 分支——Spotlight 提示去 kbd 化（「点这里搜索启动一切」），底部手感文案换成移动手势说明（点图标开 App/点横条回主屏/双击横条任务视图/状态栏右侧控制中心）。真机复测 hasMobileHint=true / hasDesktopHint=false / hasKbd=false ✅。回归：vitest 26 文件 652 例全绿；svelte-check 0 错（5 条存量警告）；build 成功（626ms）。"
+        }
+      ]
+    },
+    {
+      "id": "M41",
+      "name": "动效真机调校（Genie 刷新边界修复 + Dock 波形验证）",
+      "status": "done",
+      "scope": "清 DEVPLAN-UIUX「待真机验证」M2 三项。真机帧采样验证 Genie 神灯双向插值（吸入：全矩形→上宽下窄漏斗梯形；放出：窄塞子→展开全矩形），查获并修复刷新后首次还原播 500ms 全矩形空动画的边界 bug——genieT 组件本地状态恒 0 起步，而 minimized 经会话还原持久为 true，from=0/to=0 空转；修复为 genieT 随 proc.minimized 起步 1。Dock 高斯放大实测：峰 1.5×、±1 图标 1.194×、±2 1.011×，对称 margin 推开 + 距离负反馈平衡自洽，σ=1.2×图标宽参数健康无需调校。",
+      "subtasks": [
+        {
+          "id": "M41.1",
+          "title": "Genie 神灯真机验证 + 刷新边界修复",
+          "status": "done",
+          "notes": "帧采样（55ms×9）验证：吸入 clip-path 从 polygon(0% 0%,100% 0%,100% 100%,0% 100%) 插值到漏斗梯形（顶边慢收、底角 t^0.6 快捏），500ms 结束帧清 clip 交还 CSS 态，无跳变。查获 bug：页面刷新后会话还原带回 minimized=true 的窗口，首次还原 from=genieT=0、to=0 → 播 500ms 全矩形空动画（应 1→0 放出）。修复 Window.svelte：genieT 初始值 proc.minimized ? 1 : 0。修复后重载+登录+还原实测：窄塞子（16.7%–31% 顶边）逐帧展开至全矩形 ✅。"
+        },
+        {
+          "id": "M41.2",
+          "title": "Dock 高斯放大波形真机验证",
+          "status": "done",
+          "notes": "悬停中间图标实测 9 图标刻度：中心 1.5×、±1（d=73px 平衡后）1.194×、±2 1.011×、±3 ≈1、左右完全对称。等效距离反推 56px 与 magnify(σ=57.6, amp=0.5) 自洽——scaleFor 读取在 margin 推开前、渲染后推开，负反馈平衡稳定不抖。参数符合 macOS 手感（峰 1.4–1.6× 区间），无需调校。截图确认视觉波形。"
+        },
+        {
+          "id": "M41.3",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 26 文件 652 例全绿；svelte-check 0 错（5 条存量警告）；build 成功（649ms）。DEVPLAN-UIUX 待真机项清账进度：M2 Genie/波形 ✅（弹簧回弹手感属主观项，参数 springEasing stiffness 320/damping 26 已在横幅/窗口沿用）；M1 玻璃折射仍为默认关闭的实验项。"
+        }
+      ]
+    },
+    {
+      "id": "M40",
+      "name": "浮层前景语义审计（亮/暗双模式全浮层巡查）",
+      "status": "done",
+      "scope": "M39 确立「壁纸叠加层前景恒定白 / 主题表面前景走 token」规则后，对全部浮层做亮/暗双模式真机截图审计：TopBar（浅色薄雾壁纸 + 深色 aurora 壁纸）、Launchpad、Spotlight、上下文菜单、Exposé 任务视图、控制中心、通知中心、通知 toast。排查中一度怀疑 toast 不渲染——实为默认 4500ms 超时先于检查到期，改用 timeout:60000 注入实测：亮/暗两模式下 toast 玻璃底板 + text-qz-text/qz-muted 前景 + 等级色左边条全部正常。结论：零代码修复，规则在全系统成立。",
+      "subtasks": [
+        {
+          "id": "M40.1",
+          "title": "亮模式 + 浅色壁纸全浮层巡查",
+          "status": "done",
+          "notes": "切换「薄雾」浅色壁纸，逐一截图验证：TopBar 白字 + text-shadow 在浅底上可读；Launchpad/Spotlight/上下文菜单/Exposé/控制中心/通知中心均有 qz-glass 底板属主题表面，前景走 token 亮模式深色可读。零问题。"
+        },
+        {
+          "id": "M40.2",
+          "title": "通知 toast 专项排查 + 暗模式验证",
+          "status": "done",
+          "notes": "后台作业 echo x & 触发通知后检查 DOM 发现 toast 容器无子元素、notifications.items 为空——排查 pushNote/notifyd/dnd 全链路无异常，最终定位为 4500ms 默认超时先于 evaluate_script 检查到期（非 bug）。注入 timeout:60000 测试通知实测：亮模式深字/暗模式浅字 + 玻璃底板 + success 绿/warn 橙左边条均正常渲染可读。测试后清理注入通知与历史、还原亮模式。"
+        },
+        {
+          "id": "M40.3",
+          "title": "全量回归 + 规则记录",
+          "status": "done",
+          "notes": "vitest 26 文件 652 例全绿；svelte-check 0 错（5 条存量警告）；build 成功（621ms，index 468.31kB gzip 156.02kB）。语义规则二次确认：壁纸叠加层（TopBar/Launchpad 遮罩）前景恒定白；主题表面（窗口/面板/菜单/toast）前景走 token——后续新增浮层按此归类即不会踩坑。"
+        }
+      ]
+    },
+    {
+      "id": "M39",
+      "name": "顶栏亮色可读性修复（壁纸叠加层前景语义）",
+      "status": "done",
+      "scope": "M9.3 顶栏改透明融入壁纸后遗留：前景色继承主题 --color-qz-text，亮模式 + 深色壁纸下文字/图标变深色全灭。定位为「壁纸叠加层」语义——顶栏不属于主题表面，前景应恒定白色系；下拉面板（通知中心/控制中心）有自己的玻璃底板，属主题表面，前景重置回主题语义。真机截图（亮模式 + aurora 深色壁纸）验证顶栏 🍆/App 名/窗口 chips/托盘图标/时钟全部可读。",
+      "subtasks": [
+        {
+          "id": "M39.1",
+          "title": "TopBar 前景强制白色系",
+          "status": "done",
+          "notes": "TopBar 容器加 text-white/90（对齐原本就硬编码 text-white/85 的时钟语义），顶部微暗渐变 + text-shadow 保留，保证浅色壁纸上也可读。修复点在容器层一处，chips/托盘/菜单按钮全部继承，无需逐元素改。"
+        },
+        {
+          "id": "M39.2",
+          "title": "下拉面板前景重置 + 全量回归 + 真机验证",
+          "status": "done",
+          "notes": "通知中心面板（TopBar 内）与控制中心面板（QuickSettings）根节点加 text-qz-text + style text-shadow:none——面板有 qz-glass 底板，属主题表面，前景/阴影重置回主题语义，避免继承顶栏白色前景在亮模式下白字玻璃。vitest 26 文件 652 例全绿；svelte-check 0 错（5 条存量警告）；build 成功（664ms，index 468.31kB gzip 156.02kB）；真机截图确认亮模式 + 深色壁纸下顶栏全元素可读。"
+        }
+      ]
+    },
+    {
+      "id": "M38",
+      "name": "命令参数路径名展开（glob）+ 字符类 + man/help 同步",
+      "status": "done",
+      "scope": "globToRe 扩展字符类（[abc] [a-z] [!a] [^a]、] 首位字面、未闭合字面）；hasGlob 补 [ 判定；新增 globExpand 路径感知展开（按 / 切段逐层下钻 VFS、段首显式 . 才匹配隐藏文件、绝对/相对形态保持、尾随 / 只匹配目录、命中字典序排序、无匹配 null 放原词）；expandToks 加 glob 参数接线命令参数展开（case 词与模式传 false——bash 不做路径名展开）；expandWords 复用 globExpand（for 词表升级为路径感知）；man.ts 补 until/break/continue/case/return 五条目 + for/find 描述同步；shell.test.ts +17 例",
+      "subtasks": [
+        {
+          "id": "M38.1",
+          "title": "globToRe/hasGlob 字符类",
+          "status": "done",
+          "notes": "globToRe 新增 [ 分支：取反 !/^ → 正则 ^；] 紧跟开头算字面成员；类内只转义反斜杠；未闭合/空类 → 字面 [（bash 同款）。hasGlob 补 [ 判定（ESC 转义的不算）。case 模式、find -name 同步获益（共用 globToRe）。"
+        },
+        {
+          "id": "M38.2",
+          "title": "globExpand 路径感知展开 + expandToks/expandWords 接线",
+          "status": "done",
+          "notes": "globExpand 按 / 切段逐层下钻：无通配段按名字面查找（任一层缺失 → 整体无匹配）、通配段 globToRe 匹配 children；bash 隐藏文件规则（段首显式 . 才匹配 . 开头）；绝对模式从根起结果带 / 前缀、相对模式保持相对形态；尾随 / 只匹配目录；命中字典序排序；无匹配返回 null → 调用方放原词（nullglob off）。expandToks 加 glob=true 参数（runPipeline/别名走展开；case 词与模式传 false）。expandWords 复用同一实现，for 词表升级为路径感知（for f in sub/*.txt）。已知取舍：. / .. 段不特殊解析（原样保留）；虚拟挂载 /proc /dev 不参与；重定向目标多命中无 ambiguous 报错。"
+        },
+        {
+          "id": "M38.3",
+          "title": "man/help 同步 + 旧测试语义修正 + 全量回归",
+          "status": "done",
+          "notes": "man.ts 补 until/break/continue/case/return 五条目，for 描述改「$VAR、花括号与路径通配（* ? [a-z]）」、find -name 补 [a-z]。两处旧测试（for 词表字面 * 后 echo $f）按 bash 展开顺序改为 echo \"$f\"——M38 起变量展开结果会再 glob（bash 同款），原断言编码的是无 glob 时代语义。vitest 26 文件 652 例全绿（+17）；svelte-check 0 错（5 条存量警告）；build 成功（627ms，index 468.22kB gzip 155.95kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M37",
+      "name": "Shell 循环控制 break/continue [n] + until 循环",
+      "status": "done",
+      "scope": "ShellCtx 扩展 loopDepth/loopCtl 信号字段；loopCtlCmd 共用实现（循环外警告码 0、非正整数参数码 1）；parseWhile 识别 until（同 while 节点 + until: true 标志，执行层翻转条件）；consumeLoopCtl 迭代边界消费（n=1 本层生效、n>1 递减 propagate 向上传）；execNodes 语句边界检查 loopCtl；$(…)/后台作业新上下文不继承循环；shell.test.ts +15 例",
+      "subtasks": [
+        {
+          "id": "M37.1",
+          "title": "ShellCtx + loopCtlCmd + fork 隔离",
+          "status": "done",
+          "notes": "loopDepth（合法性判定）+ loopCtl（信号：n=1 本层消费、n>1 递减外传，break 2 断两层）。newCtx/execCmdSubst/backgroundRun 三处新上下文均从 0 起（bash：$(…) 内 break 只警告不断外层）。loopCtlCmd：非正整数参数报错码 1 不置信号；循环外警告「只有在循环中才有意义」码 0（bash 同款，后续语句照跑）。"
+        },
+        {
+          "id": "M37.2",
+          "title": "解析器 until + CTRL_KW",
+          "status": "done",
+          "notes": "parseWhile 首词 until → while 节点 until: true；parseSeq 分发 while|until；CTRL_KW 补 until。needsContinuation 零改动支持（until 缺 done → 缺 done → 续行 true；闭合 → false）。"
+        },
+        {
+          "id": "M37.3",
+          "title": "执行器 loopDepth 跟踪 + 信号消费 + 全量回归",
+          "status": "done",
+          "notes": "consumeLoopCtl 辅助；for/while 循环 loopDepth++（finally 递减）+ 迭代边界消费（break 出圈/continue 下迭代/propagate 向上传）；execNodes 语句边界 ctx.loopCtl 检查（break; echo x 的 echo 不执行）；until 翻转 condOk；函数内 break 断调用处循环（共享 ctx 动态作用域）自然成立。vitest 26 文件 635 例全绿（+14）；svelte-check 0 错（5 条存量警告）；build 成功（667ms，index 466.25kB gzip 155.07kB）。已知取舍：管道段内 break 无子 shell 隔离，记录在案。"
+        }
+      ]
+    },
+    {
+      "id": "M36",
+      "name": "Terminal PS2 多行续行",
+      "status": "done",
+      "scope": "Terminal 接入 M35 needsContinuation：新建 lib/ps2.ts 续行累积器（ps2Push 逐行累积 + 完整即拼接返回并清空、ps2Cancel、ps2Active），submit 不完整回车只累积不执行、提示符变 >；Ctrl+C 丢弃缓冲回 PS1、Ctrl+D 续行中报「意外结束（EOF）」不关窗；ps2.test.ts +9 例",
+      "subtasks": [
+        {
+          "id": "M36.1",
+          "title": "ps2.ts 纯函数 + TDD 9 例",
+          "status": "done",
+          "notes": "ps2Push/ps2Cancel/ps2Active/ps2New：单行即完整、if/heredoc/引号/反斜杠/尾部 | 逐行累积、完整即清空可复用、cancel 丢弃、孤立 then 不续行交 run 报错。红测时发现一例用例本身写错（if true\\nfi 缺 then 本就不完整），修正用例非实现。"
+        },
+        {
+          "id": "M36.2",
+          "title": "Terminal 接线 + 全量回归",
+          "status": "done",
+          "notes": "submit：入行显示按 ps2Active 选 PS1/>，ps2Push 未 done 仅累积；完整文本走既有 histExpand/addHistory/run 流（多行命令作为单条历史入库，bash cmdhist 同款）。cancelLine 清缓冲；eofExit 续行中转 EOF 语法错。模板输入行提示符与回显行同步切换。vitest 26 文件 621 例全绿（+9）；svelte-check 0 错（5 条存量警告）；build 成功（755ms）。"
+        }
+      ]
+    },
+    {
+      "id": "M35",
+      "name": "here-document / here-string + needsContinuation 续行判定",
+      "status": "done",
+      "scope": "shell.ts 新增 scanHeredocs 预处理（<<[-]DELIM body 整段抽离为哨兵 \\x02N，body 内 ;/换行/引号/# 均不参与分句）、extractRedirs 识别 << 与 <<<、runPipeline 输入优先级 heredoc > here-string > < 文件 > 管道 stdin、导出 needsContinuation（反斜杠续行/引号未闭合/$(`)` 未闭合/尾部 | && ||/控制结构缺 fi done esac }/heredoc 未闭合 → true），shell.test.ts +35 例",
+      "subtasks": [
+        {
+          "id": "M35.1",
+          "title": "TDD 红测 35 例",
+          "status": "done",
+          "notes": "here-document 19 例（基本/多行/wc 计行/未引号分隔符变量展开/单双引号分隔符字面/$( ) 替换/\\$ 转义字面/<<- 剥 tab/带 tab 闭合不匹配报错/未闭合语法错码 2/进管道/优先于管道 stdin/搭配 > 写文件/头行多语句/同头行双 heredoc 按序/body 内 # 非注释/脚本内 source 执行/$(…) 内 heredoc）；here-string 5 例（基本/粘连 <<<foo/wc 计 1/变量+引号展开/优先于管道 stdin）；needsContinuation 11 例（空串与普通命令 false、控制结构未闭合 true、引号/替换未闭合 true、行尾奇偶反斜杠、尾部 | && ||、引号内与转义 \\| 不算、heredoc 未闭合 true、body 含引号不误判、完整语法错 false 不续行）。"
+        },
+        {
+          "id": "M35.2",
+          "title": "scanHeredocs + 执行层 + needsContinuation 实现",
+          "status": "done",
+          "notes": "scanHeredocs：逐字扫描尊重引号/转义/$( ) 跨度，<< 后解析分隔符（剥引号定 expand、\\ 转义字符、<<- 标记 stripTabs），头行换行后按 pending 队列顺序吞 body（<<- 剥每行前导 tab、闭合行整行匹配、未闭合抛「缺少闭合行（DELIM）」），哨兵 `<< \\x02N` 原位替换。splitStatements 返回 { stmts, heredocs }；run 把 heredoc 表挂 ctx.heredocs（嵌套 run 保存/恢复，索引层内有效）。extractRedirs：<<< 取后一词（已展开）、<< 只认哨兵。runPipeline：heredoc body 未引号分隔符时 \\$ \\` \\\\ → ESC 哨兵过 subst 出口 stripEsc；here-string 补尾随换行。needsContinuation 五段判定（奇数反斜杠结尾/scanHeredocs 试跑/引号与替换配对扫描/尾部连接算符/parseStatements 缺关键字）。"
+        },
+        {
+          "id": "M35.3",
+          "title": "修复 18 例失败 + 全量回归",
+          "status": "done",
+          "notes": "两处修复：①runLeaf 收集语句输出时统一剥尾随换行（res.out.replace(/\\n+$/,'')）——echo 惯例本无尾换行，heredoc/here-string/文件内容的结构性尾换行只活在 stdin 层（wc -l 需要），不透到语句显示输出；②heredoc stdin 注入处出口 stripEsc（\\$ 转义字面美元符哨兵残留 \\x01 修复）。vitest 25 文件 612 例全绿（+35）；svelte-check 0 错（5 条存量警告）；build 成功（654ms，index 464.26kB gzip 154.38kB）。遗留：Terminal 尚未接 needsContinuation（PS2 续行属 M36）。"
+        }
+      ]
+    },
+    {
+      "id": "M34",
+      "name": "App 级自定义菜单扩展（U8 清账）",
+      "status": "done",
+      "scope": "registry appMenus 新增三家真实全局动作菜单：textedit 新建文稿（sys.openApp）、clipboard 清空剪贴板历史（clearClipboard + notify，danger）、appstore 检查更新（fetchCatalog 异步兜错 → notify 成功报条目数/失败报原因）；图标复用已注册 Lucide 项；新建 registry.test.ts +9 例（结构断言 + 动作真实效果 + fetch mock 成功/失败/HTTP 非 2xx）",
+      "subtasks": [
+        {
+          "id": "M34.1",
+          "title": "App 能力盘点 + 菜单设计",
+          "status": "done",
+          "notes": "约束沿用 M12.2：动作只接真实全局函数（sys 门面 / vfs / 数据层 store），不碰窗口实例状态。Assistant/Screenshot/Reminders 无全局动作可用（对话/截屏/提醒都绑窗口态或需用户输入）——不虚构菜单，跳过。bus 无 App 监听事件可复用。"
+        },
+        {
+          "id": "M34.2",
+          "title": "registry appMenus 扩展 + checkCatalogUpdates",
+          "status": "done",
+          "notes": "textedit 新建文稿（与终端新建窗口同语义）；clipboard 清空历史（danger 对齐清空回收站，source=剪贴板）；appstore 检查更新——onClick 同步签名包 fire-and-forget async，fetchCatalog 成功 notify「已是最新目录 · 仓库现有 N 款 App」、失败 notify「检查更新失败 + 原因」（异常内部兜住不崩菜单）。图标 FileText/Trash2/RefreshCw 均在 iconRegistry 已注册，零新增。"
+        },
+        {
+          "id": "M34.3",
+          "title": "registry.test.ts 新建 +9 例 + 全量回归",
+          "status": "done",
+          "notes": "首个 import registry.ts（连带 23 个 .svelte 组件）的测试——node 环境 import 组件类安全（不实例化）。结构断言 4 例（新增三家/存量四家不受影响/未声明 App menus undefined 回退/ danger+图标）；动作真实效果 5 例（拉起 textedit 进程/清剪贴板+notify/mock fetch 成功报条目数/reject 与 HTTP 502 转 error 通知）。vitest 25 文件 577 例全绿（+9）；svelte-check 0 错（5 条存量警告）；build 成功（680ms，index 462.20kB gzip 153.64kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M33",
+      "name": "Shell case 语句 case word in 模式) 体 ;; esac",
+      "status": "done",
+      "scope": "SNode 新增 case 节点（word + arms）；parseCase 解析（可选前括号、| 多模式、in 同行 arm 回插、嵌套控制流）；globToRe 模式匹配（* ? 通配、ESC 转义字面保留）；首个命中 arm 执行后 ;; 语义即退；无匹配/空体退出码 0；测试 +20 例",
+      "subtasks": [
+        {
+          "id": "M33.1",
+          "title": "SNode case 节点 + parseCase 解析",
+          "status": "done",
+          "notes": "ARM 正则支持可选前括号 (pat) 与裸 pat) 两形态；in 同行余文回插解析流；体复用 parseSeq(stopPred=isArmStart) 递归 → 嵌套 if/for/while/case 自然生效；缺 esac/模式语法错误抛错（码 2）。"
+        },
+        {
+          "id": "M33.2",
+          "title": "case 执行：word 展开 + 模式匹配",
+          "status": "done",
+          "notes": "word 经 expandToks 展开后剥哨兵；模式逐个展开后 globToRe 匹配（ESC 保留——转义的 * 是字面）；首个命中 arm 执行体（bash ;; 语义）；进入 case 即 lastCode=0（无匹配/空体退出码 0）。"
+        },
+        {
+          "id": "M33.3",
+          "title": "TDD 抓出并修复：嵌套 case 解析 arm 边界误判",
+          "status": "done",
+          "notes": "内层 case 行被外层 parseSeq 的 stopPred 误判为 arm 边界——parseSeq 控制结构（if/for/while/case）优先级提升至 stopPred 判定之前，嵌套 case 正常解析。"
+        },
+        {
+          "id": "M33.4",
+          "title": "shell.test.ts +20 例 + 全量回归",
+          "status": "done",
+          "notes": "基本匹配/多模式 |/通配 * ?/变量展开 word 与模式/前括号形态/in 换行/嵌套 case/嵌套 if/无匹配码 0/空体/缺 esac 报错/转义模式字面/多语句体。vitest 24 文件 568 例全绿（+20）；svelte-check 0 错（5 条存量警告）；build 成功（604ms，index 461.57kB gzip 153.42kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M32",
+      "name": "Shell 函数定义 name() { … } + 位置参数 $1/$@/$#",
+      "status": "done",
+      "scope": "ShellCtx 扩展（funcs/positional/funcDepth/retFlag）；parseFuncdef 多行函数定义解析；函数调用共享 ctx + 位置参数保存/恢复；return 内置命令（& 0xff 截断、无参沿用上码、顶层报错）；source/sh 脚本位置参数；arith 支持 $1..$9/$#；bash 纯赋值语句 X=5；测试 +18 例",
+      "subtasks": [
+        {
+          "id": "M32.1",
+          "title": "ShellCtx 扩展 + parseFuncdef 函数定义解析",
+          "status": "done",
+          "notes": "funcs（fork 拷贝不回流父 shell）、positional、funcDepth、retFlag 四字段。FUNC_HEAD 匹配 name() { / name () {；多行体逐行收集至 } 闭合，尾部余文回插语句流；未闭合抛「缺少闭合 }」语法错误（码 2）；孤立 } 报「意外的 }」。"
+        },
+        {
+          "id": "M32.2",
+          "title": "函数调用 + return 内置命令",
+          "status": "done",
+          "notes": "别名展开后、内建命令前查函数表（函数可覆盖内建）；共享 ctx（赋值/cd 影响调用者）；位置参数保存/恢复；funcDepth+1。return：无参沿用 ctx.code、数字参数 & 0xff（-1→255）、非数字码 2、funcDepth=0 且非脚本内报「只能在函数或脚本内使用」；retFlag 在函数/脚本边界清除并作为退出码。后台作业拷贝 funcs/positional 防污染前台。"
+        },
+        {
+          "id": "M32.3",
+          "title": "位置参数展开 + 脚本参数",
+          "status": "done",
+          "notes": "subst 支持 $1..$9（单数字，$10=${1}0）、$# 个数、$@/$* 空格 join、$0=qzsh。source/sh 命令带参数执行脚本：脚本内 $1.. 为实参，return 提前结束脚本（sourceDepth 边界清信号）。"
+        },
+        {
+          "id": "M32.4",
+          "title": "TDD 抓出并修复：arith 位置参数 + 纯赋值语句",
+          "status": "done",
+          "notes": "① 递归测试 $(( $1 - 1 )) 报「变量名无效」——evalArith 增第三参 positional，$ 分支支持数字参数（$10=${1}0 拼接语义）与 $#；② 函数内 X=5 被当命令 127——runPipeline 新增 bash 纯赋值语句：整行全是 VAR=value 则设置 ctx.env（重定向仍生效，X=5 > f 建空文件）。"
+        },
+        {
+          "id": "M32.5",
+          "title": "shell.test.ts +18 例 + 全量回归",
+          "status": "done",
+          "notes": "定义调用/位置参数/$#/$@/$0/多行定义/name () 空格形式/return 各形态/穿透循环/共享作用域/参数保存恢复/递归/覆盖内建/脚本参数/脚本 return/顶层 return 报错/未闭合定义/孤立 }。另修复测试文件 478 行多一个 ) 的语法错误。vitest 24 文件 548 例全绿（+18）；svelte-check 0 错（5 条存量警告）；build 成功（596ms，index 460.56kB gzip 153.08kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M31",
+      "name": "Shell 反斜杠转义体系",
+      "status": "done",
+      "scope": "ESC 哨兵（\\u0001）贯穿 tokenize/subst/花括号/波浪号/glob/分句/分管/分连接符/后台判定全链路；裸词 \\X 字面、双引号弱引用（\\$ \\` \\\" \\\\）、单引号强引用、\\<换行> 续行；runPipeline 抽完重定向后统一剥哨兵（修复 ESC 泄漏）；测试 +17 例",
+      "subtasks": [
+        {
+          "id": "M31.1",
+          "title": "ESC 哨兵 + wordexpand 转义感知",
+          "status": "done",
+          "notes": "wordexpand.ts 导出 ESC 常量（避免 shell↔wordexpand 循环依赖）；matchBrace/splitTop 遇 ESC 整对跳过——转义的 { } , 不参与花括号展开。"
+        },
+        {
+          "id": "M31.2",
+          "title": "tokenize/subst 转义处理",
+          "status": "done",
+          "notes": "裸词 \\X → ESC+X 字面（\\<换行> 续行拼接、行尾孤立 \\ 保留）；双引号内仅 \\$ \\` \\\" \\\\ 转义（bash 弱引用），\\d 等其余反斜杠字面保留；单引号内一切字面。subst 遇 ESC 对原样通过，$ ` ( 不再触发二次展开。"
+        },
+        {
+          "id": "M31.3",
+          "title": "分隔/后台/glob 全链路转义感知",
+          "status": "done",
+          "notes": "splitTopLevel/splitConnectors/splitStatements 跳过 \\; \\| \\&；run 末尾后台判定排除奇数个反斜杠前缀（\\& 是字面 &）；globToRe/hasGlob 遇 ESC 对当字面（\\* \\? 不是通配符）。"
+        },
+        {
+          "id": "M31.4",
+          "title": "修复 ESC 哨兵泄漏（runPipeline 出口剥哨兵）",
+          "status": "done",
+          "notes": "冒烟发现 ESC 泄漏进命令输出（echo \\$USER 打印 \\u0001$USER）。runPipeline 在 extractRedirs 之后统一 stripEsc（rest + redir.in/out/err + 别名展开结果）——剥哨兵必须晚于重定向抽取，否则 \\> 会被算符表吃掉。"
+        },
+        {
+          "id": "M31.5",
+          "title": "shell.test.ts +17 例 + 全量回归",
+          "status": "done",
+          "notes": "覆盖变量/空格/重定向/分句/管道/后台/glob/花括号/波浪号/命令替换各转义场景 + 三种引号环境 + 文件落盘无哨兵残留。vitest 24 文件 530 例全绿（+17）；svelte-check 0 错；build 成功。"
+        }
+      ]
+    },
+    {
+      "id": "M30",
+      "name": "Files Quick Look 空格预览",
+      "status": "done",
+      "scope": "quicklook.ts 纯函数（previewKind/truncatePreview/stepSelection/fmtBytes）+ QuickLook.svelte 浮动预览面板 + Files 空格触发与键盘导航；测试 +25 例",
+      "subtasks": [
+        {
+          "id": "M30.1",
+          "title": "quicklook.ts 纯函数 + 25 例测试",
+          "status": "done",
+          "notes": "previewKind 判别 image/media/text/dir/binary（isImage/isMedia 复用 vfs 判定）；truncatePreview 文本超 20000 字符截断并附提示；stepSelection 方向键步进选中（夹紧边界）。"
+        },
+        {
+          "id": "M30.2",
+          "title": "QuickLook.svelte 浮动预览面板",
+          "status": "done",
+          "notes": "图片/音视频走 readBlob → objectURL（卸载 revoke）；文本等宽 pre 截断展示；目录显图标+子项数；二进制显通用图标。遮罩点击/Esc 关闭。"
+        },
+        {
+          "id": "M30.3",
+          "title": "Files.svelte 空格触发 + 键盘导航",
+          "status": "done",
+          "notes": "空格开/关预览（输入框聚焦时不抢键）；预览开着时 ↑/↓ 步进选中项（macOS Quick Look 手感）；选中变化同步刷新预览内容。"
+        },
+        {
+          "id": "M30.4",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 22 文件 467 例全绿（+25）；svelte-check 0 错；build 成功。"
+        }
+      ]
+    },
+    {
+      "id": "M29",
+      "name": "Shell 波浪号 ~/~user + 花括号 {a,b} 展开",
+      "status": "done",
+      "scope": "wordexpand.ts 纯函数（braceExpand 逗号列表/区间/嵌套/补宽 + tildeExpand ~/~user/未知用户保留）；users.svelte userHome 单一来源；expandToks/expandWords 按 bash 顺序接线；测试 +46 例",
+      "subtasks": [
+        {
+          "id": "M29.1",
+          "title": "wordexpand.ts 纯函数 + 30 例测试",
+          "status": "done",
+          "notes": "braceExpand：{a,b} 列表、{1..5}/{a..z} 区间（降序/步进/前导零补宽 {01..05}）、嵌套与多组笛卡尔积、无效组（{a}/未闭合/混合 {1..z}/步进 0）字面保留、{{a,b}} 外层无效跳内层对齐 bash 递归。tildeExpand：词首 ~ → HOME、~name → userHome、~name/path 拼接剥 home 尾斜杠（HOME=/ 不产 //x）、未知用户原样保留。"
+        },
+        {
+          "id": "M29.2",
+          "title": "users.svelte.ts userHome 单一来源",
+          "status": "done",
+          "notes": "新增 userHome(name)（root→/root、其余→/、未知→undefined）；passwdLine 改走 userHome，/etc/passwd 与波浪号展开不再两处手写同一规则。"
+        },
+        {
+          "id": "M29.3",
+          "title": "shell.ts expandToks/expandWords 接线",
+          "status": "done",
+          "notes": "bash 顺序：花括号 → 波浪号 → subst（变量/命令/算术）→ glob；引号词（t.q）全程跳过前两步。空词删除改按变体级判定——花括号空变体（{,}）是有效参数不删。for 词表同走展开（for i in {1..3}）。已知差异：花括号扫描不识别 $(…) 跨度（x$(echo {a,b})y 路径与 bash 不同），注释在案。"
+        },
+        {
+          "id": "M29.4",
+          "title": "shell.test.ts +16 例",
+          "status": "done",
+          "notes": "花括号 8 例（列表/区间/组合/步进补宽/for×2/引号不展开/先于变量/无逗号）+ 波浪号 8 例（~/~path/~root/~qiezi/未知用户/cd ~/cd 子目录/重定向目标/词中与变量值不展开）。"
+        },
+        {
+          "id": "M29.5",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 24 文件 513 例全绿（+46：wordexpand 30 + shell 16）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（595ms，index 457.03kB gzip 151.91kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M28",
+      "name": "Shell 历史词指示符与修饰符（!!:s/^/$/、:s/old/new/）",
+      "status": "done",
+      "scope": "histexpand.ts 扩展词指示符（:^/:$/:*/:n/:n-m）与修饰符（:s/old/new/、:gs/、:p 只打印不执行）；Terminal 接线 :p；测试 +29 例",
+      "subtasks": [
+        {
+          "id": "M28.1",
+          "title": "histexpand.ts 词指示符 + 修饰符",
+          "status": "done",
+          "notes": "词指示符：:^ 首词、:$ 末词、:* 全部参数、:n 第 n 词、:n-m 区间；修饰符：:s/old/new/ 首个替换、:gs/old/new/ 全局替换、:p 只打印不执行（bash 同款演练）。"
+        },
+        {
+          "id": "M28.2",
+          "title": "histexpand.test.ts +29 例",
+          "status": "done",
+          "notes": "覆盖五种词指示符、三种修饰符、组合链（!:1:s/a/b/）、越界失败路径。"
+        },
+        {
+          "id": "M28.3",
+          "title": "Terminal 接线 :p 修饰符",
+          "status": "done",
+          "notes": "展开结果带 printOnly 标记 → 回显展开行后不执行、不入历史执行队列（bash :p 语义）。"
+        },
+        {
+          "id": "M28.4",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 21 文件 388 例全绿（+29）；svelte-check 0 错；build 成功。"
+        }
+      ]
+    },
+    {
+      "id": "M27",
+      "name": "Shell 算术展开 $((expr))",
+      "status": "done",
+      "scope": "arith.ts 递归下降求值器（整数四则/幂/位/比较/逻辑/三元/变量/短路）+ shell.ts subst 集成；测试 +42 例",
+      "subtasks": [
+        {
+          "id": "M27.1",
+          "title": "arith.ts 求值器 + 28 例测试",
+          "status": "done",
+          "notes": "递归下降：primary/unary/power(右结合)/mul/add/shift/rel/eq/bitAnd/bitXor/bitOr/logAnd/logOr/ternary 十三级优先级；整除向零取整；变量裸名/$ 前缀，未定义按 0；&&/||/?: 短路（0?1/0:9 → 9 不报除零）；除零/语法错误抛中文错。"
+        },
+        {
+          "id": "M27.2",
+          "title": "shell.ts subst 集成 $(( ))",
+          "status": "done",
+          "notes": "$( 紧跟 ( 判算术（bash 同款：$( (ls) ) 带空格才是子 shell）；matchParen 配对剥掉 $(( 与 )) 后 evalArith；双引号内可展开、单引号强引用不展开。run 顶层加错误兜底——算术错误退出码 1 + err 提示。"
+        },
+        {
+          "id": "M27.3",
+          "title": "shell.test.ts +14 例",
+          "status": "done",
+          "notes": "四则/优先级/整除/取模负号/幂右结合/变量/未定义按 0/比较逻辑位/三元短路/除零报错/语法报错/引号语义/嵌套命令替换旁粘连/$( 判定不吞命令替换。"
+        },
+        {
+          "id": "M27.4",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 22 文件 429 例全绿（+42）；svelte-check 0 错；build 成功。"
+        }
+      ]
+    },
+    {
+      "id": "M26",
+      "name": "Shell 命令替换 $(cmd) / `cmd`",
+      "status": "done",
+      "scope": "tokenize 跨度扫描（matchParen/substSpanEnd）+ subst 异步化 + execCmdSubst 子 shell 执行 + splitTopLevel/splitStatements/splitConnectors 跨度跳过 + Ctrl+C 中断传播；测试 +13 例",
+      "subtasks": [
+        {
+          "id": "M26.1",
+          "title": "tokenize 跨度扫描",
+          "status": "done",
+          "notes": "matchParen 配对括号（嵌套/引号/转义感知）、substSpanEnd 统一 $(…) 与 `…` 跨度；tokenize 扫到 $( 或 ` 整体留在词内（内部空白不分词、引号不切换），单引号内不生效（bash 强引用）。"
+        },
+        {
+          "id": "M26.2",
+          "title": "subst/expandToks 异步化 + execCmdSubst",
+          "status": "done",
+          "notes": "execCmdSubst：fork ctx（cd/export 不影响父 shell）、intr 共享引用、SUBST_DEPTH_MAX=8 防栈爆、stdout 剥尾随换行。替换结果单遍扫描不二次展开。TDD 抓出：expandWords/runPipeline/别名展开漏 await（22 例红→绿）、变量展开 m[1] 误用（应为 m[0]）。"
+        },
+        {
+          "id": "M26.3",
+          "title": "中断传播",
+          "status": "done",
+          "notes": "内层 run 吞 130 且 intr.flag 置位 → execCmdSubst 抛 ShellInterrupt 继续向上——Ctrl+C 能断 $(while 失控循环)，bash 手感。"
+        },
+        {
+          "id": "M26.4",
+          "title": "shell.test.ts +13 例",
+          "status": "done",
+          "notes": "基本/反引号/剥换行粘连/嵌套/双引号内/单引号不替换/内部管道/内部分号/内部 &&||/子 shell 隔离/不二次展开/未闭合报错/Ctrl+C 断替换。"
+        },
+        {
+          "id": "M26.5",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 21 文件 387 例全绿（+13）；svelte-check 0 错；build 成功。"
+        }
+      ]
+    },
+    {
+      "id": "M25",
+      "name": "Shell 历史展开（!!/!n/!str）+ readline kill ring（Ctrl+Y/Alt+Y）",
+      "status": "done",
+      "scope": "histexpand.ts 纯函数（!!/!n/!-n/!str/!?str? + 单引号不展开 + 反斜杠转义）；lineedit kill 类带 killed 字段 + yank/yankPop 纯函数；Terminal 接线 submit 展开回显 + kill ring 粘贴；测试 +28 例",
+      "subtasks": [
+        {
+          "id": "M25.1",
+          "title": "histexpand.ts 历史展开纯函数 + 20 例测试",
+          "status": "done",
+          "notes": "新建 src/lib/histexpand.ts：HistExpandResult 判别联合（ok/fail）；逐字符扫描——单引号强引用不展开（bash 语义）、双引号内可展开、\\! 转义字面叹号、词尾/空白/=/引号紧随的字面 ! 不展开（echo a!、!= 安全）；形态：!! 上一条、!n 第 n 条（1-based）、!-n 倒数、!str 最近开头匹配、!?str? 最近包含匹配（闭合 ? 可省）；失败返回「词: 事件未找到」。测试 20 例：基本形态 9 + 引号转义 6 + 失败路径 5。"
+        },
+        {
+          "id": "M25.2",
+          "title": "lineedit.ts kill 类带 killed 字段 + yank/yankPop 纯函数",
+          "status": "done",
+          "notes": "EditState 新增 killed?（kill 类删下的文本，无删除不设）；killToStart/killToEnd/killWordBack 返回值带 killed；新增 yank(s,text) 光标处插入、yankPop(s,newText,lastYank) 替换上次粘贴段（区间夹紧防越界）。"
+        },
+        {
+          "id": "M25.3",
+          "title": "lineedit.test.ts 补齐（+17 例：killed 断言 + yank/yankPop）",
+          "status": "done",
+          "notes": "killToStart/killToEnd/killWordBack 断言全量补 killed 字段（toEqual 不忽略已定义属性）；新增 yank 4 例（行尾/词中/行首/空文本）+ yankPop 4 例（基本替换/连续 Alt+Y 链/区间越界夹紧/中段替换前后保留）。TDD 抓出 1 处测试索引笔误（AAA 区间 [3,6) 误写 [4,7)）。"
+        },
+        {
+          "id": "M25.4",
+          "title": "Terminal 接线：submit 历史展开 + kill ring",
+          "status": "done",
+          "notes": "submit：执行前 histExpand(cmd, cmdHistory.list)——用加入当前行之前的历史（!!=上一条）；展开失败报「qzsh: 词: 事件未找到」不执行但原始行入历史（bash 同款）；展开变更先回显展开行再执行；历史记原始行。kill ring：applyEdit 捕获 next.killed 入环（RING_CAP=32）；Ctrl+Y doYank 粘环顶记区间、Alt+Y doYankPop 环内取模替换（无前置 yank/环单项无操作）；onKey 分派前统一判定 isYankKey——任何其他键断 Alt+Y 链；Alt+Y 用 e.code（macOS Option+y 产 ¥）。help 文本补历史展开说明。"
+        },
+        {
+          "id": "M25.5",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 21 文件 359 例全绿（+28：histexpand 20 + lineedit 8 净增）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（581ms，index 443.40kB gzip 147.33kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M24",
+      "name": "Shell 变量展开与 bash 引号语义",
+      "status": "done",
+      "scope": "tokenize 保留引号类型（Tok{text,q}）→ 单引号强引用不展开、引号内 > < 不当算符、引号内 * ? 不 glob、无引号变量展开为空删词、$? 语句间实时同步；测试 +18 例",
+      "subtasks": [
+        {
+          "id": "M24.1",
+          "title": "tokenize 产出 Tok{text,q} 保留引号信息",
+          "status": "done",
+          "notes": "tokenize 返回值 string[] → Tok[]：text 剥引号文本 + q 包裹引号类型（null=裸词）。已知取舍：裸词拼引号罕见形态（foo\"bar\"）以首个引号作整词 q。subst 加第三参 q：单引号强引用（bash 语义）原样不展开。修复前 '$HOME' 也会展开成 /。"
+        },
+        {
+          "id": "M24.2",
+          "title": "splitRedirToks/expandWords 引号感知",
+          "status": "done",
+          "notes": "splitRedirToks 引号词整体跳过不拆算符（修复 echo \">x\" 被当重定向）；expandWords 引号词不 glob（for f in \"*\" 是字面星号）、无引号变量展开为空删词（for i in $X 循环 0 次）。"
+        },
+        {
+          "id": "M24.3",
+          "title": "expandToks 空词删除 + runPipeline 空段跳过",
+          "status": "done",
+          "notes": "新 helper expandToks = subst + bash 空词删除：无引号变量展开为空 → 整词移除（echo $X x 输出 \"x\" 而非 \" x\"）；引号空串保留（echo \"\" x 输出 \" x\"）。runPipeline 主调用点与别名展开统一改走 expandToks；变量展开后整段为空（未定义变量单独成行）→ 无操作跳过非语法错误（`> file` 式空命令+重定向仍走原报错，记录在案）。已知差异：变量展开产出的 > < 仍会被当重定向（bash 不认），A='>' 场景极罕见从简。"
+        },
+        {
+          "id": "M24.4",
+          "title": "$? 语句间实时同步（runLeaf 写回 ctx.code）",
+          "status": "done",
+          "notes": "TDD 抓出：nosuchcmd; echo $? 输出 0 而非 127——runLeaf 只更新局部 lastCode 不写回 ctx.code，subst 拿调用前旧值。修复：runLeaf 同步 ctx.code = res.code，语句间 $? 实时反映上一条命令退出码（bash 语义）；run 返回后 Terminal submit 再赋值 res.code 幂等。"
+        },
+        {
+          "id": "M24.5",
+          "title": "shell.test.ts +18 例",
+          "status": "done",
+          "notes": "变量展开 11 例（$VAR/${}粘连/export 后展开/unset 空词/未定义空词删除/引号空串保留/$? 初始 0/$? 取 127/cd $D/重定向目标 $F/未定义变量单行跳过）+ 引号语义 7 例（单引号强引用/双引号弱引用/双内单普通字符/混用/引号内 > 非算符/引号内 | 非管道/引号内 * 不 glob）。"
+        },
+        {
+          "id": "M24.6",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 20 文件 331 例全绿（+18）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（625ms，index 440.81kB gzip 146.30kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M23",
+      "name": "Shell 环境变量补全（$ 前缀）",
+      "status": "done",
+      "scope": "completion.ts $ 前缀感知补全环境变量；CompletionSource 新增 env 字段；Terminal 注入 ctx.env.keys；测试 +7 例",
+      "subtasks": [
+        {
+          "id": "M23.1",
+          "title": "completion.ts $ 前缀补全逻辑",
+          "status": "done",
+          "notes": "CompletionSource 新增 env 字段；completeLine 在 flag 检测后、命令感知前加 $ 前缀检测：word.slice(1) 匹配环境变量名；唯一候选补全保留 $ 前缀 + 空格；多候选列 $VAR 形式；LCP 补全保留 $ 前缀；引号内 $VAR 补全保留引号。"
+        },
+        {
+          "id": "M23.2",
+          "title": "completion.test.ts +7 例",
+          "status": "done",
+          "notes": "$HOM→唯一补全/$HO→多候选/$US→唯一/$HOME 空格后走路径补全/引号内补全/cd 命令下补全/管道段内补全。"
+        },
+        {
+          "id": "M23.3",
+          "title": "Terminal.svelte 注入 env.keys",
+          "status": "done",
+          "notes": "complete() 中新增 env: Object.keys(ctx.env)，注入当前 shell 上下文的环境变量。"
+        },
+        {
+          "id": "M23.4",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 20 文件 313 例全绿（+7）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（617ms，index 440.50kB gzip 146.17kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M22",
+      "name": "Terminal 选中即复制 + 右键菜单",
+      "status": "done",
+      "scope": "macOS Terminal 经典交互：鼠标选中区域自动复制到剪贴板；右键弹出菜单（粘贴/复制/清空/新建窗口）",
+      "subtasks": [
+        {
+          "id": "M22.1",
+          "title": "选中即复制（onMouseUp 触发）",
+          "status": "done",
+          "notes": "onMouseUp：getSelection 非折叠且有文本 → sys.clipboard.copy(text)；行内连续空白被折叠（与真实终端一致）。"
+        },
+        {
+          "id": "M22.2",
+          "title": "右键菜单（粘贴/复制/清空/新建窗口）",
+          "status": "done",
+          "notes": "onContextMenu：点在输入框上不弹菜单（保留浏览器默认）；粘贴优先 navigator.clipboard.readText()，失败回退 sys.clipboard.read()；复制项选中时有文本才可用（disabled: !hasSelection）；清空 = lines=[]；新建窗口 = sys.openApp('terminal')。"
+        },
+        {
+          "id": "M22.3",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 20 文件 306 例全绿；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（599ms，index 440.25kB gzip 146.07kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M21",
+      "name": "Files ↔ Terminal 跨 App 联动",
+      "status": "done",
+      "scope": "Files 右键菜单新增「在终端打开」（目录单选）+「复制路径」（多选友好）；Terminal 接收 launch data.cwd 作为起始工作目录（与 M20 并行：子代理执行）",
+      "subtasks": [
+        {
+          "id": "M21.1",
+          "title": "Terminal.svelte 接收 cwd 启动参数",
+          "status": "done",
+          "notes": "props 新增 data?: unknown；onMount 开头解析 data.cwd：getNode 校验存在且 type==='dir' 才赋给 ctx.cwd（非法数据静默忽略）；/etc/profile 里的 cd 仍可覆盖（真实 shell rc 优先级语义）。导入 getNode。"
+        },
+        {
+          "id": "M21.2",
+          "title": "Files.svelte 右键菜单两项",
+          "status": "done",
+          "notes": "onItemMenu 新增：「在终端打开」（显隐条件 n.type==='dir' && 单选，icon 🖥️ 与 registry terminal 一致，onClick sys.openApp('terminal', { data: { cwd: n.id } })）；「复制路径」（多选同款 suffix，icon 🔗，tgts.map(pathOf).join('\\n') 进剪贴板，与「复制名称」同手法）。"
+        },
+        {
+          "id": "M21.3",
+          "title": "全量回归（与 M20 合并）",
+          "status": "done",
+          "notes": "vitest 20 文件 306 例全绿；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（555ms，index 439.53kB gzip 145.89kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M20",
+      "name": "Shell 管道/重定向感知补全",
+      "status": "done",
+      "scope": "completion.ts 新增 tokenize（引号感知操作符分词）+ completeLine 管道/重定向感知：| && || ; & 后是新命令位补命令、> >> < 后补路径、管道段内按真实命令递推（含 sudo 透传）",
+      "subtasks": [
+        {
+          "id": "M20.1",
+          "title": "tokenize 引号感知操作符分词",
+          "status": "done",
+          "notes": "导出 tokenize(line)：空白分词基础上，引号（'/\"）内操作符不生效；| & 单写/双写各自成词（&& || 合并）；; > >> < 各自成词；2> 自然拆成 '2' 与 '>'（与 bash 词法一致）。"
+        },
+        {
+          "id": "M20.2",
+          "title": "completeLine 管道/重定向感知",
+          "status": "done",
+          "notes": "整行 tokenize 定位：末词是 PIPE_OPS（| || && ; &）→ 新命令位补命令名；末词是 REDIR_OPS（> >> <）→ 补路径（pathCands 目录加 / 可续钻）；否则取最后一个管道/序列操作符之后的「当前段」，段内滤掉重定向操作符后按 seg[0] 为命令递推（sudo 透传逻辑改吃 seg 数组）；systemctl 子命令判定同步改用 seg。语义对齐 bash：ls | grep f<Tab> 按 grep 参数补路径、cat > out.txt <Tab> 仍按 cat 参数补。"
+        },
+        {
+          "id": "M20.3",
+          "title": "completion.test.ts +18 例（46→64）",
+          "status": "done",
+          "notes": "tokenize 6 例（普通/管道无空格/引号内 | 非操作符/&& || ; &/> >> < 与 2> 拆分/空行）；管道 6 例（| 后列全部命令/唯一命令补全/&& 后命令位/段内按 grep 参数补路径/段内 kill 补 pid/sudo 跨段透传）；重定向 6 例（> 后列目录含虚拟挂载点/LCP 补全/>> 唯一文件/目录加斜杠/2> 后仍补路径/目标写完后回到命令参数位）。"
+        },
+        {
+          "id": "M20.4",
+          "title": "全量回归（与 M21 合并）",
+          "status": "done",
+          "notes": "vitest 20 文件 306 例全绿（+18）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（555ms，index 439.53kB gzip 145.89kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M19",
+      "name": "通知中心 macOS 化：来源分组 + 单条/分组清除",
+      "status": "done",
+      "scope": "Note.source 来源标注（13 文件 18 处调用方）+ notegroup.ts 分组纯函数 + TopBar 通知中心分组渲染 + 单条 X / 分组 X 清除（与 M18 并行：子代理执行）",
+      "subtasks": [
+        {
+          "id": "M19.1",
+          "title": "数据层：Note.source + 单条/分组删除",
+          "status": "done",
+          "notes": "notifications.svelte.ts：Note 与 pushNote 参数新增 source?（写入 note 与历史副本；旧持久化数据无该字段 → 消费方兜底归 '系统'）；新增 removeFromHistory(id) 删单条、removeSourceFromHistory(source) 按来源整组删（n.source ?? '系统' 兜底，与分组语义一致）。"
+        },
+        {
+          "id": "M19.2",
+          "title": "notegroup.ts 分组纯函数 + 测试（7 例）",
+          "status": "done",
+          "notes": "新建 src/lib/notegroup.ts：groupBySource<T extends {ts, source?}> 泛型结构化类型（不 import 数据层 → 可纯测）。语义：无 source 归 '系统'；组内 ts 新→旧；组间按「组内最新 ts」新→旧（旧组来新通知 → 整组排前，macOS 手感）。notegroup.test.ts 7 例：多来源分组/兜底 '系统'/组内序/组间序/单条成组/空数组/组顺序不受输入顺序影响。坑：多来源组名断言不能套默认 sort 预期（中文按 UTF-16 码位：截 U+622A < 文 U+6587），改显式顺序断言。"
+        },
+        {
+          "id": "M19.3",
+          "title": "sys.notify 链路透传 source",
+          "status": "done",
+          "notes": "sys.ts notify opts 加 source；emit('notify') → services.ts notifyd → pushNote 全链路带 source；emptyTrashWithNotify 标 '文件'。schedd 定时通知（at/crontab/提醒到点）来源无法静态判定 → 走兜底 '系统'。"
+        },
+        {
+          "id": "M19.4",
+          "title": "TopBar 通知中心分组渲染",
+          "status": "done",
+          "notes": "$derived(groupBySource(noteHistory.items)) 替换平铺 reverse。组头：来源名·数量（text-[10px] font-semibold text-qz-muted）+ hover 出现的清组 X（group/g 命名 hover 作用域）；通知行尾加 hover 出现的删单条 X（group/n，行 hover 底色 bg-qz-elevated/60）；平铺 border-b 分隔改组间 mt-1.5 留白；面板 w-72→w-80；清空全部/BellOff 空态/unread 角标/markNotesSeen 全保留。"
+        },
+        {
+          "id": "M19.5",
+          "title": "调用方 source 标注（13 文件 18 处）",
+          "status": "done",
+          "notes": "Screenshot'截图'×2、Files'文件'×3、AppStore+AppGallery'App Store'×3、Reminders'提醒事项'×3、Clock'时钟'、Settings'设置'×2、Clipboard'剪贴板'、registry'文件'×2、Desktop+Window'系统'×2、DesktopIcons'文件'、Spotlight'聚焦'、shell.ts 作业结束'终端'、aiTools'AI 助手'、services'能力被拒绝''系统'。"
+        },
+        {
+          "id": "M19.6",
+          "title": "全量回归（与 M18 合并）",
+          "status": "done",
+          "notes": "vitest 20 文件 288 例全绿（+15 histsearch +7 notegroup）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（546ms，index 438.39kB gzip 145.41kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M18",
+      "name": "Terminal Ctrl+R 历史搜索（reverse-i-search）",
+      "status": "done",
+      "scope": "lib/histsearch.ts 搜索纯函数 + Terminal 搜索模式接线（状态机 + 按键接管 + 提示符替换），顺带堵掉 Ctrl+R 触发浏览器刷新的存量隐患",
+      "subtasks": [
+        {
+          "id": "M18.1",
+          "title": "histsearch.ts 搜索纯函数",
+          "status": "done",
+          "notes": "新建 src/lib/histsearch.ts：RSearchState{query,idx}；rsUpdate（查询词变化 → 从最新向最老重搜）/rsOlder（下一个更老匹配；无更老停原地，failed 提示由 UI 据 idx 显示）/rsMatch（命中文本，idx 越界兜底 null）。子串匹配（includes 非前缀：'rm' 命中 'sudo rm -rf'）；findBackward 的 fromIdx 先夹合法范围（历史被 HISTORY_CAP 截短后 idx 越界仍能搜）。"
+        },
+        {
+          "id": "M18.2",
+          "title": "histsearch.test.ts（15 例）",
+          "status": "done",
+          "notes": "rsUpdate 5 例（空查询/多匹配取最新/子串匹配/无匹配/空历史）+ rsOlder 6 例（更老/连续按/最老停原地/未命中重搜/空查询恒等/idx 越界夹紧）+ rsMatch 4 例（命中/未命中/越界/空历史）。"
+        },
+        {
+          "id": "M18.3",
+          "title": "Terminal.svelte 搜索模式接线",
+          "status": "done",
+          "notes": "rsearch 状态 + rsSaved 还原点；onKey 搜索分支接管按键：打字改查询、Backspace 删查询词、Ctrl+R 循环更老、Enter 直接执行命中（bash 手感）、→/Ctrl+E 只取到输入行留待编辑、Esc/Ctrl+C/Ctrl+G 取消还原；ctrlChord 加 r=rsStart（此前 Ctrl+R 无 case 不 preventDefault → 触发浏览器整页刷新，一并堵掉）；提示符行搜索中替换为 (reverse-i-search)`query': 或未命中 (failed reverse-i-search)`query':（与 bash 一致）；搜索中 Tab/↑/↓ 等其余键一律吃掉避免半态；欢迎语补 Ctrl+R。"
+        },
+        {
+          "id": "M18.4",
+          "title": "全量回归（与 M19 合并）",
+          "status": "done",
+          "notes": "vitest 20 文件 288 例全绿；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（546ms，index 438.39kB gzip 145.41kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M17",
+      "name": "Terminal readline 行编辑 + Ctrl+C 中断",
+      "status": "done",
+      "scope": "lib/lineedit.ts 行编辑纯函数 + shell.ts 协作式中断（ctx.intr + ShellInterrupt + 130）+ Terminal 接线 Ctrl 键族",
+      "subtasks": [
+        {
+          "id": "M17.1",
+          "title": "lineedit.ts 行编辑纯函数",
+          "status": "done",
+          "notes": "新建 src/lib/lineedit.ts：EditState{text,pos} 二元组（对齐 input value/selectionStart 语义），killToStart(Ctrl+U)/killToEnd(Ctrl+K)/killWordBack(Ctrl+W)/wordBack(Alt+B、Ctrl+←)/wordForward(Alt+F、Ctrl+→)。词边界取 bash C-w 空白分隔语义（/tmp/foo 整体一词），wordBack→词头、wordForward→词尾的 emacs 不对称惯例；行首/行尾幂等，不碰 DOM 可纯测。"
+        },
+        {
+          "id": "M17.2",
+          "title": "lineedit.test.ts（29 例）",
+          "status": "done",
+          "notes": "killToStart×4 + killToEnd×3 + wordBack×9 + wordForward×7 + killWordBack×6。TDD 抓出 4 处测试期望算错（pos=8 在 hello 中是 l|l 之间；空白分隔下 /tmp/foo 是一词整体删），实现符合 bash C-w 语义，修正测试而非实现。"
+        },
+        {
+          "id": "M17.3",
+          "title": "shell.ts 协作式中断 + shell.test.ts（8 例）",
+          "status": "done",
+          "notes": "ShellCtx 新增 intr{flag}（newCtx 带上）；ShellInterrupt 异常在语句边界+每次循环迭代 checkIntr 抛出，unwind 到 run 顶层转 130 退出码 + err '^C'；flag 由调用方复位（run 内部不清 → 嵌套 sh/source 共享 ctx 时外层一并中止）；后台作业 bgCtx 不带 intr（真实 shell 同理，Ctrl+C 只打前台）。shell.test.ts 起步 8 例：echo/for/while 基础 + 预置 flag 即停/失控 while 执行中中断/for 中断/flag 持续性与复位/无 intr 旧式 ctx 可选链兜底。发现存量语义：while 退出码是 cond 的码（bash 应 0），记录不动。"
+        },
+        {
+          "id": "M17.4",
+          "title": "Terminal.svelte 接线",
+          "status": "done",
+          "notes": "ctrlChord 统一入口（纯 Ctrl，不吃 Cmd/Alt 组合）：C=cancelLine（echo ^C 新起行）/D=eofExit（空行关窗，pid→进程 id 换算）/A/E=行首行尾/U/K/W=applyEdit 三件套/L=清屏；Ctrl+←/→ 与 Alt+B/F 词移动（Alt 用 e.code 防 macOS Option 产出 ∫）；applyEdit 等 tick 后 setSelectionRange 落光标。busy 时输入框解禁（原 disabled 会吞掉 Ctrl+C 键事件）：busy 分支只拦 Ctrl+C，其余键放行默认行为 → 白赚 type-ahead。submit 执行前复位 intr.flag。欢迎语补新键位提示。"
+        },
+        {
+          "id": "M17.5",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 18 文件 266 例全绿（+29 lineedit +8 shell）；svelte-check 0 错 0 警（顺手修两处：completion.ts dirId 窄化顺序、Terminal close 吃字符串 id 非数字 pid）；npm run build 成功（569ms，index 435.36kB gzip 144.48kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M16",
+      "name": "Terminal 补全引擎（贴近真实 shell）",
+      "status": "done",
+      "scope": "lib/completion.ts 纯函数补全引擎（引号感知 lastWord / LCP 公共前缀 / 命令感知 / 虚拟路径）+ Terminal 接入替换旧简陋补全",
+      "subtasks": [
+        {
+          "id": "M16.1",
+          "title": "completion.ts 补全引擎纯函数",
+          "status": "done",
+          "notes": "新建 src/lib/completion.ts：lastWord（引号感知最后一词切分，未闭合引号内空格不断词）+ longestCommonPrefix + completeLine 主入口。行为对标真实 shell：首词补命令名；参数位命令感知（cd 只目录且不带虚拟挂载点、man/help/which/sudo 补命令、kill 补 pid、su 补用户、systemctl 补子命令+服务名、pkg 补子命令、fg 补运行中作业号、open 补 App id+路径混合）；路径补全支持绝对/相对/..、隐藏文件规则（frag 以 . 开头才补隐藏项）、虚拟挂载 /proc /dev（根目录补全与 ls 一样带 proc/ dev/）；多候选先补 LCP（bash 第一次 Tab 手感），无进展才列候选；flag 参数（-开头）不响；空行 Tab 不刷全部命令；引号补全自动闭合（目录不闭合可续补）。动态数据经 CompletionSource 注入（命令/App/用户/服务/pid/作业号）→ 测试不拖 shell.ts 大依赖图。TDD 抓出两处语义：cd 不应补虚拟挂载点（cd /proc 本会失败）、cwd 即根时 ls 空词应含 proc/dev（与 ls 输出一致）。"
+        },
+        {
+          "id": "M16.2",
+          "title": "completion.test.ts（46 例）",
+          "status": "done",
+          "notes": "lastWord 7 例（空行/单词/多词/尾空格/未闭合双单引号/已闭合）+ LCP 4 例 + 命令位 4 例（空行不响/唯一/列候选/补 LCP）+ 路径 12 例（唯一/空词列表/隐藏规则/LCP 两阶段/目录斜杠/子路径/绝对/.. /根挂载点/不存在/是文件）+ 虚拟路径 3 例 + 命令感知 14 例（cd/man/kill/su/systemctl×2/pkg/fg/flag/sudo×2/open×3）+ 引号 2 例。mock blobStore 同 vfs.test 手法。"
+        },
+        {
+          "id": "M16.3",
+          "title": "Terminal.svelte 接入",
+          "status": "done",
+          "notes": "complete() 由 30 行内联简陋实现（split(/\\s+/) 不尊重引号、只补当前目录、无 LCP）改为调 completeLine；CompletionSource 现场组装：COMMAND_NAMES、appList 全量 id（open textedit 等 hidden 也合法）、users.list、listServices、processes pid、jobs 运行中作业号。删 resolvePath/children import（补全引擎内部处理）。"
+        },
+        {
+          "id": "M16.4",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 16 文件 229 例全绿（+46 例 completion.test.ts）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（551ms，index 433.48kB gzip 143.92kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M15",
+      "name": "VFS 补测 + AI 工具箱补完",
+      "status": "done",
+      "scope": "vfs.svelte.ts 核心函数 TDD 补测（copyNode/purge/writeFile 二进制降级 + 原有全套）+ aiTools 新增 6 工具（read_file/close_app/notify/move_file/trash_file/set_dnd）",
+      "subtasks": [
+        {
+          "id": "M15.1",
+          "title": "VFS 核心函数 TDD 补测",
+          "status": "done",
+          "notes": "新建 vfs.test.ts（53 例）：children 排序/回收站隔离/空目录；createDir/createFile 重名自动 +2（保留扩展名/无扩展名/目录）；rename 改名成功/空名拒绝/同目录同名拒绝/不同目录同名不冲突/改自己名视为成功/未知 id；move 移动到目标/同名自动 +2/不能移动 root/不能移动自己/不能移动到自己的子孙/目标是文件拒绝/已在目标目录 no-op；trash/restore/emptyTrash 移入回收站记住原父级/trash root 拒绝/还原到原位置/原父级已删回 root/还原时同名自动 +2/清空回收站；writeFile 改写内容/目录不可写/未知 id no-op/二进制节点写入文本降级（清 kind/blobId/mime/size）；copyNode 复制文件到目标目录内容权限一致/递归复制目录及子项/不能复制 root/不能复制到自己或子孙/目标是文件拒绝；purge 彻底删除文件/递归删除目录及子项/不能删 root/父环防御不无限递归；setMode/setOwner 改权限位/改属主；isImage/isAudio/isVideo/isMedia MIME 优先/扩展名大小写不敏感/MIME 优先于扩展名；pathOf/resolvePath/pathSegments root 路径/嵌套路径/相对路径/.. 向上一级/找不到返回 undefined/路径段数组。mock blobStore（putBlob/getBlob/deleteBlob）消除测试环境无 IndexedDB 的 unhandled rejection。"
+        },
+        {
+          "id": "M15.2",
+          "title": "AI 工具箱补完（6 个新工具）",
+          "status": "done",
+          "notes": "aiTools.ts TOOL_DEFS 新增：read_file（读文本文件内容，拒绝二进制）、close_app（按 processId 或 pid 关闭窗口）、notify（发系统通知 toast）、move_file（fileId→destFolderId）、trash_file（软删除入回收站）、set_dnd（开关勿扰模式，轻量 localStorage 布尔）。executeTool 对应 6 个 case：read_file 用 sys.fs.read 取节点返回 content/拒绝二进制；close_app 遍历 sys.proc.list() 匹配 processId/pid 后 sys.proc.close；notify 直调 sys.notify；move_file 先校验目标为目录后 sys.fs.move；trash_file 校验存在后 sys.fs.trash；set_dnd 读写 localStorage 'qz.dnd' 键。sys.ts fs 命名空间补充暴露 move、trash（AI 工具经 sys 门面访问）。"
+        },
+        {
+          "id": "M15.3",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 15 文件 183 例全绿（+53 例 vfs.test.ts）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（585ms，index 431.20kB gzip 142.90kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M14",
+      "name": "全面检查修复 + 排版优化",
+      "status": "done",
+      "scope": "toggleTheme 收口（修复 auto/schedule 下失效） + 排版/一致性广审修复 + emptyTrashWithNotify 抽共用",
+      "subtasks": [
+        {
+          "id": "M14.1",
+          "title": "toggleTheme 收口（修复 auto/schedule 模式下切换失效 P0）",
+          "status": "done",
+          "notes": "根因：Spotlight/registry/TopBar/MobileControlCenter 四处切换主题各自直接读 settings.mode 判定反面——auto/schedule 模式下 settings.mode !== 'dark'，按 'dark' 翻转后仍是 'dark'，用户在 auto+暗色下按了没反应。修复：theme.svelte.ts 新增 toggleTheme()（用 resolvedMode() 判当前实际态再翻 → auto/schedule 模式下也能正确切到反面），四处调用统一收口。settings 菜单 onClick、Spotlight ACTIONS.theme.run、TopBar toggleMode、MobileControlCenter 主题按钮全部 import 同一个 toggleTheme；MobileControlCenter 删本地同名包装函数避免无限递归。"
+        },
+        {
+          "id": "M14.2",
+          "title": "排版修复（8 处精细化）",
+          "status": "done",
+          "notes": "Spotlight.svelte：空态文案「没有匹配的结果」（原 results.length===0 整段不渲染留空白）、组间间距 pt-2 pb-1 拉开层级、calc 的 = 号单独着色 text-qz-muted；ContextMenu.svelte：kbd 加 border/bg/padding（原裸文字像普通文本）、danger hover 改红底白字（原仅文字色变红）、disabled 加 cursor-default、分割线 mx-2.5 对齐；Notifications.svelte：标题加 truncate、action 按钮 text-[11px]→text-xs；Window.svelte：标题 span 加 min-w-0（flex-1 truncate 在 min-width:auto 下不生效）；Launchpad.svelte：标签加 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]；Expose.svelte：tracking-[0.3em]→tracking-wider（中文过宽）、已最小化角标 text-[9px]→text-[10px]；Onboarding.svelte：第一页 h1 text-3xl→text-2xl（三页统一）；LoginScreen.svelte：时钟 text-6xl→text-[5rem]、日期 text-sm→text-lg（与 LockScreen 统一）。"
+        },
+        {
+          "id": "M14.3",
+          "title": "一致性修复 + emptyTrashWithNotify 抽共用",
+          "status": "done",
+          "notes": "sys.ts fs 命名空间新增 emptyTrashWithNotify()（emptyTrash + notify 文案/level/timeout 单一来源），Spotlight.svelte ACTIONS.emptytrash.run 与 registry.ts trash 菜单 onClick 全部改调 sys.fs.emptyTrashWithNotify——消除两处字面量复制（清空逻辑 + notify 文案各一份）的漂移风险。QuickSettings.svelte：fontScale step 0.05→0.01（与 Settings.svelte 一致，更细颗粒）；主色 swatch ring-2/ring-offset-1 → outline/outline-offset（与 Settings.svelte:296 一致，避免 ring 在 transparent 态仍占空间）。Dock.svelte：运行指示点 -bottom-1→-bottom-0.5（与 MobileHome 主屏一致）。"
+        },
+        {
+          "id": "M14.4",
+          "title": "TopBar 🔕 空态改 Icon + 广审剩余修复",
+          "status": "done",
+          "notes": "TopBar.svelte 通知中心空态裸 emoji 🔕 → <Icon name=\"BellOff\" size={28} strokeWidth={1.5} />（统一 Lucide 通道）。并行启动 search agent 广审 src/ 全量排版/一致性问题（16 条候选），核查后修 6 条真值得修：MobileControlCenter.svelte 主色 swatch ring-2→outline（与 QuickSettings 同款语义统一）；MobileHome.svelte 运行点 -bottom-1→-bottom-0.5（与桌面 Dock 一致）；AppStore.svelte 能力标签 text-[9px]→text-[10px]（与 AppGallery 一致）；SysMonitor.svelte 服务重启徽章 text-[9px]→text-[10px]（组件内统一）；Files.svelte 网格视图属主权限行 text-[9px]→text-[10px]（与同组件列表视图 text-[11px] 跨视图接近）；Desktop.svelte 中央 🍆 logo 加注释明确为品牌符号例外（与 TopBar:157 同款）。未修的 10 条经核查均合理：bus.svelte.ts console.error 是叶子模块不能 import logSys；sync.ts localStorage.setItem 需大改 persisted 架构；log.svelte.ts p:any 已有 eslint-disable；viewport.svelte.ts matchMedia 是 singleton 生产无影响；Files.svelte ring-2 选中态是文件项边框高亮 ≠ swatch 语义；Files.svelte/LoginScreen.svelte 角标 -bottom-1 是徽章语义 ≠ Dock 运行点；Terminal.svelte top-9 是窗口内弹层偏移 ≠ 顶栏高度；live2d.ts any 是类型收口不影响运行。"
+        },
+        {
+          "id": "M14.5",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 14 文件 130 例全绿（无新增测试——本次均为视觉/收口修复，无新纯函数）；svelte-check 0 错（5 条 tsconfig 存量警告：moduleResolution=node10 deprecation + composite/emit，与本次无关）；npm run build 成功（591ms，index 428.69kB gzip 142.18kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M13",
+      "name": "Spotlight 分组精致化 + App 菜单扩充",
+      "status": "done",
+      "scope": "groupResults 纯函数分组标题渲染 + 行尾冗余标签下线 + files/settings App 级菜单",
+      "subtasks": [
+        {
+          "id": "M13.1",
+          "title": "Spotlight 分组标题（macOS Spotlight 式）",
+          "status": "done",
+          "notes": "新建 spotlightGroups.ts 纯函数 groupResults(results, fileTitle)：按 kind 首见顺序聚合分组、组内保持原顺序、GroupItem.i 恒等于原数组下标 → selected 高亮/键盘循环/Enter 激活零改动。标题映射：calc 计算 / app 应用程序 / userapp 我的 App / action 动作 / ai 问 AI / file 由参数注入（空查询「最近打开」、有查询「文件」，两者不同时出现）。Spotlight.svelte 渲染改两层 each：组标题 px-3 pt-1.5 text-[10px] uppercase tracking-wider 灰字，行尾冗余 kind 标签（App/我的/动作/文件/AI）删除——分类语义由组标题承担，行更干净贴近 macOS；calc 的「Enter 复制」提示挪到副标题。spotlightGroups.test.ts 8 例（首见顺序/不相邻聚合/扁平索引矩阵/fileTitle 注入/默认标题/未知 kind 兜底/空数组）。"
+        },
+        {
+          "id": "M13.2",
+          "title": "App 菜单扩充（files/settings）",
+          "status": "done",
+          "notes": "registry.ts appMenus 新增：files「新建文件夹/新建文本文件」（createDir/createFile 落 root，与桌面右键同语义，notify 提示落点）；settings「切换明暗主题」（SunMoon，settings.mode toggle，与 Spotlight 动作同款）。图标 Folder/FileText/SunMoon 均已在 iconRegistry 注册。机制（M12.2 buildAppMenu 消费）零改动。"
+        },
+        {
+          "id": "M13.3",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 14 文件 130 例全绿（+8）；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（521ms，index 428.38kB gzip 142.10kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M12",
+      "name": "键盘完备性 + App 级菜单机制",
+      "status": "done",
+      "scope": "matchShortcut 统一快捷键判定 + ⌘W/⌘H 全局键位 + registry 声明式 App 菜单（顶栏消费）",
+      "subtasks": [
+        {
+          "id": "M12.1",
+          "title": "keymap.ts 快捷键判定收口 + ⌘W/⌘H 全局键位",
+          "status": "done",
+          "notes": "新建 src/shell/keymap.ts：matchShortcut(e, key) 纯函数（Ctrl 或 Cmd 双平台等价、大小写不敏感），ShortcutKey 联合类型列当前接住的键位（w/h/q/m/k）。Desktop.svelte onKey 全部 Ctrl/Cmd+字母判定改走 matchShortcut；新增 ⌘W 关闭活动窗、⌘H 隐藏其他（只最小化非活动窗）。Shortcuts.svelte 速查面板补两条说明。keymap.test.ts 6 例（双修饰等价/大小写/非修饰拒绝/键位不匹配拒绝）。"
+        },
+        {
+          "id": "M12.2",
+          "title": "App 级菜单机制（registry 声明 menus → 顶栏消费）",
+          "status": "done",
+          "notes": "registry.ts AppDef 新增可选 menus 字段（类型取 system 层 SessionMenuItem，apps→system 单向依赖不成环）；session.svelte.ts buildAppMenu 加 appItems 参数——「关于<App>」与窗口操作四项之间插 App 专属项（首项自动带分割线），并为「关闭窗口」「隐藏其他」标注 ⌘W/⌘H shortcut（与真实 handler 对应，不虚构键位）；TopBar.svelte 取 resolveAppDef(activeProc.appId)?.menus 传入。示范：回收站「清空回收站」（danger，emptyTrash+notify）、终端「新建窗口」（sys.openApp）。session.test.ts +4 例（appItems 插入位置/分割线/无 items 回退/shortcut 标注矩阵）。"
+        },
+        {
+          "id": "M12.3",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 13 文件 122 例全绿；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功。"
+        }
+      ]
+    },
+    {
+      "id": "M11",
+      "name": "图标底板一致性（squircle 全场景收尾）",
+      "status": "done",
+      "scope": "DesktopIcons 类型分色底板 + Spotlight 结果行迷你底板 + MobileHome per-app 色",
+      "subtasks": [
+        {
+          "id": "M11.1",
+          "title": "DesktopIcons 桌面图标 squircle 底板（类型分色）",
+          "status": "done",
+          "notes": "appList.ts 五色相常量 C 加 export 成全系统图标配色单一来源；新建 desktopTile.ts 纯函数 desktopTileColor(n)：文件夹→blue / 图片 7 扩展名→green / 音视频 16 扩展名→orange / 代码标记 7 扩展名→violet / 兜底 graphite，扩展名清单与 emojiFor、vfs isAudio/isVideo 逐项对齐同口径，toLowerCase 大小写不敏感。DesktopIcons.svelte 裸 Icon(36) → 44×44 squircle 底板（22.37% + 三层阴影，投影 0 3px 8px）内嵌白 Icon(22, 1.8)；拖拽/重命名/长按零改动。"
+        },
+        {
+          "id": "M11.2",
+          "title": "Spotlight 结果行迷你底板 + MobileHome per-app 色",
+          "status": "done",
+          "notes": "Spotlight.svelte：app/userapp 类结果图标外包 28×28 迷你 squircle（22.37% + inset 高光 + 轻投影），app 取 appMeta[id].color ?? C.graphite、userapp 石墨；action/file/calc/ai 保持裸图标（macOS Spotlight 同语义）。MobileHome.svelte：网格 iconTile 与 Dock 托盘背景从 accent color-mix 单色渐变改 app.color ?? C.graphite，rounded-[1.1rem]/border/shadow/active scale 保留——移动端与桌面 Dock 同色。"
+        },
+        {
+          "id": "M11.3",
+          "title": "全量回归 + 视觉验证",
+          "status": "done",
+          "notes": "新增 desktopTile.test.ts 8 例（toBe(C.xxx) 严格全等锁死单一来源）；vitest 12 文件 110 例全绿；svelte-check 0 错；build 545ms。Playwright：桌面图标 44px squircle 类型分色 ✓（文件夹蓝/文本紫·石墨/图片绿）、Spotlight App 结果 28px 迷你底板与 Dock 同色 ✓、移动端 per-app 色经源码交叉验证 ✓。"
+        }
+      ]
+    },
+    {
+      "id": "M10",
+      "name": "细节精修（菜单三态 + 边缘贴靠预览）",
+      "status": "done",
+      "scope": "MenuItem shortcut/disabled/checked 三态 + Dock 菜单去 hack + 拖窗边缘检测纯函数化与角落优先修正",
+      "subtasks": [
+        {
+          "id": "M10.1",
+          "title": "菜单系统三态（shortcut/disabled/checked）",
+          "status": "done",
+          "notes": "menu.svelte.ts MenuItem 新增 shortcut/disabled/checked 三可选字段；session.svelte.ts SessionMenuItem 同步保持结构化兼容。ContextMenu.svelte 渲染：checked → 图标列优先 Lucide Check（与 icon 同列不占新位）；disabled → opacity-40 + aria-disabled + onclick 守卫（点不动、不关菜单，macOS 心智）；shortcut → kbd ml-auto 右对齐 text-qz-muted。调用点：buildSystemMenu「锁定」标注真实快捷键 Ctrl+⌘Q（Desktop.svelte handler 核实；睡眠=锁定同效不重复标注；关闭窗口无 Cmd+W handler 按约不虚构，测试锁定）；Dock.svelte onMenu 抽纯函数 buildDockMenu（新 dockMenu.ts）——「自动隐藏 Dock」去 '✓ ' 文本 hack 改 checked，「左移/右移」边界改 disabled 常驻（分割线固定一条）；Desktop.svelte 桌面右键「桌宠」改稳定 label + checked: pet.enabled，「任务视图 (F3)」「键盘快捷键 (?)」内嵌键位移入 shortcut 字段。"
+        },
+        {
+          "id": "M10.2",
+          "title": "窗口边缘贴靠预览（纯函数化 + 角落优先修正）",
+          "status": "done",
+          "notes": "新建 snapPreview.ts 纯函数库：detectSnapZone（边缘带 8px=SNAP_EDGE_T，角落 96px 方块=SNAP_CORNER_T 且最先判定天然优先；顶部→max、左右→半屏、四角→quarter、底部 Dock 区不触发；指针越界按最近边缘判）+ zoneBounds（zone→目标矩形唯一几何来源，奇数宽度不溢出，未知 zone→null）。Window.svelte：updateSnap 接纯函数 + 四类守卫（isMobile/reducedMotion/maximized/resizing 命中即清预览），tileTo 内联几何表删除改 zoneBounds，旧常量 SNAP_T=18/CORNER_R=0.2 移除；applySnap 松手沿用 kickSettle 弹簧 + setBounds。Desktop.svelte 预览浮层定稿 bg-qz-accent/20 + border-qz-accent/40 + transition:fade 150ms（reducedMotion 归 0），区间切换 100ms 形变过渡保留。TDD 抓出并修正：首版角落误判为 y≤8，现为 96×96 双方块语义。三条路径（预览/松手落位/贴靠浮层点击）共用 zoneBounds → 预览与落位像素级一致。"
+        },
+        {
+          "id": "M10.3",
+          "title": "全量回归 + 视觉验证",
+          "status": "done",
+          "notes": "新增测试 29 例：dockMenu.test.ts 10 例（左移/右移三位 disabled 矩阵/组前单分割线/move 回调/autohide checked 无 ✓ 文本/running/pinned 分支）、session.test.ts +2 例（锁定 shortcut/系统菜单仅 1 项带快捷键 + App 菜单无 shortcut）、snapPreview.test.ts 17 例（detectSnapZone 10 + zoneBounds 7 联动）。vitest 11 文件 102 例全绿；svelte-check 0 错；build 504ms。Playwright 视觉验证：系统菜单「锁定」Ctrl+⌘Q kbd 右对齐 ✓、Dock 最左图标「左移」灰色禁用且点击不关菜单 ✓、贴靠预览 accent 半透明框与落位几何一致 ✓。两代理并行改动 Desktop.svelte（菜单/浮层不同区块）合并无冲突。"
+        }
+      ]
+    },
+    {
+      "id": "M9",
+      "name": "精致感四件套（Dock 图标 / 弹跳 / 透明顶栏 / 通知动效）",
+      "status": "done",
+      "scope": "macos27 同款 squircle 图标底板 + Dock 启动弹跳 + Tahoe 式透明顶栏 + 通知弹簧入场",
+      "subtasks": [
+        {
+          "id": "M9.1",
+          "title": "Dock/Launchpad squircle 图标底板",
+          "status": "done",
+          "notes": "appList.ts AppMeta 新增 color 字段，五色相渐变常量（blue/violet/green/orange/graphite）为每个内置 App 配专属底板。Dock.svelte 图标按钮内嵌 data-dock-tile 元素：border-radius 22.37%（macOS squircle 近似）+ 玻璃厚度三层阴影（inset 顶部镜面高光 + inset 底部暗影 + 投影）+ 白色 Lucide 图标（size 22, strokeWidth 1.8）。Launchpad.svelte 同款放大版（64px, size 30）。Dock 与 Launchpad 视觉统一，不再是裸白图标。"
+        },
+        {
+          "id": "M9.2",
+          "title": "Dock 启动弹跳动画",
+          "status": "done",
+          "notes": "Dock.svelte 新增 bounce(i)：onLaunch 时对新启动 App 的 tile 播 WAAPI 关键帧（0 → -30px@35% → 0@62% → -12px@80% → 0，620ms，cubic-bezier(0.2,0.6,0.35,1)），macOS Dock 起跳手感。移动端/reducedMotion 跳过。"
+        },
+        {
+          "id": "M9.3",
+          "title": "顶栏透明融入壁纸（Tahoe 式）",
+          "status": "done",
+          "notes": "TopBar.svelte 去 qz-glass 磨砂与分隔线，仅留顶部微暗线性渐变（黑 .18→0）+ 文字投影保证浅色壁纸可读；高度 h-9→h-8（32px，向 macOS 24px 靠拢），Desktop.svelte 窗口层 top-9 同步 top-8。窗口切换 chips 改半透明样式（活动态 accent 38% 混合 + 白 .25 描边）。顶栏 emoji（🌓/⚙️/🔔/🖼️/🔊等）全换 Lucide（Sun/Moon/Settings/Bell/Image/Volume2），仅 🍆 品牌 logo 保留。"
+        },
+        {
+          "id": "M9.4",
+          "title": "通知横幅弹簧入场（bannerIn）",
+          "status": "done",
+          "notes": "Notifications.svelte 弃用线性 fly，新增 bannerIn 自定义过渡：springEasing(stiffness 320, damping 26) 驱动 opacity + translate 28px→0 + scale .96→1 从右滑入落定，320ms；离场仍快速淡出。横幅面板追加 qz-glass-float 三层阴影。reducedMotion 归 0。"
+        },
+        {
+          "id": "M9.5",
+          "title": "全量回归 + 视觉验证",
+          "status": "done",
+          "notes": "修复 QuickSettings.svelte 构建错误：class:bg-white/15={open} 的 class: 指令不支持带 / 的 Tailwind 类名（rolldown 编译 Expected token >），改为 class 字符串内联条件。vitest 9 文件 73 例全绿；svelte-check 0 错（5 条 tsconfig 存量警告）；npm run build 成功（506ms，index 425.44kB gzip 140.99kB）。Playwright 视觉验证四项全过：squircle 底板五色渐变+白图标、点击「文件」弹跳帧捕获、顶栏透出壁纸+左右控件齐全、「提醒」App 触发通知横幅毛玻璃+彩色竖条+入场动画。"
+        }
+      ]
+    },
+    {
+      "id": "M8",
+      "name": "UI 打磨（参考 macos27/windowos）",
+      "status": "done",
+      "scope": "窗口双阴影景深 + 悬浮面板玻璃厚度三层阴影 + 红绿灯体积感/灰化 + 菜单动效微调",
+      "subtasks": [
+        {
+          "id": "M8.1",
+          "title": "窗口活动/非活动双阴影景深",
+          "status": "done",
+          "notes": "app.css :root 新增 --qz-shadow-window-active（0 24px 72px .35 + 0 2px 12px .18 + 0 0 0 .5px .25 边缘定义线，三层复合）与 --qz-shadow-window-inactive（0 10px 34px .22 + 弱边缘线）。Window.svelte 去 shadow-2xl 类改 style:box-shadow 按 active 消费 token；winTransition 全分支追加 box-shadow 过渡 → 聚焦/失焦阴影平滑切换。参考 macos27：用阴影深度表达 z 轴景深而非只靠透明度。"
+        },
+        {
+          "id": "M8.2",
+          "title": "悬浮面板玻璃厚度三层阴影（qz-glass-float）",
+          "status": "done",
+          "notes": "app.css 新增 --qz-shadow-glass-float token（inset 0 1px 0 白.18 顶部镜面高光 + inset 0 0 0 .5px 白.1 发丝描边 + 0 12px 32px 黑.35 投影）与 @utility qz-glass-float。8 处悬浮面板去 shadow-2xl 换用：Dock / Spotlight / ContextMenu / QuickSettings / TopBar 通知中心 / Shortcuts / MobileHome Dock 托盘 / App 关机确认框。窗口不用本类（走 M8.1 双阴影）。"
+        },
+        {
+          "id": "M8.3",
+          "title": "红绿灯体积感 + 非活动灰化",
+          "status": "done",
+          "notes": "WindowControls.svelte 新增 active prop（默认 true）。桌面端按钮 h-3.5→h-3（12px 与 macOS 一致）；三灯加 inset 0 0 1px 黑.25 内阴影体积感；非活动窗三灯统一灰化 #8e8e93（macOS 后台窗语义，深色 UI 用石墨灰保持可辨），背景色带 transition 平滑切换。Window.svelte 传 {active}。"
+        },
+        {
+          "id": "M8.4",
+          "title": "菜单/弹出动效微调（pop offsetY）",
+          "status": "done",
+          "notes": "motion.ts pop() 新增 offsetY 参数：>0 时 css 追加独立 translate 属性（与 scale 同属合成器属性，不与窗口定位 transform 打架）。ContextMenu 入场 110ms→120ms + offsetY:-4（macos27 menuIn 同款：opacity+scale(0.97)+translateY(-4px) 下落感）。窗口 pop 默认 offsetY:0 行为不变。"
+        },
+        {
+          "id": "M8.5",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 9 文件 73 例全绿；svelte-check 0 错 0 警；npm run build 成功（553ms，index 423.55kB gzip 140.44kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M7",
+      "name": "AI 命令面板（Spotlight 内联 agent）",
+      "status": "done",
+      "scope": "设备清单预设（GLM 本地 / minimax 工作站 / Anthropic Opus）+ Spotlight 自然语言 → function calling → 系统操作",
+      "subtasks": [
+        {
+          "id": "M7.1",
+          "title": "AI 预设共用层（applyAiPreset / matchPreset）",
+          "status": "done",
+          "notes": "aiConfig.svelte.ts：AiPreset 接口新增 short 字段（紧凑场景短名）；AI_PRESETS 三预设对应设备清单——本地 GLM-4.6V（/aiproxy/v1，免 key）、工作站 minimax（/aiproxy/lm/v1，useEnvKey 取 VITE_AI_KEY）、Anthropic Opus（官方）。applyAiPreset 抽为导出共用（useEnvKey 且环境有 key 才填，否则不动现有 key）；matchPreset（provider+baseURL+model 全等命中）供 chip 激活态。Settings.svelte 删本地实现改 import，与 Spotlight 走同一处语义不分裂。TDD：aiConfig.test.ts +5 例（本地预设不动 key / 工作站有环境 key 用之无则保留 / Anthropic 清空 baseURL / matchPreset 全等命中三预设 / 任一字段不符 null）。"
+        },
+        {
+          "id": "M7.2",
+          "title": "Spotlight 内联 AI 命令面板",
+          "status": "done",
+          "notes": "Spotlight.svelte：搜索结果末尾「问 AI」入口 activate 改为 enterAiMode 面板内执行（不再开助手窗口）。AI 模式三段式——头部（返回 ChevronLeft + AI_PRESETS 短名 chips 一键切模型 + activePreset 高亮 + 「在助手中继续」ExternalLink 对话接力：aiTurns 推入全局 chat.msgs 后 openApp('assistant')）、对话区（用户/助手气泡 + 工具调用标签 Icon+name 流式追加 + 自动滚底 + 空态引导示例命令）、输入区（Enter 发送 / aiBusy 时禁用 + Square 停止按钮 abort）。ask() 走 runAgent agent loop（ai.ts），历史转 ChatTurn 流式回显 text/tool/error 三事件。键盘语义：AI 模式 Esc 窗口级监听退搜索态（焦点在按钮上也生效）；Desktop.svelte onKey 新增 spotlight.open 短路——面板开着全局快捷键整体让路，防 Esc 误关背后活动窗。未配置 AI 时横幅引导去设置。"
+        },
+        {
+          "id": "M7.3",
+          "title": "全量回归",
+          "status": "done",
+          "notes": "vitest 9 文件 73 例全绿（motion19/session16/icons8/gesture7/settings6/aiConfig7/exposeThumb6/onboarding2/processes2）；svelte-check 0 错 0 警；npm run build 成功（490ms，index 422.98kB gzip 140.28kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M6",
+      "name": "UI 全面改造修复（F1–F8）",
+      "status": "done",
+      "scope": "移动端点击穿透阻断 Bug + 桌面端菜单/层级修复 + windowos 参考借鉴 + 移动端排版优化",
+      "subtasks": [
+        {
+          "id": "M6.1",
+          "title": "F1 移动端点击穿透修复（阻断性）",
+          "status": "done",
+          "notes": "根因：窗口层 div（absolute inset-x-0 bottom-0 isolate）即便无窗口也拦截全部指针事件，盖住 MobileHome 图标。修复：Desktop.svelte 窗口层加 pointer-events-none 让空区穿透到 Home/桌面图标；Window.svelte 窗口自身 style:pointer-events 由条件 none 改为显式 'auto'（minHidden||genie 时仍 none）恢复命中。Playwright 实测：hit-test elementFromPoint 命中图标按钮（inBtn:true），触摸点击「文件」成功开窗（windows-open=1）。"
+        },
+        {
+          "id": "M6.2",
+          "title": "F2 桌面端系统/应用菜单 + 右键菜单点击修复",
+          "status": "done",
+          "notes": "与 F1 同根因（窗口层拦截）。修复后实测：🍆系统菜单（关于/启动台/锁定/睡眠/重启/关机）、活动 App 菜单（关于<App>/关闭窗口/全部最小化/隐藏其他）、桌面右键菜单（新建文件夹/文本/便签/小组件等）均正常弹出。截图 f2-sysmenu/f2b-appmenu/f2b-desktop-ctx 验证。"
+        },
+        {
+          "id": "M6.3",
+          "title": "F3 z-index 层级管理（allocZ + normalizeZ）",
+          "status": "done",
+          "notes": "processes.svelte.ts：原 nextZ 无界 ++ 致 z-index 缓慢膨胀。新增 normalizeZ（nextZ≥500 时按当前层级重编为 1..n，相对顺序不变）+ allocZ（先规整再 ++）。launch/focus/restore/toggleMaximize/cycleWindows/cascade 六处 ++nextZ 全换 allocZ。TDD：processes.test.ts 2 例（新窗置顶+focus 提升；600 次 focus 后 max z<600 有界且相对顺序保持）。"
+        },
+        {
+          "id": "M6.4",
+          "title": "F4 Exposé 真实窗口缩略图 + 标题",
+          "status": "done",
+          "notes": "新增 exposeThumb.ts 纯函数 fitThumb（窗口真实宽高等比缩进预览框，默认上限 150×86，只缩不放，非法尺寸兜底）+ exposeThumb.test.ts 5 例。Expose.svelte 重写：标题条 appIconName(appId) 取 Lucide 图标；卡片内按真实宽高比渲染迷你窗口预览（标题栏色条+App 图标 CSS 等比缩放）；最小化窗半透明+「已最小化」角标；点击 restore 并关闭；Esc/F3 行为不变。"
+        },
+        {
+          "id": "M6.5",
+          "title": "F5 桌面右键菜单增强（参考 windowos）",
+          "status": "done",
+          "notes": "settings.svelte.ts 抽出共享 nextWallpaper()（循环切换内置壁纸），QuickSettings 改复用。Desktop.svelte onDesktopMenu：新增「整理桌面图标」（清 iconPos 存档回落自动网格）、「更换壁纸」（nextWallpaper）、「个性化设置」（openApp settings，与原打开设置合并）；全部 emoji 图标换 Lucide（Folder/FileText/NotebookPen/Puzzle/Sparkles/AppWindow/LayoutGrid/Layers/X/Keyboard）。"
+        },
+        {
+          "id": "M6.6",
+          "title": "F6 移动端窗口窄屏排版优化",
+          "status": "done",
+          "notes": "WindowControls.svelte：移动端改用真实按钮尺寸 h-5 w-5 + gap-3（占布局），桌面保持 h-3.5 w-3.5；import viewport 判定。Window.svelte 去掉 origin-left scale-[1.5] 视觉放大（会盖标题文字致「设置」只显「置」）。移动端不渲染贴靠布局浮层（无贴靠语义）。截图 f6-settings 验证标题完整显示。"
+        },
+        {
+          "id": "M6.7",
+          "title": "F7 对齐/间距检查",
+          "status": "done",
+          "notes": "截图 f7-login/f7-desktop 验证：登录页时钟/用户/提示间距合理（mb-10/gap-8/mt-10），桌面图标对齐正常，标题栏遮挡已由 F6 修复。无需额外改动。"
+        },
+        {
+          "id": "M6.8",
+          "title": "F8 全量回归",
+          "status": "done",
+          "notes": "vitest 9 文件 68 例全绿（motion19/session16/settings6/onboarding2/aiConfig2/icons?/gesture?/processes2/exposeThumb5 等）；svelte-check 0 错 0 警；npm run build 成功（475ms，index 417.59kB gzip138.81kB）。"
+        }
+      ]
+    },
+    {
+      "id": "M1",
+      "name": "视觉地基",
+      "status": "done",
+      "scope": "纯渲染层改造（U1 图标 / U2 玻璃 / U3 字体），桌面行为零回归",
+      "subtasks": [
+        {
+          "id": "M1.1",
+          "title": "U1 图标去 emoji 化 → Lucide（@lucide/svelte）",
+          "status": "done",
+          "notes": "新建 src/lib/icons.ts（emoji 存储键→Lucide 名映射，VS16 剥离，FALLBACK_ICON=Puzzle 兜底）、src/lib/iconRegistry.ts（Record<IconName, Component> 类型保证 80 个图标注册齐全，逐路径 import 保 tree-shaking）、src/lib/Icon.svelte 统一封装。存量数据（appList.icon / MenuItem.icon / 文件类型判断）保留 emoji 键不动，渲染层一律经 <Icon name> 上屏。替换覆盖 shell（DesktopIcons/Spotlight/Launchpad/QuickSettings/Widgets/StickyNotes/Expose/Shortcuts/DesktopPet/ContextMenu/Notifications）与全部 apps 组件；残余裸符号（↗/⏳/−/＋/⏰/⌨️/⌫/↑/↓/✕ 文本）一并清掉。禁碰文件（index.html/Desktop/TopBar/Dock/Window/WindowControls/DEVPLAN-UIUX.md）未动，其 emoji 留待对应负责方。"
+        },
+        {
+          "id": "M1.2",
+          "title": "U2 玻璃质感升级（qz-glass L1 + 可选折射 L2）",
+          "status": "done",
+          "notes": "qz-glass：saturate 140%→160%，新增顶部 sheen 内高光（background-image 渐变实现，不碰 box-shadow/position → 与 shadow-* 无级联冲突、零布局回归）。settings 新增 glassRefraction（默认关，入 SETTINGS_KEYS 白名单）；theme.svelte.ts 输出 --qz-glass-backdrop token，开启时前置 url(#qz-glass-refraction)；App.svelte 内联 SVG 滤镜（feTurbulence 0.012/0.02 → feGaussianBlur σ2.2 → feDisplacementMap scale 12，Liquid Glass 配方）。Settings 面板「面板透明度」后新增实验开关 UI（注明仅 Chromium 生效，其它浏览器自动退回普通磨砂）。"
+        },
+        {
+          "id": "M1.3",
+          "title": "U3 字体升级（Inter 预设）",
+          "status": "done",
+          "notes": "FONT_FAMILIES 新增 inter 预设（栈锚定系统族回退）；app.css 顶部 @import Google Fonts Inter 可变字重（opsz 14..32, wght 100..900, display=swap）；--qz-font token 机制现成，设置 → 界面字体 即选即用。"
+        },
+        {
+          "id": "M1.4",
+          "title": "测试与回归",
+          "status": "done",
+          "notes": "package.json 新增 test 脚本（vitest run）。新增 src/lib/icons.test.ts（6 例：映射落注册表/语义/VS16 等价/名直通/兜底/mappedIconName）与 src/system/settings.test.ts（6 例：Inter 预设/栈锚定/id 唯一/fontStack 查找回退/glassRefraction 白名单）。vitest 3 文件 17 例全绿；npm run check 0 错 0 警；npm run build 成功（464ms）。"
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "name": "动效",
+      "status": "done",
+      "scope": "U4 弹簧化窗口动效 + U5 Genie 神灯最小化（清账 F10）+ U6 Dock 高斯放大波形",
+      "subtasks": [
+        {
+          "id": "M2.1",
+          "title": "U4 弹簧化（真弹簧 easing + 落位回弹）",
+          "status": "done",
+          "notes": "src/lib/motion.ts 新增 springEasing（阻尼谐振子解析解：欠/临界/过阻尼三分支，归一化保证严格 0→1 端点）与 springSettleTime（≈4/(ζω0)，500/25 配方 ≈320ms）；pop 开窗过渡从线性换成真弹簧（opacity clamp 防 overshoot 越界，仍只动 opacity + 独立 scale 属性走合成器）。Window.svelte：吸附落位/贴靠/最大化⇄还原统一走 kickSettle —— 先置 settling 挂 SPRING_BEZIER（cubic-bezier(0.34,1.56,0.64,1)）260ms 几何过渡、再同一渲染批 setBounds（transition 与变化同批提交才生效）；桌面最大化从 inset:0 改为与窗口态同构的 translate+width/height:100%（px↔% 属 length-percentage 可插值），最大化⇄还原才能走同一条 transform/width/height/border-radius 过渡；startDrag/startResize 抓起即撤过渡防弹簧拖手。reducedMotion/移动端全部退化为既有瞬时行为。WindowControls 新增可选 onToggleMax 回调（Window 注入，缺省回退内核直调）。"
+        },
+        {
+          "id": "M2.2",
+          "title": "U5 Genie 神灯最小化/还原（F10 清账）",
+          "status": "done",
+          "notes": "motion.ts 新增 genieClipPath（clip-path 梯形插值纯函数：顶边留 14% 塞子对准目标、底角 t^0.6 先捏 → 任意中点上宽下窄漏斗）与 genieFrame（translate 吸入 + scale→12% + 尾段 t² 淡出，t=1 opacity 恰 0 交接最小化态无跳变）；dockIconPos 坐标表 + trackDockIcon action（Dock 图标挂载/resize 时上报 getBoundingClientRect 屏幕中心，卸载清键）。Window.svelte 用 $effect.pre 监听 proc.minimized 翻转（红绿灯/标题菜单/Dock 最小化全部/快捷键全触发源覆盖），DOM 提交前起 rAF 循环（500ms cubicInOut），genie 帧接管 transform/opacity/scale/clip-path 且 transition:none 防拖帧，首帧不闪「空内容+淡出」；中途反向（最小化动画没播完就还原）从 genieT 当前进度接续不跳变；结束帧置 genie=null 清掉 clip-path 交还 CSS 态。降级链：移动端/reducedMotion/找不到 Dock 坐标 → 既有缩放淡出；会话还原的最小化窗首帧只建基线不播动画；minHidden=proc.minimized&&!genie 保证神灯播放期 content-visibility 不提前 hidden。"
+        },
+        {
+          "id": "M2.3",
+          "title": "U6 Dock 高斯放大波形",
+          "status": "done",
+          "notes": "Dock.svelte 从阶梯式 scale（1.4/1.2/1.06）改为 magnify(d,σ,maxAmp) 高斯距离衰减（motion.ts 纯函数 1+maxAmp·exp(-(d/σ)²)，σ=48×1.2=57.6，maxAmp=0.5 → 波峰 1.5×）；容器 onpointermove 记 mouseX，各图标 bind:this 收集元素量屏幕中心算距离（transform-origin:bottom 保证水平中心不随 scale 偏移）；对称 margin-inline=(s-1)·24px 把放大量摊回布局 → 相邻图标平滑推开，自身中心不受自己的对称 margin 影响（负反馈，波形稳定不抖）；140ms 过渡阻尼。移动端（触控无悬停）/reducedMotion/拖拽重排时禁用。"
+        },
+        {
+          "id": "M2.4",
+          "title": "TDD 测试与全量回归",
+          "status": "done",
+          "notes": "新增 src/lib/motion.test.ts 19 例：弹簧端点严格 0→1/欠阻尼 overshoot∈(1.05,1.3) 后收敛/过阻尼单调无回弹/settleTime 落 200–600ms 手感带/pop opacity clamp；magnify 中心峰值 1+maxAmp/远距趋 1（d=200 避浮点下溢）/左右对称/单调衰减/非法参数回退 1；genieClipPath t=0 全矩形/t=1 底尖顶塞/中点漏斗/居中对称/底角单调收拢；genieFrame t=0 恒等/t=1 中心对靶/目标夹取/GENIE_MS=500。vitest 5 文件 52 例全绿；npm run check 0 错 0 警；npm run build 成功（446ms）。"
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "name": "仪式感",
+      "status": "done",
+      "scope": "U7 开机/登录/锁屏流程 + U8 顶栏应用菜单（系统菜单 + 活动 App 菜单 + 关机确认）",
+      "subtasks": [
+        {
+          "id": "M3.1",
+          "title": "U7 会话状态机 + 开机/登录/锁屏三屏",
+          "status": "done",
+          "notes": "新建 src/system/session.svelte.ts：SessionPhase（boot/login/desktop/locked）+ TRANSITIONS 白名单迁移表（非法迁移幂等拒绝返回 false）；bootComplete（移动端跳登录直进锁屏/桌面端去登录）、loginAs、lock/unlock（仅 desktop⇄locked）、reboot（任何阶段回 boot）；sessionPrefs.skipBoot 持久化（qz.session 独立键，不入 SETTINGS_KEYS 主题白名单）。新建 shell/boot/ 三组件：BootScreen（黑底 logo + 1.5s rAF 进度条，skipBoot/reducedMotion 直跳）、LoginScreen（壁纸 + 毛玻璃罩 + 大时钟 + users 表用户列表，点击即进桌面无密码）、LockScreen（由 M5 MobileLockScreen 泛化为两端统一：壁纸 + 大时钟 + 当前用户 + 上滑/点击/任意键解锁，移动端上滑手势复用 gesture.ts 纯函数）。App.svelte 按 phase 渲染：boot/login 不挂 Desktop（服务随 Desktop onMount 启动），desktop 与 locked 共用同一 Desktop 实例 → 锁定只盖锁屏、窗口状态原样保留。Desktop 键盘守卫：locked 阶段吞掉全部桌面快捷键；Ctrl/Cmd+Q 锁定。mobileUi.svelte.ts 移除旧移动端 locked 态（并入统一状态机）；MobileControlCenter 头部加锁定按钮（关面板 → lock()）。Settings.svelte 加「系统」小节（skipBoot 开关）。"
+        },
+        {
+          "id": "M3.2",
+          "title": "U8 顶栏系统菜单 + 活动 App 菜单 + 关机流程",
+          "status": "done",
+          "notes": "TopBar 左侧 🍆 按钮 → 系统菜单（关于本机→SysMonitor / 启动台 / 锁定 / 睡眠=锁定 / 重新启动=reload / 关机-danger，分割与危险标记符合 macOS 心智）；🍆 右侧新增粗体活动 App 名按钮（无活动窗显「桌面」）→ App 菜单（关于<App> / 关闭窗口 / 全部最小化 / 隐藏其他；无活动窗回退只剩关于本机）。菜单构建为 session.svelte.ts 里的纯函数 buildSystemMenu/buildAppMenu（注入回调，vitest 裸跑不碰 DOM）；menu.svelte.ts 新增 openMenuAt(x,y,items) 定点开菜单（视口边缘夹取）。关机流程：askShutdown → App.svelte 渲染毛玻璃确认框（z-10009）→ confirmShutdown 置 power.off → 整屏黑屏「已关机」（z-10010），点击/任意键 reload 重新开机；确认框键盘语义（Esc 取消 / Enter 确认）由 Desktop 全局 handler 统一接并吞掉其它键。"
+        },
+        {
+          "id": "M3.3",
+          "title": "TDD 测试与全量回归",
+          "status": "done",
+          "notes": "新建 src/system/session.test.ts（16 例：状态机合法全链/非法迁移拒绝/任意阶段 reboot/bootComplete/loginAs 阶段守卫/lock·unlock 幂等/关机确认三步/buildSystemMenu 序列与回调顺序/buildAppMenu 有无活动窗两态）。顺带修复 M2 遗留：motion.ts 神灯 clip 底角捏合指数 t^1.4→t^0.6（中点保持上宽下窄漏斗）、motion.test.ts 适配 Svelte 5 css 单参签名与 magnify 远距浮点下溢（400px→200px）。vitest 5 文件 52 例全绿；npm run check 0 错 0 警；npm run build 成功（502ms）。"
+        }
+      ]
+    },
+    {
+      "id": "M4",
+      "name": "收尾",
+      "status": "done",
+      "scope": "U9 桌面控制中心化 + U10 首秀引导 + M5.8 移动端图标长按菜单 + 图标映射重复清理",
+      "subtasks": [
+        {
+          "id": "M4.1",
+          "title": "U9 QuickSettings 控制中心化（桌面端）",
+          "status": "done",
+          "notes": "src/shell/QuickSettings.svelte 从小下拉升级为 macOS 风格控制中心面板：毛玻璃大面板（顶栏 ⚙️ 右上弹出，w-80≈320px），分区圆角卡片——连接区（AI 在线/勿扰 2×2 大色块 toggle，激活态 bg-qz-accent）、显示区（明/暗/自动/定时四段 + 界面缩放滑块带百分比读数）、声音区（开关 + 音量滑块，关时收起滑块）、外观区（accentPresets 主色 swatch 环形选中 + 下一张壁纸循环并清自定义壁纸）。状态全部复用 settings/dnd/soundPrefs/aiConfig 既有 store（与 M5 MobileControlCenter 同源，两端语义一致）；顶栏 ⚙️ 入口不变，自管开关 + 点外部关闭。aiConfig.svelte.ts 抽出 provider 感知纯函数 aiReady（openai 可空 key / anthropic 必填），桌面与移动控制中心共用同一判定。"
+        },
+        {
+          "id": "M4.2",
+          "title": "U10 首秀引导（全屏三页 + qz.onboarded 门控）",
+          "status": "done",
+          "notes": "新建 src/system/onboarding.svelte.ts：onboardPrefs（persisted 键 qz.onboarded，不入 SETTINGS_KEYS 主题白名单、随 qz.* 同步）+ shouldShowOnboard 纯函数（无标记/未完成 → 展示）+ onboarding 运行时开关 + openOnboarding/finishOnboarding（完成与跳过同语义，写标记后不再弹）。新建 src/shell/Onboarding.svelte 全屏沉浸式三页引导：①这是什么（logo + Web OS 定位 + 真窗口/真文件/真 Shell 三卡）②AI 能做什么（自然语言驱动系统/各 App 内嵌 AI/视觉+桌宠三要点 + 「去设置 AI」入口=完成引导并开设置）③快捷键速查（Shortcuts 精选 6 条 + 按 ? 提示）；壁纸背景 + 压暗景深、页点/上一步/下一步/开始使用、safe-area 适配；z-10002 低于锁屏（10003）→ 移动端首启 Desktop 在 locked 阶段挂载时引导先藏于锁屏下、解锁自然露出。Desktop.svelte onMount 首启门控由「processes.length===0 开 Welcome」改为 shouldShowOnboard 判定 → 未完成开全屏引导；完成后不再自动开 Welcome（Welcome App 保留，Launchpad/Dock 可手动打开看 4 卡片）。Desktop 键盘守卫：引导开着时 Esc/Enter=完成并吞掉其它键。boot/login 阶段不挂 Desktop → 引导绝不在开机阶段弹出。"
+        },
+        {
+          "id": "M4.3",
+          "title": "M5.8 移动端图标长按菜单",
+          "status": "done",
+          "notes": "gesture.ts 新增长按纯函数：LONG_PRESS_MS=500、LONG_PRESS_TOLERANCE=10、isLongPress、longPressCancelled（x/y 较大者超容差即取消）。MobileHome.svelte：网格图标与托盘图标统一 pointer 接线——pointerdown 起计时 500ms 无超容差位移 → openMenuAt 唤起全局 ContextMenu，位移/抬起/pointercancel 清计时，contextmenu preventDefault 挡系统菜单；menuFired 标记吞掉长按后随之而来的 click 防误开 App。菜单项与 Dock 右键同款项构建：打开（↗）/ 在跑时 最小化全部+关闭全部（danger）/ 固定到 Dock·从 Dock 移除（📌，isPinned/pinApp/unpinApp）。DesktopIcons.svelte：菜单项构建抽成 iconMenuItems（打开/重命名/删除，右键与长按共用同一份保证一致），startDrag 内起长按计时 → 触发即退出拖拽态（dragId=null）后 openMenuAt，onMove 超容差取消、onUp/pointercancel 清计时。"
+        },
+        {
+          "id": "M4.4",
+          "title": "清理：图标映射重复（appIcons.ts 并入 icons.ts）",
+          "status": "done",
+          "notes": "M5 的 src/shell/mobile/appIcons.ts（appId→Lucide）并入 M1 的 src/lib/icons.ts：新增 APP_TO_ICON 映射（17 个内置 App）+ appIconName（未知 appId 回退 AppWindow），语义与 EMOJI_TO_ICON 的 App 段一一对应（同一 App 两端同图标，注释互指）；MobileHome.svelte 改从 lib/icons import；appIcons.ts 删除。全系统图标数据层收敛为 icons.ts 唯一一处。"
+        },
+        {
+          "id": "M4.5",
+          "title": "TDD 测试与全量回归",
+          "status": "done",
+          "notes": "新增 8 例：onboarding.test.ts 2 例（无标记 null/undefined → 展示；done false/true 两态）、aiConfig.test.ts 2 例（openai 空 key 在线；anthropic 空白/缺失 key 离线、有 key 在线）、gesture.test.ts +2 例（长按 499/500/1000ms 阈值；容差边界 ±10 不取消、±11 取消）、icons.test.ts +2 例（17 个内置 appId 全命中显式映射且落注册表；未知 appId 回退 AppWindow）。vitest 7 文件 60 例全绿；npm run check 0 错 0 警；npm run build 成功（513ms）。"
+        }
+      ]
+    }
+  ]
+}

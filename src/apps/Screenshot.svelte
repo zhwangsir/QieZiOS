@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createBinaryFile } from '../kernel/vfs.svelte';
   import { pushNote } from '../system/notifications.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   // 截图工具（G6）：navigator.mediaDevices.getDisplayMedia 抓一帧屏幕/窗口/标签页 →
   // 画进 canvas → PNG Blob → 可保存进 VFS（根目录）或下载到本机 + 预览。
@@ -83,9 +84,9 @@
     try {
       const name = tsName();
       await createBinaryFile('root', name, blob);
-      pushNote({ title: '已保存截图', body: `${name} → 根目录`, level: 'info' });
+      pushNote({ title: '已保存截图', body: `${name} → 根目录`, level: 'info', source: '截图' });
     } catch (e) {
-      pushNote({ title: '保存失败', body: e instanceof Error ? e.message : String(e), level: 'warn' });
+      pushNote({ title: '保存失败', body: e instanceof Error ? e.message : String(e), level: 'warn', source: '截图' });
     } finally {
       saving = false;
     }
@@ -117,17 +118,17 @@
     <button
       class="rounded-md bg-qz-accent px-3 py-1.5 font-medium text-qz-accent-contrast transition hover:brightness-110 disabled:opacity-50"
       disabled={status === 'capturing' || !supported}
-      onclick={capture}>{status === 'capturing' ? '捕获中…' : status === 'preview' ? '🔄 重新截图' : '📸 截图'}</button>
+      onclick={capture}>{#if status === 'capturing'}捕获中…{:else}<span class="flex items-center gap-1"><Icon name={status === 'preview' ? '🔄' : '📸'} size={12} />{status === 'preview' ? '重新截图' : '截图'}</span>{/if}</button>
     {#if status === 'preview'}
       <span class="text-qz-muted">{dims}</span>
       <div class="ml-auto flex gap-1.5">
         <button
           class="rounded-md bg-qz-elevated px-2.5 py-1.5 transition hover:brightness-110 disabled:opacity-50"
           disabled={saving}
-          onclick={saveToVfs}>{saving ? '保存中…' : '💾 存到文件'}</button>
+          onclick={saveToVfs}>{#if saving}保存中…{:else}<span class="flex items-center gap-1"><Icon name="💾" size={12} />存到文件</span>{/if}</button>
         <button
           class="rounded-md bg-qz-elevated px-2.5 py-1.5 transition hover:brightness-110"
-          onclick={download}>⬇ 下载</button>
+          onclick={download}><span class="flex items-center gap-1"><Icon name="⬇" size={12} />下载</span></button>
       </div>
     {/if}
   </div>
@@ -137,12 +138,12 @@
     {#if status === 'preview' && previewUrl}
       <img src={previewUrl} alt="屏幕截图预览" class="max-h-full max-w-full rounded object-contain shadow-lg" />
     {:else if status === 'error'}
-      <div class="max-w-xs text-center text-sm text-red-400">⚠️ {errMsg}</div>
+      <div class="flex max-w-xs items-center justify-center gap-1 text-center text-sm text-red-400"><Icon name="⚠️" size={14} />{errMsg}</div>
     {:else if status === 'capturing'}
       <span class="text-sm text-qz-muted">等待屏幕共享授权…</span>
     {:else}
       <div class="max-w-xs space-y-2 text-center text-sm text-qz-muted">
-        <div class="text-5xl">📸</div>
+        <div class="flex justify-center text-qz-muted"><Icon name="📸" size={40} strokeWidth={1.5} /></div>
         <p>点「截图」选择要捕获的屏幕、窗口或标签页。</p>
         <p class="text-[11px]">截图可存进文件系统或下载到本机。</p>
         {#if !supported}<p class="text-red-400">当前环境不支持屏幕捕获。</p>{/if}

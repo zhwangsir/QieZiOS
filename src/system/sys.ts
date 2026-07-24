@@ -1,5 +1,5 @@
 import { processes, launch, close, focus, minimize, restore } from '../kernel/processes.svelte';
-import { children, getNode, createDir, createFile, writeFile } from '../kernel/vfs.svelte';
+import { children, getNode, createDir, createFile, writeFile, emptyTrash, move, trash } from '../kernel/vfs.svelte';
 import { emit, on } from '../kernel/bus.svelte';
 import { logSys } from '../kernel/log.svelte';
 import { settings } from './settings.svelte';
@@ -45,7 +45,21 @@ export const sys = {
     if (FILE_VIEWERS.has(appId) && typeof opts.data === 'string') pushRecentFile(opts.data);
     else if (!a.hidden) pushRecentApp(appId);
   },
-  fs: { list: children, read: getNode, mkdir: createDir, create: createFile, write: writeFile },
+  fs: {
+    list: children,
+    read: getNode,
+    mkdir: createDir,
+    create: createFile,
+    write: writeFile,
+    move,
+    trash,
+    // M14.3 清空回收站 + 通知收口（Spotlight 命令面板 / Trash App 菜单 / 桌面右键三处共用，
+    // 避免字面量复制导致提示文案/level/timeout 漂移）
+    emptyTrashWithNotify() {
+      emptyTrash();
+      sys.notify('已清空回收站', { level: 'success', timeout: 1500, source: '文件' });
+    },
+  },
   ui: {
     setTheme(p: ThemePatch) {
       if (p.mode === 'dark' || p.mode === 'light') settings.mode = p.mode;
@@ -83,8 +97,8 @@ export const sys = {
   },
   bus: { emit, on },
   log: logSys,
-  // 发一条系统通知（通知中心服务会接住并弹 toast）
-  notify(title: string, opts: { body?: string; level?: 'info' | 'success' | 'warn' | 'error'; timeout?: number } = {}) {
+  // 发一条系统通知（通知中心服务会接住并弹 toast）；source = 来源 App 中文名（通知中心按它分组）
+  notify(title: string, opts: { body?: string; level?: 'info' | 'success' | 'warn' | 'error'; timeout?: number; source?: string } = {}) {
     emit('notify', { title, ...opts });
   },
 };

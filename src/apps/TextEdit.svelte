@@ -5,6 +5,7 @@
   import { complete } from '../system/ai';
   import { aiConfig } from '../system/aiConfig.svelte';
   import { renderMarkdown } from '../lib/markdown';
+  import Icon from '../lib/Icon.svelte';
 
   // data = 要打开的文件 id（由文件管理器在 launch 时通过启动参数传入）
   let { data }: { data?: unknown } = $props();
@@ -23,28 +24,33 @@
   let aiBusy = $state(false);
   let aiOut = $state('');
   let aiLabel = $state('');
+  let aiIcon = $state('✨');
   let ctrl: AbortController | null = null;
 
   // 每个动作 = 一段任务系统提示。complete() 用它替换默认提示 → 结果聚焦、可控。
   const ACTIONS = [
     {
       key: 'polish',
-      label: '✨ 润色',
+      icon: '✨',
+      label: '润色',
       sys: '你是中文写作助手。在保持原意与语言的前提下润色下面的文本，使其更通顺自然。只输出润色后的正文，不要解释、不要加引号或代码块。',
     },
     {
       key: 'summary',
-      label: '📝 总结',
+      icon: '📝',
+      label: '总结',
       sys: '你是中文写作助手。用简洁的要点总结下面的文本。只输出总结本身，不要解释。',
     },
     {
       key: 'continue',
-      label: '➡️ 续写',
+      icon: '➡️',
+      label: '续写',
       sys: '你是中文写作助手。承接下面的文本自然地往下续写一段，风格保持一致。只输出新增的续写内容，不要重复原文。',
     },
     {
       key: 'en',
-      label: '🌐 译英',
+      icon: '🌐',
+      label: '译英',
       sys: 'You are a professional translator. Translate the following text into natural, fluent English. Output only the translation, nothing else.',
     },
   ];
@@ -55,6 +61,7 @@
     if (!src) {
       aiOpen = true;
       aiLabel = a.label;
+      aiIcon = a.icon;
       aiOut = '（文件是空的，先写点内容再让 AI 处理）';
       return;
     }
@@ -62,12 +69,13 @@
     aiBusy = true;
     aiOut = '';
     aiLabel = a.label;
+    aiIcon = a.icon;
     ctrl = new AbortController();
     try {
       await complete(src, { system: a.sys, onText: (t) => (aiOut += t), signal: ctrl.signal });
     } catch (e) {
       if (!(e instanceof Error && e.name === 'AbortError'))
-        aiOut += (aiOut ? '\n\n' : '') + '⚠️ ' + (e instanceof Error ? e.message : String(e));
+        aiOut += (aiOut ? '\n\n' : '') + (e instanceof Error ? e.message : String(e));
     }
     aiBusy = false;
   }
@@ -234,7 +242,7 @@ ${renderMarkdown(content)}
     <!-- 顶部工具条（常驻）：Markdown 编辑/预览切换（仅 md） + 导出到本机 -->
     <div class="flex shrink-0 items-center gap-2 border-b border-qz-border px-2 py-1.5 text-[11px]">
       {#if isMarkdown}
-        <span class="shrink-0 text-qz-muted">📝 Markdown</span>
+        <span class="flex shrink-0 items-center gap-1 text-qz-muted"><Icon name="📝" size={12} />Markdown</span>
         <div class="flex shrink-0 overflow-hidden rounded ring-1 ring-qz-border">
           <button
             class="px-2 py-0.5 transition"
@@ -256,7 +264,7 @@ ${renderMarkdown(content)}
         <button
           class="rounded bg-qz-elevated px-2 py-1 transition hover:brightness-110"
           title="导出到本机"
-          onclick={() => exportFile(false)}>⬇ 导出</button>
+          onclick={() => exportFile(false)}><span class="flex items-center gap-1"><Icon name="⬇" size={11} />导出</span></button>
         {#if isMarkdown}
           <button
             class="rounded bg-qz-elevated px-2 py-1 transition hover:brightness-110"
@@ -274,14 +282,14 @@ ${renderMarkdown(content)}
           <button
             class="rounded bg-qz-elevated px-2 py-1 text-[11px] transition hover:brightness-110 disabled:opacity-40"
             disabled={aiBusy}
-            onclick={() => runAi(a)}>{a.label}</button>
+            onclick={() => runAi(a)}><span class="flex items-center gap-1"><Icon name={a.icon} size={11} />{a.label}</span></button>
         {/each}
       </div>
     {/if}
 
     {#if !writable}
-      <div class="shrink-0 border-b border-qz-border bg-amber-500/15 px-3 py-1 text-[11px] text-amber-300">
-        🔒 只读 —— 当前用户对此文件无写权限（chmod +w 或改属主后可编辑）
+      <div class="flex shrink-0 items-center gap-1 border-b border-qz-border bg-amber-500/15 px-3 py-1 text-[11px] text-amber-300">
+        <Icon name="🔒" size={11} />只读 —— 当前用户对此文件无写权限（chmod +w 或改属主后可编辑）
       </div>
     {/if}
 
@@ -302,8 +310,8 @@ ${renderMarkdown(content)}
           class="min-w-0 flex-1 rounded bg-qz-elevated px-2 py-1 outline-none ring-1 ring-transparent focus:ring-qz-accent"
         />
         <span class="shrink-0 tabular-nums text-qz-muted">{totalMatches ? `${Math.min(curMatch, totalMatches)}/${totalMatches}` : '0/0'}</span>
-        <button class="rounded px-1.5 py-1 hover:bg-qz-elevated disabled:opacity-40" disabled={!totalMatches} onclick={() => gotoMatch(-1)} title="上一个">↑</button>
-        <button class="rounded px-1.5 py-1 hover:bg-qz-elevated disabled:opacity-40" disabled={!totalMatches} onclick={() => gotoMatch(1)} title="下一个">↓</button>
+        <button class="grid place-items-center rounded px-1.5 py-1 hover:bg-qz-elevated disabled:opacity-40" disabled={!totalMatches} onclick={() => gotoMatch(-1)} title="上一个"><Icon name="↑" size={12} /></button>
+        <button class="grid place-items-center rounded px-1.5 py-1 hover:bg-qz-elevated disabled:opacity-40" disabled={!totalMatches} onclick={() => gotoMatch(1)} title="下一个"><Icon name="↓" size={12} /></button>
         <label class="flex shrink-0 items-center gap-1 text-qz-muted" title="区分大小写">
           <input type="checkbox" bind:checked={caseSensitive} /> Aa
         </label>
@@ -322,7 +330,7 @@ ${renderMarkdown(content)}
           <button class="rounded px-2 py-1 hover:bg-qz-elevated" onclick={replaceCurrent}>替换</button>
           <button class="rounded px-2 py-1 hover:bg-qz-elevated" onclick={replaceAll}>全部</button>
         {/if}
-        <button class="rounded px-1.5 py-1 text-qz-muted hover:bg-qz-elevated" onclick={() => { findOpen = false; textarea?.focus(); }} title="关闭 (Esc)">✕</button>
+        <button class="grid place-items-center rounded px-1.5 py-1 text-qz-muted hover:bg-qz-elevated" onclick={() => { findOpen = false; textarea?.focus(); }} title="关闭 (Esc)"><Icon name="✕" size={11} /></button>
       </div>
     {/if}
 
@@ -351,7 +359,7 @@ ${renderMarkdown(content)}
     {#if aiOpen}
       <div class="flex max-h-[45%] shrink-0 flex-col border-t border-qz-border bg-qz-surface/60">
         <div class="flex items-center justify-between gap-2 px-3 py-1.5">
-          <span class="truncate text-[11px] text-qz-muted">{aiLabel}{aiBusy ? ' · 生成中…' : ''}</span>
+          <span class="flex items-center gap-1 truncate text-[11px] text-qz-muted"><Icon name={aiIcon} size={11} />{aiLabel}{aiBusy ? ' · 生成中…' : ''}</span>
           <div class="flex shrink-0 gap-1">
             {#if aiBusy}
               <button class="rounded px-2 py-0.5 text-[11px] hover:bg-qz-elevated" onclick={stopAi}>停止</button>

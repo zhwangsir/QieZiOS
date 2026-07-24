@@ -4,6 +4,7 @@
   import { CAPABILITIES, ALL_CAP_KEYS, capsToTools } from '../system/appSdk';
   import Sandbox from './Sandbox.svelte';
   import CodeMirror from './CodeMirror.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   // data.editAppId = 从「我的 App」点编辑进来 → 载入那个 App 的代码、之后保存即更新它
   let { data }: { data?: unknown } = $props();
@@ -84,19 +85,19 @@
 <div class="flex h-full flex-col text-qz-text">
   <!-- 工具栏 -->
   <div class="flex shrink-0 items-center gap-2 border-b border-qz-border px-3 py-1.5">
-    <span class="text-xs text-qz-muted">🛠️ 开发者{editName ? ` · 编辑「${editName}」` : ''}</span>
+    <span class="flex items-center gap-1 text-xs text-qz-muted"><Icon name="🛠️" size={12} />开发者{editName ? ` · 编辑「${editName}」` : ''}</span>
     <button
       class="rounded-md bg-qz-accent px-2.5 py-1 text-xs font-medium text-qz-accent-contrast transition-transform active:scale-95"
-      onclick={run}>▶ 运行</button>
+      onclick={run}><span class="flex items-center gap-1"><Icon name="Play" size={11} />运行</span></button>
     <button class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110" onclick={openSave}
-      >💾 {editId ? '更新 App' : '保存为 App'}</button>
+      ><span class="flex items-center gap-1"><Icon name="💾" size={12} />{editId ? '更新 App' : '保存为 App'}</span></button>
     <button class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110" onclick={resetCode}
       >重置示例</button>
     <button
       class="rounded-md bg-qz-elevated px-2 py-1 text-xs hover:brightness-110"
       class:ring-1={showCaps}
       class:ring-qz-accent={showCaps}
-      onclick={() => (showCaps = !showCaps)}>🔐 能力 {capKeys.length}/{ALL_CAP_KEYS.length}</button>
+      onclick={() => (showCaps = !showCaps)}><span class="flex items-center gap-1"><Icon name="🔐" size={12} />能力 {capKeys.length}/{ALL_CAP_KEYS.length}</span></button>
     <button
       class="ml-auto rounded-md px-2 py-1 text-xs text-qz-muted hover:bg-qz-elevated"
       onclick={() => (showHelp = !showHelp)}>{showHelp ? '收起' : '？SDK'}</button>
@@ -114,7 +115,7 @@
           class:bg-qz-elevated={!capKeys.includes(c.key)}
           class:opacity-50={!capKeys.includes(c.key)}
           title={c.desc}
-          onclick={() => toggleCap(c.key)}>{c.icon} {c.label}</button>
+          onclick={() => toggleCap(c.key)}><span class="flex items-center gap-1"><Icon name={c.icon} size={11} />{c.label}</span></button>
       {/each}
     </div>
   {/if}

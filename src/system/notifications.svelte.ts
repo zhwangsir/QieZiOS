@@ -9,6 +9,8 @@ export interface Note {
   body?: string;
   level: NoteLevel;
   ts: number;
+  // 来源 App 的中文名（如 '文件'、'截图'），通知中心按它分组。旧持久化数据没有该字段 → 消费方兜底归 '系统'。
+  source?: string;
   // 可选操作按钮（如「撤销」）。只在活动 toast 上有意义；进历史/持久化时剥掉（函数不序列化）。
   action?: { label: string; run: () => void };
 }
@@ -29,10 +31,11 @@ export function pushNote(p: {
   body?: string;
   level?: NoteLevel;
   timeout?: number;
+  source?: string;
   action?: { label: string; run: () => void };
 }): number {
   const id = ++nid;
-  const note: Note = { id, title: p.title, body: p.body, level: p.level ?? 'info', ts: Date.now(), action: p.action };
+  const note: Note = { id, title: p.title, body: p.body, level: p.level ?? 'info', ts: Date.now(), source: p.source, action: p.action };
   // 勿扰模式：不弹 live toast，但仍记入历史（通知中心可回看，不丢通知）
   if (!dnd.enabled) {
     notifications.items.push(note);
@@ -60,4 +63,13 @@ export function markNotesSeen(): void {
 }
 export function clearHistory(): void {
   noteHistory.items = [];
+}
+// 通知中心单条清除（macOS 式：悬停某条出现 ✕）
+export function removeFromHistory(id: number): void {
+  const i = noteHistory.items.findIndex((n) => n.id === id);
+  if (i !== -1) noteHistory.items.splice(i, 1);
+}
+// 通知中心按来源整组清除（macOS 式：悬停组头出现 ✕）
+export function removeSourceFromHistory(source: string): void {
+  noteHistory.items = noteHistory.items.filter((n) => (n.source ?? '系统') !== source);
 }

@@ -2,8 +2,11 @@
   import { untrack } from 'svelte';
   import { vfs, children, rename, trash, move, isImage, isMedia, type VNode } from '../kernel/vfs.svelte';
   import { sys } from '../system/sys';
-  import { openMenu } from './menu.svelte';
+  import { openMenu, openMenuAt, type MenuItem } from './menu.svelte';
+  import { LONG_PRESS_MS, longPressCancelled } from './mobile/gesture';
   import { iconPos } from './iconLayout.svelte';
+  import { desktopTileColor } from './desktopTile';
+  import Icon from '../lib/Icon.svelte';
 
   // 桌面上显示 VFS 根目录的项
   const items = $derived(children('root'));
@@ -33,7 +36,7 @@
   function commitIconRename(id: string) {
     if (renamingId !== id) return;
     if (!rename(id, renameText) && renameText.trim()) {
-      sys.notify('重命名失败', { body: '桌面已有同名项', level: 'warn' });
+      sys.notify('重命名失败', { body: '桌面已有同名项', level: 'warn', source: '文件' });
     }
     renamingId = null;
   }
@@ -59,6 +62,16 @@
     else sys.openApp('textedit', { title: n.name, data: n.id });
   }
 
+  // M5.8 长按菜单（触屏）：pointerdown 起计时 ≥500ms 且位移未超容差 → 唤起与右键相同的全局菜单。
+  // 超容差位移/抬起即取消计时；菜单一旦弹出就退出拖拽态（dragId=null），避免菜单开着图标还在跟手。
+  let pressTimer: ReturnType<typeof setTimeout> | undefined;
+  function cancelPress() {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = undefined;
+    }
+  }
+
   function startDrag(e: PointerEvent, n: VNode, i: number) {
     if (e.button !== 0 || renamingId === n.id) return; // 仅左键；重命名时不拖
     dragId = n.id;
@@ -66,8 +79,16 @@
     const p = posOf(n, i);
     sx = e.clientX; sy = e.clientY; ox = p.x; oy = p.y;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const x = e.clientX;
+    const y = e.clientY;
+    pressTimer = setTimeout(() => {
+      pressTimer = undefined;
+      dragId = null;
+      openMenuAt(x, y, iconMenuItems(n));
+    }, LONG_PRESS_MS);
   }
   function onMove(e: PointerEvent) {
+    if (pressTimer && longPressCancelled(e.clientX - sx, e.clientY - sy)) cancelPress();
     if (!dragId) return;
     moved = true;
     nx = Math.max(0, ox + (e.clientX - sx));
@@ -92,6 +113,7 @@
   }
 
   function onUp(e: PointerEvent) {
+    cancelPress(); // 抬起未达长按阈值 → 取消计时（已达阈值则计时器已自然清空）
     if (dragId) {
       const targetId = folderAt(e.clientX, e.clientY);
       if (targetId) move(dragId, targetId); // 松手在某文件夹图标上 → 移入它
@@ -101,8 +123,9 @@
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
   }
 
-  function onMenu(e: MouseEvent, n: VNode) {
-    openMenu(e, [
+  // 桌面图标的菜单项（右键与 M5.8 长按共用同一份构建，保证两端菜单一致）
+  function iconMenuItems(n: VNode): MenuItem[] {
+    return [
       { label: '打开', icon: n.type === 'dir' ? '📂' : '↗', onClick: () => open(n) },
       {
         label: '重命名',
@@ -119,7 +142,11 @@
         separator: true,
         onClick: () => trash(n.id),
       },
-    ]);
+    ];
+  }
+
+  function onMenu(e: MouseEvent, n: VNode) {
+    openMenu(e, iconMenuItems(n));
   }
 
   function emojiFor(n: VNode): string {
@@ -146,11 +173,18 @@
       onpointerdown={(e) => startDrag(e, n, i)}
       onpointermove={onMove}
       onpointerup={onUp}
+      onpointercancel={cancelPress}
       onkeydown={(e) => {
         if (e.key === 'Enter') open(n);
       }}
     >
-      <div class="text-4xl drop-shadow-lg">{emojiFor(n)}</div>
+      <!-- M9.1 同款 squircle 底板（22.37% + 三层阴影，投影稍弱），底板色按文件类型走五色相；
+           图标名仍走 emojiFor（Icon 组件映射 Lucide），白色内嵌 -->
+      <span
+        class="grid h-11 w-11 place-items-center text-white"
+        style="border-radius: 22.37%; background: {desktopTileColor(n)};
+               box-shadow: inset 0 1px 1px rgb(255 255 255 / 0.28), inset 0 -1px 2px rgb(0 0 0 / 0.18), 0 3px 8px rgb(0 0 0 / 0.35);"
+      ><Icon name={emojiFor(n)} size={22} strokeWidth={1.8} /></span>
       {#if renamingId === n.id}
         <!-- svelte-ignore a11y_autofocus -->
         <input

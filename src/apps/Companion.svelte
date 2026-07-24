@@ -2,6 +2,7 @@
   import { createPet, type Pet } from '../lib/live2d';
   import { companion, DEFAULT_MODEL } from '../system/companion.svelte';
   import { pet as desktopPet } from '../system/pet.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   let canvas = $state<HTMLCanvasElement>();
   let container = $state<HTMLElement>();
@@ -34,7 +35,7 @@
 
 <div class="flex h-full flex-col text-qz-text">
   <div class="flex shrink-0 items-center gap-2 border-b border-qz-border px-2 py-1.5">
-    <span class="shrink-0 text-xs text-qz-muted">🧚 伙伴</span>
+    <span class="flex shrink-0 items-center gap-1 text-xs text-qz-muted"><Icon name="🧚" size={12} />伙伴</span>
     <input
       class="min-w-0 flex-1 rounded-md bg-qz-surface px-2 py-1 text-[11px] outline-none ring-1 ring-qz-border focus:ring-qz-accent"
       placeholder="模型 .model3.json URL"
@@ -50,7 +51,7 @@
     <button
       class="shrink-0 rounded-md bg-qz-elevated px-2 py-1 text-[11px] hover:brightness-110"
       title="把桌宠浮到桌面上"
-      onclick={() => (desktopPet.enabled = true)}>📌 钉到桌面</button>
+      onclick={() => (desktopPet.enabled = true)}><span class="flex items-center gap-1"><Icon name="📌" size={11} />钉到桌面</span></button>
   </div>
 
   <div bind:this={container} class="relative min-h-0 flex-1">
@@ -61,7 +62,7 @@
       </div>
     {:else if status === 'error'}
       <div class="absolute inset-0 grid place-items-center px-4 text-center text-xs text-red-400">
-        ⚠️ {errMsg}<br /><span class="text-qz-muted">换个 .model3.json URL 再试</span>
+        <span class="flex items-center justify-center gap-1"><Icon name="⚠️" size={13} />{errMsg}</span><span class="text-qz-muted">换个 .model3.json URL 再试</span>
       </div>
     {/if}
   </div>

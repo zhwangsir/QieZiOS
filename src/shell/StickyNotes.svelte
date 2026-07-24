@@ -1,5 +1,6 @@
 <script lang="ts">
   import { stickyNotes, removeNote, cycleColor, type StickyNote } from './notes.svelte';
+  import Icon from '../lib/Icon.svelte';
 
   // 拖动状态：仅顶栏手柄可拖（与文本编辑互不干扰）
   let drag: { id: string; sx: number; sy: number; ox: number; oy: number } | null = null;
@@ -42,8 +43,8 @@
         onpointermove={move}
         onpointerup={end}
       >
-        <button class="rounded px-1 text-[11px] hover:bg-black/10" title="换颜色" onclick={() => cycleColor(n.id)}>🎨</button>
-        <button class="rounded px-1 text-[11px] text-black/60 hover:bg-black/10" title="删除便签" onclick={() => removeNote(n.id)}>✕</button>
+        <button class="grid place-items-center rounded px-1 text-[11px] hover:bg-black/10" title="换颜色" onclick={() => cycleColor(n.id)}><Icon name="🎨" size={12} /></button>
+        <button class="grid place-items-center rounded px-1 text-[11px] text-black/60 hover:bg-black/10" title="删除便签" onclick={() => removeNote(n.id)}><Icon name="✕" size={11} /></button>
       </div>
       <textarea
         class="h-28 w-full resize-none bg-transparent px-2 py-1.5 text-[13px] leading-snug text-[#3a3320] outline-none placeholder:text-black/30"

@@ -1,4 +1,5 @@
 import { persisted } from '../kernel/persist.svelte';
+import { wallpapers } from './wallpaper';
 
 // ───────────────────────────────────────────────────────────
 // 用户设置 —— 高自由度/自定义的「真相源」
@@ -19,6 +20,7 @@ export interface Settings {
   accent: string;           // 主色（#hex）
   radius: number;           // 全局圆角（px）
   blur: number;             // 磨砂模糊（px）
+  glassRefraction: boolean; // 玻璃折射（U2，默认关）：qz-glass 叠 SVG 位移滤镜，仅 Chromium 生效
   surfaceOpacity: number;   // 面板半透明度（0~1）
   accentTint: number;       // 主色渗入表面色的比例（0~0.15）→ 整体配色更统一；0=纯中性表面
   fontScale: number;        // 界面缩放（根字号倍率，0.85~1.2）
@@ -35,6 +37,7 @@ const defaults: Settings = {
   accent: '#8b5cf6',
   radius: 14,
   blur: 18,
+  glassRefraction: false,
   surfaceOpacity: 0.66,
   accentTint: 0,
   fontScale: 1,
@@ -48,6 +51,8 @@ const defaults: Settings = {
 // 字体也能看出区别。等宽用 font-mono 工具类的元素（终端等）不受全局字体影响。
 export const FONT_FAMILIES: { id: string; name: string; stack: string }[] = [
   { id: 'system', name: '系统默认', stack: 'system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif' },
+  // U3：Inter（app.css 顶部 @import Google Fonts 可变字重）；缺网/加载失败自动落到系统栈
+  { id: 'inter', name: 'Inter', stack: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif' },
   { id: 'sans', name: '无衬线', stack: '"Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif' },
   { id: 'serif', name: '衬线', stack: 'Georgia, "Times New Roman", "Songti SC", "SimSun", serif' },
   { id: 'mono', name: '等宽', stack: 'ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace' },
@@ -73,3 +78,11 @@ export const accentPresets = [
   '#ef4444', // 红
   '#ec4899', // 粉
 ];
+
+// 切换到「下一个」内置壁纸（循环）。由 QuickSettings / 桌面右键菜单共用。
+export function nextWallpaper() {
+  const ids = wallpapers.map((w) => w.id);
+  const i = ids.indexOf(settings.wallpaperId);
+  settings.customWallpaper = null; // 清掉自定义壁纸 → 预设可见
+  settings.wallpaperId = ids[(i + 1) % ids.length];
+}
