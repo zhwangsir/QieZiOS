@@ -71,12 +71,12 @@ export function evalArith(src: string, env: Record<string, string>, positional: 
       return /^0[xX]/.test(m[0]) ? parseInt(m[0], 16) : parseInt(m[0], 10);
     }
     if (/[A-Za-z_]/.test(c)) return ident();
-    err(`意外的字符 '${c}'`);
+    return err(`意外的字符 '${c}'`);
   }
 
   function ident(): number {
     const m = /^[A-Za-z_]\w*/.exec(s.slice(i));
-    if (!m) err('变量名无效');
+    if (!m) return err('变量名无效');
     i += m[0].length;
     const name = m[0];
     // M46.3 后置 ++ / --：返回旧值，变量自增/自减（副作用写入 env）。
@@ -358,13 +358,14 @@ export function evalArith(src: string, env: Record<string, string>, positional: 
           case '+=': v = base + r; break;
           case '-=': v = base - r; break;
           case '*=': v = base * r; break;
-          case '/=': if (r === 0) err('除数为 0'); v = Math.trunc(base / r); break;
-          case '%=': if (r === 0) err('除数为 0'); v = base % r; break;
+          case '/=': if (r === 0) return err('除数为 0'); v = Math.trunc(base / r); break;
+          case '%=': if (r === 0) return err('除数为 0'); v = base % r; break;
           case '<<=': v = base << r; break;
           case '>>=': v = base >> r; break;
           case '&=': v = base & r; break;
           case '|=': v = base | r; break;
           case '^=': v = base ^ r; break;
+          default: return err(`未知赋值运算符: ${op}`);
         }
         env[name] = String(v);
         return v;

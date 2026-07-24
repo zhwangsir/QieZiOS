@@ -2775,7 +2775,7 @@ const COMMANDS: Record<string, CmdFn> = {
           deleted = true;
           break; // d 立即进入下一周期
         } else if (cmd.op === 'p') out.push(ps);
-        else ps = ps.replace(cmd.re, cmd.rep); // s
+        else if (cmd.op === 's') ps = ps.replace(cmd.re, cmd.rep);
       }
       if (!deleted && !quiet) out.push(ps);
     }
@@ -4227,7 +4227,8 @@ const COMMANDS: Record<string, CmdFn> = {
     let tmpId = resolvePath('root', '/tmp');
     if (!tmpId || getNode(tmpId)?.type !== 'dir') {
       const rootId = resolvePath('root', '/');
-      tmpId = createDir(rootId, 'tmp');
+      if (!rootId) return { out: '', err: 'mktemp: 无法定位根目录', code: 2 };
+      tmpId = createDir(rootId, 'tmp')!;
     }
     const name = '.tmp_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
     if (makeDir) createDir(tmpId, name);

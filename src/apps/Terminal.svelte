@@ -133,7 +133,7 @@
         if (res.exit) {
           // M52.1 exit：关闭终端窗口。先把 exit 退出码写入 ctx，再调 sys.proc.close 关窗。
           ctx.code = res.code;
-          sys.proc.close(ctx.pid);
+          sys.proc.close(String(ctx.pid));
           return;
         }
         if (res.clear) lines = [];

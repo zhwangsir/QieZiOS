@@ -1,5 +1,18 @@
 # TEST_LOG
 
+## 2026-07-24 · M55「发布候选 · svelte-check 零错误」
+
+**回归**：svelte-check **0 errors** 1 warning（既有）· vitest 26 文件 1178 例全绿 · build 成功。
+
+**修复 15 个类型错误**（4 文件）：
+
+- **arith.ts（5 个）**：`primary()` 末尾 `err()`→`return err()` 让 TS 收窄 never；`ident()` `if(!m) err()`→`return err()` 消除 m possibly null；switch 加 `default: return err()` 修复 `v` used before assigned。
+- **shell.ts（3 个）**：sed 替换 `else`→`else if (cmd.op === 's')` 收窄联合类型；mktemp `createDir()!` 非空断言 + rootId 空检查。
+- **histexpand.ts（6 个）**：`apply()` 返回类型 `ApplyResult | null`→`{ ok: false; error: string } | null`，成功返回 null、失败只返回错误分支。
+- **Terminal.svelte（1 个）**：`sys.proc.close(ctx.pid)`→`sys.proc.close(String(ctx.pid))`。
+
+---
+
 ## 2026-07-24 · M54「UI/UX 完善与性能优化」（Files 键盘导航 · 神灯确认 · 壁纸轮播 · 拖文件进 App · 小组件 · 窗口置顶 · 重渲染审计）
 
 **回归**：vitest 26 文件 1178 例全绿；build 成功（646ms）。

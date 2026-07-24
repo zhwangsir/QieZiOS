@@ -1,9 +1,22 @@
 {
   "project": "QieZiOS",
   "updatedAt": "2026-07-24",
-  "currentMilestone": "M54",
+  "currentMilestone": "M55",
   "status": "done",
   "milestones": [
+    {
+      "id": "M55",
+      "name": "发布候选 · svelte-check 零错误",
+      "status": "done",
+      "scope": "修复全部 15 个 svelte-check 类型错误，达成零错误发布候选标准。",
+      "subtasks": [
+        { "id": "M55.1", "title": "arith.ts 5 个类型错误", "status": "done", "notes": "primary() 末尾 err()→return err() 让 TS 收窄 never；ident() if(!m) err()→return err() 消除 m possibly null；switch 加 default return err() 修复 v used before assigned（/=/+=/-=/*=//=/%=/<<=>>/=&=/|=/^= 全覆盖）。" },
+        { "id": "M55.2", "title": "shell.ts 3 个类型错误", "status": "done", "notes": "sed 替换：else 分支加 cmd.op==='s' 收窄联合类型访问 re/rep；mktemp：createDir 返回 string|undefined 加 ! 非空断言 + rootId 空检查提前返回错误。" },
+        { "id": "M55.3", "title": "histexpand.ts 6 个 ApplyResult 类型错误", "status": "done", "notes": "apply() 返回类型从 ApplyResult|null 改为 {ok:false;error:string}|null——成功时返回 null，失败时只返回错误分支，与 HistExpandResult 的 ok:false 兼容。" },
+        { "id": "M55.4", "title": "Terminal.svelte 1 个 number→string 类型错误", "status": "done", "notes": "sys.proc.close(ctx.pid) → sys.proc.close(String(ctx.pid))，ctx.pid 是 number 而 close 要 string。" },
+        { "id": "M55.5", "title": "全量回归验证", "status": "done", "notes": "svelte-check 0 errors 1 warning（既有 state_referenced_locally）；vitest 26 文件 1178 例全绿；build 成功。" }
+      ]
+    },
     {
       "id": "M54",
       "name": "UI/UX 完善与性能优化（Files 键盘导航 · 神灯动画确认 · 壁纸轮播 · 拖文件进 App · 小组件扩展 · 窗口置顶 · 重渲染热点审计）",

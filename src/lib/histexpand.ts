@@ -223,7 +223,7 @@ export function histExpand(line: string, history: readonly string[]): HistExpand
       continue;
     }
     // 事件找到后统一走词指示符/修饰符子流程，再拼回输出
-    const apply = (cmd: string, j: number, first?: string): ApplyResult | null => {
+    const apply = (cmd: string, j: number, first?: string): { ok: false; error: string } | null => {
       const r = applyDesignatorsAndMods(cmd, line, j, first);
       if (!r.ok) return r;
       out += r.text;
