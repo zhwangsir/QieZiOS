@@ -1,9 +1,31 @@
 {
   "project": "QieZiOS",
-  "updatedAt": "2026-07-24",
-  "currentMilestone": "M55",
+  "updatedAt": "2026-08-08",
+  "currentMilestone": "M57",
   "status": "done",
   "milestones": [
+    {
+      "id": "M57",
+      "name": "LLM 链路修复 · cloud llm_pool 指回活端口 + euryale-70b 预设接入",
+      "status": "done",
+      "scope": "修复 P1 遗留：助手集群 LLM 链路全断。排查发现认知修正——集群从未部署 LiteLLM（用户画像过时信息），cloud nginx 是按路径直接反代：/llm→spark01 vLLM、/lm→openclaw01 LM Studio、/exo→Mac Studio 集群、/comfy→workstation ComfyUI，Bearer 鉴权在 nginx 层。真实断链：llm_pool 指向 spark01:30000（历史代理端口，已死），而 vLLM 实际在 :8000。修复后接入 QieZiOS 预设并完成端到端验证。",
+      "subtasks": [
+        { "id": "M57.1", "title": "cloud llm_pool 上游修复（:30000 → :8000）", "status": "done", "notes": "链路定位：dgmt.top/llm → llm_pool（lab.wineryz.top.conf 定义）→ 100.81.235.124:30000 死端口（502）。spark01 上 vLLM :8000 健康（llama-3.3-70b-abliterated-fp8，max_model_len 32768）。备份 lab.wineryz.top.conf.bak-pre-vllm8000 后 sed 改端口，docker exec 1Panel-openresty-GJJ7 nginx -t 通过 + reload。https://dgmt.top/llm/v1/models 恢复 200。另查明：/lm 链路（openclaw01:11234 LM Studio）断因 openclaw01 Tailscale 掉线 + LM Studio 未运行（LAN 可达），未修复——非当前必需。" },
+        { "id": "M57.2", "title": "euryale-70b 预设接入（TDD）", "status": "done", "notes": "aiConfig.svelte.ts：AI_PRESETS 插入「工作站 · euryale-70b」（/aiproxy/llm/v1 + llama-3.3-70b-abliterated，useEnvKey）至 [1]，minimax/Anthropic 顺延 [2]/[3]；AI_MODELS 快填加 euryale 条目。aiConfig.test.ts：索引引用 [1]/[2]/[3] 全部更新 + matchPreset 新增 euryale 命中断言（8 例全绿）。新建 .env.local（*.local 已在 gitignore）：VITE_AI_PROXY_TARGET=https://dgmt.top + VITE_AI_KEY=cloud 网关 Bearer key。踩坑：AI_PRESETS 首次 Edit 被外部回写覆盖丢失（AI_MODELS 编辑幸存），二次 Edit 后持久化——教训：关键编辑后立即 git diff 确认。" },
+        { "id": "M57.3", "title": "端到端验证 + 全量回归", "status": "done", "notes": "vite dev :5199 实测完整链路：localhost/aiproxy/llm/v1 → vite proxy → dgmt.top/llm → spark01:8000 → euryale-70b 返回 <tool_call>{\"type\":\"function\",\"name\":\"list_apps\",\"parameters\":{}}></tool_call>（尾部带 '>' 杂字符，正是 M56.2 parseTagCallJson 容错覆盖的形态）——M56 解析器与真实模型输出闭环确认。回归：svelte-check 0 errors 1 warning（既有）；vitest 27 文件 1225 例全绿；build 成功（736ms）。" }
+      ]
+    },
+    {
+      "id": "M56",
+      "name": "AI 工具调用协议兼容 · 纯文本 JSON 工具调用回退解析（euryale-70b 等 hermes 系模型）",
+      "status": "done",
+      "scope": "修复 P1：部分模型（euryale-70b 等）不开 vLLM --enable-auto-tool-choice 时，把工具调用以纯文本 JSON 写进 content 而非 OpenAI 标准 tool_calls 字段，ai.ts 解析失败。引擎新增三种正文内嵌形态的回退提取（hermes <tool_call> 标签块 / 整段裸 JSON / 过渡语后行首裸 JSON），流式途中对疑似调用起点暂留防原始 JSON 漏给用户，流末统一剥离标准化成 OAToolCall。全程 TDD：新增 ai.test.ts 46 例（含 3 例真机抓取的 euryale-70b 原始输出固化用例）。",
+      "subtasks": [
+        { "id": "M56.1", "title": "正文内嵌工具调用提取（extractTextToolCalls）", "status": "done", "notes": "matchJsonObject：字符串感知括号配平（esc 转义/inStr 状态/depth 计数），从 {\"name\" 起点取完整对象。parseCallJson：标准化为 OAToolCall——arguments 为字符串原样保留不二次序列化、parameters 键位变体兼容、requireKnown 开关区分「标签内任何名字都收（显式意图，未知名交 executeTool 报错回灌）」与「裸 JSON 限已知工具名（防普通 JSON 误伤）」。extractTextToolCalls 三策略按序命中即返：1) <tool_call> 标签块 regex 全局剥离（解析失败保留原文给用户看）；2) 整段正文即裸 JSON；3) 内嵌裸 JSON——扫 {\"name\":\"已知工具\" 起点 + 括号配平取 span 倒序剥离保下标正确。stripEmptyFences 清残留空代码围栏。" },
+        { "id": "M56.2", "title": "流式暂留 + 流末定稿（safeFlushBoundary / finalizeStreamResult）", "status": "done", "notes": "safeFlushBoundary 扩展 holdToolCalls 分支：未闭合 <|… 控制标记暂留（先于孤立 < 判断）；第一个 <tool_call 起暂留（闭合块也等流末统一剥离，否则标签以正文漏出）；尾部被分片截断的 </tool_… 前缀暂留；行首疑似裸 JSON 调用起点（{ + \"name\" 或其截断前缀，bareCallHoldIndex）暂留。finalizeStreamResult：结构化 tool_calls 优先（finalizeToolCalls 拼增量、校验）；无结构化且本轮提供了工具 → extractTextToolCalls 回退提取；都没有 → 纯文本。content 始终已剥控制标记与调用原文。streamOpenAI 集成：flushCleanText 每分片走 safeFlushBoundary 增量输出，finishStream 流末补发未输出尾巴（调用段在暂留区未 emit 过，长度对齐天然成立）。附带：抽出 OATool 接口（type/function/parameters: unknown），streamOpenAI 签名从 ReturnType<typeof openaiToolDefs> 改为 OATool[]——修复测试 FAKE_TOOLS 与 TOOL_DEFS 字面量联合类型不兼容的 4 个 svelte-check 错误。真机验证后追加：parseTagCallJson 容错——标签体整段 parse 失败时从第一个 { 起括号配平截取对象重试（euryale-70b 实测输出 {…}}> 尾部多杂字符，直接 JSON.parse 必败）。" },
+        { "id": "M56.3", "title": "全量回归 + 真机验证 + STATE/TEST_LOG 登记", "status": "done", "notes": "svelte-check 0 errors 1 warning（既有 state_referenced_locally）；vitest 27 文件 1224 例全绿（ai.test.ts 46 例：extractTextToolCalls 全形态、matchJsonObject 配平边界、safeFlushBoundary 暂留边界、finalizeStreamResult 优先级、streamOpenAI SSE 集成——关键断言：所有 text 事件拼接不含任何工具调用原文）；build 成功（649ms）。真机验证：SSH spark01 直连 vLLM :8000（llama-3.3-70b-abliterated）实测——确认 vLLM 未开 --enable-auto-tool-choice（带 tools 请求 400），hermes prompt 下模型非流式/流式输出均为 <tool_call>{\"type\":\"function\",\"name\":...,\"parameters\":{...}}></tool_call>（尾部多 '>' 杂字符），两条真实输出均已固化为测试用例并通过。另发现 LiteLLM :4000 路由进程已停（502），vLLM 后端本身健康。" }
+      ]
+    },
     {
       "id": "M55",
       "name": "发布候选 · svelte-check 零错误",

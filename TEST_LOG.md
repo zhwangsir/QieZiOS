@@ -1,4 +1,102 @@
+# TEST_LOG.md — QieZiOS
+
+- 2026-08-27 项目管家文档治理：根目录收敛为 5 件套。
+
 # TEST_LOG
+
+## 2026-08-08 · M57「LLM 链路修复 · cloud llm_pool 指回活端口 + euryale-70b 预设接入」
+
+**背景**：M56 遗留——助手集群 LLM 链路全断（误报为「LiteLLM :4000 挂了」）。本轮排查做认知修正：**集群从未部署 LiteLLM**，cloud nginx 按路径直接反代各后端，Bearer 鉴权在 nginx 层（`$http_authorization != $BEARER → 401`）：
+
+| 路径 | 上游 | 状态 |
+|------|------|------|
+| `/llm/` | llm_pool → spark01 vLLM | 本轮修复 |
+| `/lm/` | openclaw01:11234 LM Studio | 仍断（Tailscale 掉线+未运行，非必需） |
+| `/exo/` | Mac Studio 集群 | — |
+| `/comfy/` | workstation ComfyUI | — |
+
+**真实断链根因**：`llm_pool`（lab.wineryz.top.conf）指向 `100.81.235.124:30000`（历史代理端口，已死），而 spark01 vLLM 实际在 `:8000` 健康服务 `llama-3.3-70b-abliterated-fp8`。
+
+**修复**：备份 `lab.wineryz.top.conf.bak-pre-vllm8000` → sed `:30000→:8000` → `nginx -t` 通过 → reload → `https://dgmt.top/llm/v1/models` 恢复 200。
+
+**QieZiOS 接入（TDD）**：[aiConfig.svelte.ts](file:///Users/wangzhenyu/Desktop/ALLProject/QieZiOS/src/system/aiConfig.svelte.ts) `AI_PRESETS[1]` 新增「工作站 · euryale-70b」（`/aiproxy/llm/v1` + `llama-3.3-70b-abliterated`），`AI_MODELS` 加快填；测试索引 [1]/[2]/[3] 全更新 + euryale 命中断言（8 例绿）。新建 `.env.local` 注入 `VITE_AI_PROXY_TARGET` + `VITE_AI_KEY`（cloud 网关 Bearer）。
+
+**端到端验证**：vite dev :5199 实测 `localhost/aiproxy/llm/v1/chat/completions` → euryale-70b 返回 `<tool_call>{"type":"function","name":"list_apps","parameters":{}}></tool_call>`——尾部带 `>` 杂字符，正是 M56.2 `parseTagCallJson` 容错覆盖形态，**M56 解析器与真实模型输出闭环确认**。
+
+**回归**：svelte-check 0 errors 1 warning（既有）· vitest 27 文件 **1225 例全绿** · build 成功（736ms）。
+
+**踩坑**：`AI_PRESETS` 首次 Edit 被外部回写覆盖丢失（`AI_MODELS` 编辑幸存），二次 Edit 后持久化——**教训：关键编辑后立即 `git diff` 确认落盘**。
+
+---
+
+## 2026-08-07 · M56「AI 工具调用协议兼容 · 纯文本 JSON 工具调用回退解析」
+
+**背景（P1）**：真实用户验收发现 euryale-70b 等 hermes 系模型不开 vLLM `--enable-auto-tool-choice` 时，把工具调用以纯文本 JSON 写进 `content` 而非 OpenAI 标准 `tool_calls` 字段，`ai.ts` 解析失败、原始 JSON 直接漏给用户。
+
+**回归**：svelte-check **0 errors** 1 warning（既有）· vitest 27 文件 **1224 例全绿**（ai.test.ts 46 例）· build 成功（649ms）。
+
+**真机验证**（2026-08-07，SSH spark01 直连 vLLM :8000 `llama-3.3-70b-abliterated`）：
+
+1. 确认 P1 根因：vLLM 未开 `--enable-auto-tool-choice`，带 `tools` 的请求直接 400（`"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser`）→ 工具定义只能走 prompt，调用只能写进正文。
+2. 抓取真实输出（非流式 + 流式拼接一致）：`<tool_call>{"type": "function", "name": "launch_app", "parameters": {"appId": "calculator"}}></tool_call>`——**JSON 尾部多吐 `>` 杂字符**、夹带多余 `"type"` 字段、用 `parameters` 键。原实现整段 `JSON.parse` 必败 → 追加 `parseTagCallJson` 容错（从第一个 `{` 起括号配平截取对象重试），3 条真实输出固化为测试用例全绿。
+3. 发现 **LiteLLM :4000 路由进程已停**（外网 502、本机无监听/无进程），vLLM 后端本身健康——待恢复路由（见下「遗留」）。
+
+**改动概览**（3 子任务）：
+
+- **M56.1 正文内嵌工具调用提取**（`extractTextToolCalls`）：三种形态按序命中即返——1) `<tool_call>` hermes 标签块（任何名字都收：标签即显式调用意图，未知名交 `executeTool` 报错回灌；解析失败保留原文）；2) 整段正文即裸 JSON；3) 过渡语后行首内嵌裸 JSON（限已知工具名，防普通 JSON 误伤）。核心配平器：
+
+  ```typescript
+  // 字符串感知括号配平：esc 转义 / inStr 状态 / depth 计数
+  export function matchJsonObject(text: string, start: number): number {
+    if (text[start] !== '{') return -1;
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) return i + 1;
+    }
+    return -1;
+  }
+  ```
+
+  标准化（`parseCallJson`）：`arguments` 为字符串原样保留不二次序列化；`parameters` 键位变体兼容；`requireKnown` 开关区分标签块（任何名字）与裸 JSON（限已知名）。内嵌多调用倒序剥离保下标正确。
+
+- **M56.2 流式暂留 + 流末定稿**：`safeFlushBoundary` 扩展 `holdToolCalls` 分支——未闭合 `<|…` 控制标记、`<tool_call` 标签起（含闭合块：等流末统一剥离，否则标签以正文漏出）、分片截断的 `</tool_…` 前缀、行首疑似裸 JSON 起点，全部暂留不输出。`finalizeStreamResult` 定稿优先级：
+
+  ```typescript
+  const calls = finalizeToolCalls(structured);
+  if (calls.length) return { content: stripBoxTokens(raw), toolCalls: calls }; // 结构化优先
+  if (holdToolCalls) {
+    const { text, calls: extracted } = extractTextToolCalls(stripBoxTokens(raw), validToolNames());
+    if (extracted.length) return { content: text, toolCalls: finalizeToolCalls(extracted) }; // 回退提取
+  }
+  return { content: stripBoxTokens(raw), toolCalls: [] }; // 纯文本
+  ```
+
+  附带：抽出 `OATool` 接口，`streamOpenAI` 签名 `ReturnType<typeof openaiToolDefs>` → `OATool[]`，修复测试与 `TOOL_DEFS` 字面量联合类型不兼容的 4 个 svelte-check 错误。真机验证后追加 `parseTagCallJson` 容错：
+
+  ```typescript
+  // 标签体整段 parse 失败 → 从第一个 '{' 起括号配平截取对象重试
+  // （euryale-70b 实测输出 {…}}> 尾部多杂字符，直接 JSON.parse 必败）
+  function parseTagCallJson(body: string, validNames: Set<string>): OAToolCall | null {
+    const direct = parseCallJson(body, false, validNames);
+    if (direct) return direct;
+    const start = body.indexOf('{');
+    if (start === -1) return null;
+    const end = matchJsonObject(body, start);
+    return end === -1 ? null : parseCallJson(body.slice(start, end), false, validNames);
+  }
+  ```
+
+- **M56.3 全量回归 + 真机验证**：新增 `ai.test.ts` 46 例——extractTextToolCalls 全形态（标签单块/多块/过渡语保留/arguments 字符串/parameters 变体/未知名/损坏 JSON 保留原文/整段裸 JSON/未知名防误伤/内嵌多调用/嵌套转义配平 + 3 例真机抓取原始输出固化）、matchJsonObject 边界、safeFlushBoundary 暂留边界、finalizeStreamResult 优先级、streamOpenAI SSE 集成。**关键断言：流式途中所有 text 事件拼接后不含任何工具调用原文**。
+
+**遗留**：spark01 LiteLLM :4000 路由进程已停（502），助手走 `/aiproxy/lm/v1` 预设会失败——需重启 LiteLLM 或在 aiConfig 预设改指 vLLM 直连 :8000；长期方案仍建议 vLLM 开 `--enable-auto-tool-choice --tool-call-parser hermes`（结构化输出，双保险）。
+
+---
 
 ## 2026-07-24 · M55「发布候选 · svelte-check 零错误」
 

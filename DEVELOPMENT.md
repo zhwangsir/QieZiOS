@@ -1,3 +1,10 @@
+# DEVELOPMENT.md — QieZiOS
+
+> 合并自旧 PROJECT_INIT / docs / 根目录散文档。原文在 `ALLProject/.archive/docs-legacy-20260827/`。
+> 最后更新：2026-08-27
+
+# 原 PROJECT_INIT
+
 # QieZiOS · 项目初始化文档
 
 > 由项目管理中枢自动生成 | 更新日期: 2026-07-12 | 负责人: zhwangsir
@@ -362,3 +369,19 @@ QieZiOS 生产后端（`server/index.mjs`，端口 8787）提供以下 HTTP 端�
 - **与 QieYu 独立**：QieYu 是 AI 学习日志社交平台（React 19 + Express + MySQL），与 QieZiOS 无代码依赖；两者均为 Web 应用但定位完全不同（Web OS vs 学习日志社交）
 - **AI 网关共享**：QieZiOS 默认 `AI_PROXY_TARGET=https://dgmt.top`，与 dgmt-next 项目（DGMT 官网）同属 dgmt.top 域名生态，但代码独立
 - **项目隔离原则**：四个项目（DRT-BOT / LUVU / QieZiOS / QieYu）必须保持独立，禁止交叉引用代码或共享依赖
+
+
+## 已归档文档索引
+
+- `CLAUDE.md` — QieZiOS 🍆 — 项目承接文档
+- `DEVPLAN-LINUX.md` — QieZiOS 对标 Linux · 开发计划（自治循环的真相源）
+- `DEVPLAN-PERF.md` — QieZiOS 性能 / 存储硬化阶段（DEVPLAN-PERF · 自治循环真相源）
+- `DEVPLAN-POLISH-2.md` — QieZiOS 完善与查漏计划 · 第 2 轮（自治完善循环的真相源）
+- `DEVPLAN-POLISH-3.md` — QieZiOS 完善与查漏计划 · 第 3 轮（自治完善循环真相源）
+- `DEVPLAN-POLISH-4.md` — QieZiOS 完善与查漏计划 · 第 4 轮（自治完善循环真相源）
+- `DEVPLAN-POLISH-5.md` — QieZiOS 完善与查漏计划 · 第 5 轮（自治完善循环真相源）
+- `DEVPLAN-POLISH.md` — QieZiOS 完善与查漏计划（自治完善循环的真相源）
+- `DEVPLAN-UIUX.md` — UI/UX 调研报告：参考站 macos27.kimi.page vs QieZiOS
+- `Gitee上传方法.md` — Gitee 上传方法（全项目统一）
+- `PROJECT_INIT.md` — QieZiOS · 项目初始化文档
+- `设备说明.md` — 集群设备说明（单一真相源）
