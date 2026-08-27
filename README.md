@@ -1,47 +1,62 @@
-# Svelte + TS + Vite
+# QieZiOS
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+运行在浏览器里的 Web OS / 网页桌面（Svelte 5）。登记册：桌面 OS 模拟，Docker :8787。
 
-## Recommended IDE Setup
+> **路径**：`ALLProject/QieZiOS`  
+> **状态**：维护（Qie 系列）  
+> **最后更新**：2026-08-27
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+## 身份与远程
 
-## Need an official Svelte framework?
+| 项 | 值 |
+|----|----|
+| origin（Gitee 主远程） | https://gitee.com/Winery_z/QieZiOS.git |
+| github（备份） | https://github.com/zhwangsir/QieZiOS.git |
+| 分支 | main 跟踪 origin/main |
+| package.json | name `qiezios`，version `0.0.0`（占位；功能见 STATE.json 里程碑） |
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+集群真相源：**[`../ToIV/AGENTS.md`](../ToIV/AGENTS.md)**。
 
-## Technical considerations
+## 文档五件套
 
-**Why use this over SvelteKit?**
+README.md / AGENTS.md / DEVELOPMENT.md / STATE.json / TEST_LOG.md。
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+旧 DEVPLAN-*.md、CLAUDE.md、设备说明已归档到 `ALLProject/.archive/docs-legacy-20260827/QieZiOS/`。STATE.json 很大（仍保留 M57 等历史里程碑，updatedAt 2026-08-08）。TEST_LOG 记录过 vitest 约 1225 例、svelte-check 0 error。
 
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+## 这是什么
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+浏览器 Web OS。四层：kernel / system / shell / apps。VFS 在 IndexedDB。
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+生产后端是 server/index.mjs（仅 Node 内置模块）。
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+内置应用见 src/apps/：Files、Terminal、CodeMirror、Assistant、Settings、Studio、Calculator、Clipboard 等二十余个。AI 经同源 /aiproxy 转发。账号 /sync 在 server/index.mjs。
 
-**Why include `.vscode/extensions.json`?**
+## 技术栈
 
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
+Svelte 5 + Vite 8 + TypeScript ~6 + Tailwind 4 + CodeMirror 6 + pixi-live2d-display。脚本：npm run dev / build / preview / serve / test / check。
 
-**Why enable `allowJs` in the TS template?**
+## 端口
 
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
+docker-compose.yml 映射 8787:8787。Vite 开发端口未在 vite.config.ts 写死（常为 5173）。规划建议 3801 尚未写入配置。
 
-**Why is HMR not preserving my local component state?**
+## 启动
 
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
+npm ci 后 npm run dev。可选另开 npm run serve 提供本地 8787。生产：docker compose up -d --build，访问 http://localhost:8787。
 
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
+## 注意
 
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
-```
+旧 README 是 Vite+Svelte 英文模板，已替换。Live2D 模型需自备。同步靠 token，勿裸奔公网。账号实现待硬化。push 时 origin 与 github 都要推。
+
+## 内置应用与壳（实测 src/）
+
+apps：AppGallery、AppStore、WebAppGallery、Assistant、Companion、Calculator、Clipboard、Clock、CodeMirror、Files、ImageViewer、MediaViewer、QuickLook、Reminders、Sandbox、Screenshot、Settings、Studio、SysMonitor、Terminal、TextEdit、Trash、UserApp、WebView、Welcome 等。
+
+shell：Desktop、Dock、TopBar、Spotlight、Launchpad、Expose、Notifications、Window、DesktopPet、Widgets、StickyNotes 等。
+
+system：ai / aiConfig / account / sync / theme / pet / wallpaper 等。kernel：vfs、idbStore、blobStore、processes、bus。
+
+## 开发代理
+
+vite.config.ts：/aiproxy → VITE_AI_PROXY_TARGET（默认 dgmt.top）；/auth 与 /sync → VITE_BACKEND_TARGET（默认 localhost:8787）。
+
+生产环境变量：PORT、AI_PROXY_TARGET、可选 AI_KEY、SYNC_FILE。见 docker-compose.yml，勿把 key 写进文档。
